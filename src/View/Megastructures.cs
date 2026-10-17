@@ -683,7 +683,9 @@ public partial class Megastructures : Node3D
     /// </summary>
     static void AddSparkle(Node3D inst, string slug)
     {
-        var meshes = inst.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().ToList();
+        // rooms seen through the windows are lit interiors, not lamps: no x4 boost, no glow points
+        var meshes = inst.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>()
+            .Where(mi => !mi.Name.ToString().Contains("Rooms") && !(mi.GetParent()?.Name.ToString().Contains("Rooms") ?? false)).ToList();
         foreach (var mi in meshes)
             for (int i = 0; i < mi.Mesh.GetSurfaceCount(); i++)
             {

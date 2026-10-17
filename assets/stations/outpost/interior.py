@@ -280,16 +280,49 @@ def orbit(frames=144, degrees=2.0):
             for kp in fc.keyframe_points: kp.interpolation = "LINEAR"
 
 
+COLLIDE = ("floor", "wall", "hull", "eqpm", "furn", "frame")       # Int_<cls>: what you can stand on / bump into
+
+
+def godot_extras():
+    """interior_lights.json beside the .glb: ceiling-light points (Godot coords: x, z_blender, -y_blender) for the walker,
+    plus where the Earth and the sun are, so the game's view out of the windows matches the renders."""
+    pts = []
+    for (x0, y0, x1, y1, h0, h1, ffl) in ACC.lights:
+        Lx, Wy = abs(x1 - x0), abs(y1 - y0)
+        if Lx * Wy < 0.04: continue
+        n = max(1, int(Lx / 3.0 + 0.5))
+        for k in range(n):
+            xm = min(x0, x1) + Lx * (k + 0.5) / n; ym = (y0 + y1) / 2
+            th = TH0 + xm / R_MID; r = R_MID + ym; z = ffl + min(h0, h1) - 0.08
+            pts.append([round(r * math.cos(th), 2), round(z, 2), round(-r * math.sin(th), 2)])
+    s = bpy.data.objects["IN_Sun"].matrix_world.to_3x3() @ Vector((0, 0, -1))       # direction the light travels
+    e = EARTH_DIR * 6771000 * EARTH_SCALE
+    sth = TH0 + (3.5 * R_MID * math.radians(30) - 6.5) / R_MID      # spawn: open floor of the C04 concourse, facing along the ring
+    out = {"lights": pts, "sun_dir": [s.x, s.z, -s.y], "earth_pos": [e.x, e.z, -e.y], "earth_r": 6371000 * EARTH_SCALE,
+           "spawn": [round(40 * math.cos(sth), 3), DATA["A"]["ffl"] + 1.0, round(-40 * math.sin(sth), 3)], "spawn_yaw": sth}
+    json.dump(out, open(SF + "/assets/stations/outpost/interior_lights.json", "w"))
+    return len(pts)
+
+
 def export_interior():
     for cn in ("Outpost", "OutpostInterior"):        # hidden objects can't be selected, so they'd silently drop out
         bpy.data.collections[cn].hide_viewport = False
+    # Godot makes a static collision body for nodes named *-col (the system view strips them again)
+    renamed = []
+    for o in list(bpy.data.collections["OutpostInterior"].objects) + [bpy.data.objects["Ring_Windows"]]:
+        if o.name == "Ring_Windows" or o.name[4:] in COLLIDE:
+            old = o.name; o.name = old + "-col"; renamed.append((o, old))
+    godot_extras()
     for o in bpy.context.scene.objects: o.select_set(False)
     bpy.data.objects["Outpost"].select_set(True)
     for o in bpy.data.collections["Outpost"].objects:
         if o.name != "Ring_Rooms": o.select_set(True)
     for o in bpy.data.collections["OutpostInterior"].objects: o.select_set(True)
     path = SF + "/assets/stations/outpost/outpost_interior.glb"
-    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_apply=True, export_lights=True)
+    try:
+        bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_apply=True, export_lights=True)
+    finally:
+        for o, old in renamed: o.name = old
     return path
 
 
