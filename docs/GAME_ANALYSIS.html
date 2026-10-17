@@ -1,0 +1,266 @@
+<title>Starforge Game Analysis</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column like a mission dossier; diagrams and tables break wider; the HUD's cool blue as the accent */
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --fg: #18202b; --dim: #5b6676; --rule: #d6dce5;
+  --accent: #2f6fb3; --warm: #b8641f; --good: #2d7d4f; --bad: #b23a3a; --omen: #7a4fb0;
+  --display: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0b1017; --panel: #121a24; --fg: #dbe3ec; --dim: #8b97a8; --rule: #243142;
+  --accent: #7fb6ec; --warm: #e0a060; --good: #6cc68f; --bad: #e57a7a; --omen: #b99ae8; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0b1017; --panel: #121a24; --fg: #dbe3ec; --dim: #8b97a8; --rule: #243142;
+  --accent: #7fb6ec; --warm: #e0a060; --good: #6cc68f; --bad: #e57a7a; --omen: #b99ae8; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 16px/1.6 var(--body); }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 80px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); letter-spacing: 0.02em; }
+h2 { font-size: 1.75rem; margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--rule); }
+h3 { font-size: 1.2rem; margin-top: 28px; }
+p, li { max-width: 68ch; }
+.eyebrow { font: 600 0.78rem/1 var(--display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.lede { font-size: 1.12rem; color: var(--fg); }
+.dim { color: var(--dim); }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+.stack { display: grid; gap: 14px; }
+.diagram { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 16px; overflow-x: auto; }
+.diagram pre.mermaid { margin: 0; background: transparent; }
+.caption { font-size: 0.88rem; color: var(--dim); margin-top: 8px; }
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 0.92rem; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 600 0.78rem/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+td.n { font-family: var(--mono); text-align: right; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+.finding { border-left: 3px solid var(--rule); padding: 4px 0 4px 16px; }
+.finding h3 { margin-top: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.tag { font: 600 0.72rem/1 var(--display); letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 7px; border-radius: 3px; border: 1px solid currentColor; }
+.tag.fixed { color: var(--good); } .tag.open { color: var(--warm); } .tag.big { color: var(--bad); }
+.finding.fixed { border-left-color: var(--good); } .finding.open { border-left-color: var(--warm); } .finding.big { border-left-color: var(--bad); }
+.evidence { font-size: 0.92rem; color: var(--dim); }
+.phases { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.phase { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px; min-width: 0; }
+.phase .when { font: 600 0.78rem/1 var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.phase ul { padding-left: 18px; margin: 8px 0 0; }
+.phase li { font-size: 0.93rem; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 0.95rem; }
+.kv dt { font-family: var(--mono); color: var(--dim); }
+.kv dd { margin: 0; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="stack">
+    <span class="eyebrow">Starforge · full-game review · 18 Oct 2026</span>
+    <h1>Starforge Game Analysis</h1>
+    <p class="lede">The game is strongest at what it promises first: one continuous world from cloud tops to Andromeda, rendered beautifully. Its weakest point is the player's part in it. For most of a playthrough you watch, approve the odd proposal, and use powers that cost nothing and change little you can see. The simulation also loses momentum: nobody meets anyone for five to six centuries, and after about 2600 the Kardashev curve goes almost flat.</p>
+    <p class="dim">Method: I read the simulation and interface code (about 15,000 lines of C#), ran three headless 940-year games with <code>--trace</code> and <code>--techlog</code>, took in-game screenshots at 2061, 2211 and 2461, and checked against reference designs (RimWorld, Stellaris, the god-game lineage). Six problems are fixed in commit <code>7500625</code>. Everything else is a proposal.</p>
+  </div>
+
+  <h2>1 · How the game runs</h2>
+  <p>Every frame, <code>Main._Process</code> advances the simulation by <em>speed × frame time</em>, sliced so the sim never takes more than 12 ms. The sim reports back through events, and the views, HUD, cinematics and music each listen for the ones they care about.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  IN["Input: keys, clicks, labels"] --> MAIN["Main._Process"]
+  MAIN -->|"speed × dt, ≤ 12 ms a frame"| SIM["Simulation.Step"]
+  SIM --> EV{{"events: Logged · Effect · Milestone · Alerted · MegaStarted/Finished"}}
+  EV --> HUD["HUD: ticker, inbox tiles, title cards"]
+  EV --> CINE["Cinematics queue"]
+  EV --> MUS["Music chimes"]
+  MAIN --> VIEW["SystemView: Sync, Prepare, Update"]
+  MAIN --> CAM["CameraRig.Step"]
+  CINE --> CAM
+  MAIN --> GAL["GalaxyView + overlay"]
+  MAIN --> POST["PostFx"]
+  MAIN -->|"every 5 min"| SAVE["Autosave"]
+  </pre></div>
+
+  <h3>The simulation tick</h3>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  S["Step(dy)"] --> CH["cut into chunks of ≤ 2 years"]
+  CH --> COL["every Colony.Step: economy, decisions, events, crises, natives, visitor"]
+  COL --> R["every Civ: ResearchStep (3 slots, hands of 3)"]
+  R --> Y{"a year passed?"}
+  Y -->|yes| YR["exotic pools · gate events · danger meters · civ acts · apotheosis"]
+  Y -->|no| EL
+  YR --> EL{"election due? (every 25 years)"}
+  EL --> SH["seed ships arrive: found a colony, or meet its owner"]
+  SH --> GC{"every 2 years: GalaxyCheck"}
+  GC --> CT["contact · relations drift · war / peace / battle"]
+  GC --> DS["dark-star detection (new)"]
+  GC --> MS["Type I / II / III milestones"]
+  </pre></div>
+
+  <h3>The economy of one star system</h3>
+  <p>Everything feeds one number, <em>power</em>. Mining and star lifting fill the stockpile, foundries turn it into swarm collectors, captured starlight becomes power, and power drives research, industry and the era. Great works take a share of industry and feed multipliers back in.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  H["Mining hubs"] -->|mass| ST[("Stockpile")]
+  LIFT["Star lifting"] --> ST
+  ST -->|"foundries"| SW["Swarm capture 0 → 0.92"]
+  SW --> P["Power = planet + capture × L + megastructures"]
+  P --> RP["Research points"]
+  P --> IND["Industry kg/yr"]
+  IND -->|"works share 22–45%"| GW["Great works here"]
+  IND -->|"levies through links"| GW2["Great works elsewhere"]
+  GW --> MOD["multipliers: industry, research, housing, order"]
+  MOD --> IND
+  P --> ERA["Eras and Kardashev"]
+  SW -->|"capture ≥ the drive's threshold"| SEED["Seed ship"]
+  SEED --> NEW["New colony"]
+  </pre></div>
+
+  <h3>What the player does today</h3>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  W["Watch and fly the camera"] --> E{"something happens?"}
+  E -->|"an alert pauses the game"| D["Answer in the inbox (only for areas set to manual)"]
+  E -->|no| W
+  W --> V["Use a voice power: free, unlimited, instant"]
+  V --> WIT["Witnessed: Faith up, Dread up"]
+  WIT -->|"weak and slow"| CIV["Civ drifts: conscience, faction influence, alien relations"]
+  D --> CIV
+  CIV --> W
+  </pre></div>
+  <p class="caption">The loop closes, but almost nothing on it is a trade-off. Powers cost nothing, and with every area left to the council there is nothing to decide. The player's choices only reach the outcome through slow drifts that the interface never shows.</p>
+
+  <h2>2 · What a whole game looks like</h2>
+  <p>These numbers come from a 940-year headless run on the default seed (20610) with no player input. Kardashev is the galactic figure, including the regions colonies have wrapped.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Year</th><th>Kardashev</th><th>Humanity techs</th><th>Human systems</th><th>Vessh systems</th><th>Hask systems</th><th>What happened</th></tr></thead>
+    <tbody>
+      <tr><td class="n">2111</td><td class="n">0.85</td><td class="n">27</td><td class="n">1</td><td class="n">15</td><td class="n">7</td><td>Mars, the belt</td></tr>
+      <tr><td class="n">2211</td><td class="n">1.67</td><td class="n">43</td><td class="n">1</td><td class="n">27</td><td class="n">16</td><td>Era of the Swarm (2197)</td></tr>
+      <tr><td class="n">2311</td><td class="n">2.03</td><td class="n">74</td><td class="n">5</td><td class="n">37</td><td class="n">35</td><td>first seed ship 2268, second sun 2271</td></tr>
+      <tr><td class="n">2411</td><td class="n">2.49</td><td class="n">222</td><td class="n">12</td><td class="n">81</td><td class="n">110</td><td>Type II 2370, exotic layer opens</td></tr>
+      <tr><td class="n">2511</td><td class="n">2.60</td><td class="n">293</td><td class="n">34</td><td class="n">365</td><td class="n">329</td><td>fold-drive expansion</td></tr>
+      <tr><td class="n">2611</td><td class="n">2.75</td><td class="n">331</td><td class="n">39</td><td class="n">681</td><td class="n">550</td><td></td></tr>
+      <tr><td class="n">2711</td><td class="n">2.86</td><td class="n">359</td><td class="n">63</td><td class="n">951</td><td class="n">749</td><td>first contact 2683</td></tr>
+      <tr><td class="n">2811</td><td class="n">2.93</td><td class="n">368</td><td class="n">143</td><td class="n">1,069</td><td class="n">900</td><td></td></tr>
+      <tr><td class="n">2961</td><td class="n">2.98</td><td class="n">380</td><td class="n">318</td><td class="n">1,100</td><td class="n">947</td><td>Transcendence 2906, never Type III</td></tr>
+    </tbody>
+  </table></div>
+  <p class="caption">Research per century: +148 techs in the 24th century, then +71, +38, +28, +9 and +12. The cost multiplier for non-spine techs reaches ×19 at 300 known techs and ×28 at 380. That curve was a deliberate fix for the tree collapsing too early (see <code>Defs.CostFor</code>), but nothing new arrives to take research's place.</p>
+
+  <h2>3 · Findings</h2>
+  <p class="dim">Ordered by how much each one costs the player. Green means fixed in this pass, amber is a small change to make next, and red needs a design decision.</p>
+
+  <div class="stack">
+    <div class="finding big"><h3>The player has no stakes <span class="tag big">design</span></h3>
+      <p>Every voice power is free, unlimited and has no cooldown. Under default policy no area is manual, so nothing waits on the player. The new manual mode turns council choices into yes/no proposals with no cost on either side. Faith and Dread move, but they mostly feed apotheosis rolls and alien blame, which the interface never ties back to the act that caused them.</p>
+      <p class="evidence">Reference: from Populous on, the god game has tied the player's power to their followers. Your 2026-10-17 answers already chose the fix: Influence as the nation's currency, plus faction actions that cost it. The voice can stay unlimited if its acts land as visible consequences (Dread lowers stability, Faith adds Influence) instead of costs.</p></div>
+
+    <div class="finding big"><h3>Five centuries before anyone meets <span class="tag big">design</span></h3>
+      <p>Alien homeworlds start at least 220 galaxy units (about 11,000 light-years) from Sol. In three runs of the default seed (before and after this pass's fixes changed its random sequence), first contact came in 2683, 2587 and 2587. Diplomacy, war, federations, blame for the voice's horrors, and the alien half of the tech tree are all idle for most of the game.</p>
+      <p class="evidence">Fixed in part: the new <em>Dark Stars</em> beat gives astronomy the old empires' finished swarms from the lightsail era on (2159, 2181, 2225 and 2249 in the test run). Their real contact still needs a pacing change.</p></div>
+
+    <div class="finding big"><h3>The late game goes flat <span class="tag big">design</span></h3>
+      <p>Kardashev climbs 0.12 over the 250 years from 2711 to 2961, and research adds 21 techs. No new eras, no endgame crisis and no victory condition fire, even though your answers asked for optional wins and a game running to about 3500.</p>
+      <p class="evidence">Reference: 4X designers handle late-game snowball and drift with a strong late antagonist (an endgame crisis), several victory paths, and rising administrative strain on wide empires. RimWorld's Cassandra raises the tension curve over a game instead of letting it plateau.</p></div>
+
+    <div class="finding open"><h3>The "old and slow" Vessh out-expand everyone <span class="tag open">balance</span></h3>
+      <p>The Vessh start with vigour 0.3, meant as old and slow. They end with 1,100 systems, and the Hask with 947, against humanity's 318. The cadence formula divides by vigour, but alien growth is driven mostly by colonies that have finished their swarms: those launch for free on a short timer, so a 15-colony head start compounds.</p></div>
+
+    <div class="finding open"><h3>Two centuries in one system <span class="tag open">pacing</span></h3>
+      <p>2061 to 2271 happens entirely in Sol. At the default 1 week per second that is about three hours of real time, and at 1 year per second about three and a half minutes. The Director paces this well, but it's off by default and nothing tells a new player to use it.</p></div>
+
+    <div class="finding open"><h3>The interface hides the economy <span class="tag open">UX</span></h3>
+      <p>Alert tiles are unlabelled glyphs that pile up to 12. The Empire overview is two lines of text over an empty panel, and its "who decides" line runs off the edge. The stockpile grows to hundreds of stellar-units of unspent mass with nothing to spend it on. Swarm share shows as <code>3.41e-3%</code>. Nothing explains why a great work is slow (whether it's short of matter, labour or a strategic deposit), even though <code>Construction.cs</code> already knows.</p>
+      <p class="evidence">Reference: Stellaris's Situation Log (Dev Diary #417) groups alerts by category with pinning, and its automation reuses the same formula as the indicator the player sees (Dev Diary #258, 3.4.4).</p></div>
+
+    <div class="finding fixed"><h3>The chronicle was buried in routine news <span class="tag fixed">fixed</span></h3>
+      <p>After about 2600, each of humanity's hundreds of colonies logged every moon it mined out, and every empire humanity had met logged its evacuations. The chronicle reached 8,244 lines over the run, about 2,500 a century at the end. That news now only comes from newsworthy colonies (home, the one being watched, or a young empire with eight or fewer), and a met empire's losses only appear when it's at war with humanity: 1,175 lines over the same span.</p></div>
+
+    <div class="finding fixed"><h3>Venus kept getting moved <span class="tag fixed">fixed</span></h3>
+      <p><code>Movable</code> re-qualified a world that was parked in the nearest free lane outside the warm band. Earth already occupies the band, so humanity "walked Venus into the warmth" six times in one game. A world now moves once.</p></div>
+
+    <div class="finding fixed"><h3>Chronicle opened in the middle of history <span class="tag fixed">fixed</span></h3>
+      <p>The text sat in a scroll container that never followed new entries, so it opened around 2236 in a 2461 game. It now scrolls itself and opens on the newest entry.</p></div>
+
+    <div class="finding fixed"><h3>System-view labels piled up <span class="tag fixed">fixed</span></h3>
+      <p>From the system overview, Mercury, Venus, Earth, Mars and Sol were drawn on top of each other, and the Crab and Orion nebula names floated over the planets. Labels are now ranked (selected, settled, mined, primary, size), and the lower-ranked name gives way. Seen from far out, the star's own name wins. Nebula names only show at galaxy scale.</p></div>
+
+    <div class="finding fixed"><h3>An empty galaxy before contact <span class="tag fixed">new beat</span></h3>
+      <p>Once humanity knows Laser Sails, its astronomers find each older empire by its wrapped, infrared-bright stars: a title card for the first, then a chronicle line and a non-pausing alert for each one after.</p></div>
+
+    <div class="finding open"><h3>Smaller items <span class="tag open">minor</span></h3>
+      <ul>
+        <li>The tech screen stalls for a moment when it opens (6 fps in the first second, 144 at steady state), because it builds about 100 cards at once.</li>
+        <li>Elections are every 25 years, while the breakdown doc says "every few years".</li>
+        <li><code>Main.cs</code> (1,075 lines) carries about 40 test flags inline in <code>_Process</code>. Moving them to a <code>DevHooks</code> node would halve the file.</li>
+      </ul></div>
+  </div>
+
+  <h2>4 · Overhaul roadmap</h2>
+  <p>This keeps the order you chose on 2026-10-17 (UI framework, then government, war, planets, diplomacy). Phase (a) is done. I'd put one short pacing pass first, because war and diplomacy can't be tested, or enjoyed, while contact arrives in the 27th century.</p>
+
+  <h3>What the loop should become</h3>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  W["Read the situation log"] --> G["Set goals and priorities"]
+  G --> INF["Spend Influence: claims, faction actions, edicts"]
+  G --> V["Voice acts: free, but they leave marks"]
+  V --> FD["Faith and Dread"]
+  FD -->|"Dread lowers stability, Faith adds Influence"| INF
+  INF --> NAT["The nation answers: stability, elections, war goals"]
+  NAT --> SIT["Situations with stages and deadlines"]
+  SIT --> W
+  NAT --> VIC["Victory paths and the endgame crisis"]
+  </pre></div>
+
+  <div class="phases">
+    <div class="phase"><span class="when">Next · pacing pass</span>
+      <ul>
+        <li>First contact between 2300 and 2450: contact range grows with sensor techs, and one young empire starts within reach.</li>
+        <li>Rein in the snowball from free relaunches at finished colonies.</li>
+        <li>A late-game arc: an endgame crisis around 2700, plus optional victories (Type III, Transcendence, hegemony, survival).</li>
+        <li>Check: K keeps rising to 3500 across 4 seeds.</li>
+      </ul></div>
+    <div class="phase"><span class="when">Phase e · government</span>
+      <ul>
+        <li>Influence and Unity resources.</li>
+        <li>Government, ethics and civics chosen at start; reforms and revolutions.</li>
+        <li>Faction actions that cost Influence (campaign, suppress, appease).</li>
+        <li>Dread feeds unrest; Faith feeds Influence.</li>
+      </ul></div>
+    <div class="phase"><span class="when">Phase c · war</span>
+      <ul>
+        <li>Fleets as units with admirals.</li>
+        <li>Claims, war goals, exhaustion and peace deals.</li>
+        <li>Battles staged in the system view with the cinematic camera.</li>
+      </ul></div>
+    <div class="phase"><span class="when">Phase b · worlds</span>
+      <ul>
+        <li>World specialisations and pop groups.</li>
+        <li>Sectors with governors as the unit of management.</li>
+        <li>A spend for the stockpile.</li>
+      </ul></div>
+    <div class="phase"><span class="when">Phase d · diplomacy</span>
+      <ul>
+        <li>Treaties and trade deals, shown as convoys.</li>
+        <li>Federations, then a galactic council.</li>
+      </ul></div>
+    <div class="phase"><span class="when">Alongside · interface</span>
+      <ul>
+        <li>A situation log with categories and pinning, and labelled alert tiles.</li>
+        <li>A real Empire overview: economy breakdown and why each great work is slow.</li>
+        <li>A first-run hint for the Director and speeds.</li>
+      </ul></div>
+  </div>
+
+  <h2>5 · Sources</h2>
+  <dl class="kv">
+    <dt>RimWorld</dt><dd><a href="https://en.wikipedia.com/wiki/Rimworld">Wikipedia: RimWorld</a>: the storyteller AI as story generator; Cassandra's rising tension curve.</dd>
+    <dt>Stellaris</dt><dd><a href="https://patched.gg/games/stellaris/stellaris-dev-diary-417-situation-log-updated">Dev Diary #417, Situation Log</a> · <a href="https://admin-forum.paradoxplaza.com/forum/developer-diary/stellaris-dev-diary-258-3-4-4-cepheus-information.1531115">Dev Diary #258, automation</a> · <a href="https://forum.paradoxplaza.com/forum/threads/stellaris-dev-diary-126-sectors-and-factions-in-2-2.1120288/post-24672531">Dev Diary #126, sectors and factions</a></dd>
+    <dt>God games</dt><dd><a href="https://en.wikipedia.com/wiki/God_game">Wikipedia: God game</a>: indirect control; Populous ties power to worshippers.</dd>
+    <dt>4X endgame</dt><dd><a href="https://pcgamesn.com/civilization-vi/strategy-game-endgame-design">PCGamesN on strategy endgames</a> · <a href="https://forums.civfanatics.com/threads/the-4x-problem-of-snowballing.621076">CivFanatics: the snowball problem</a></dd>
+    <dt>This repo</dt><dd><code>docs/GAMEPLAY_QUESTIONS.md</code> (your answers), <code>GAME_BREAKDOWN.md</code>, <code>docs/TECH_INTEGRATION.md</code> §12 (pacing)</dd>
+  </dl>
+</div>
