@@ -218,6 +218,14 @@ investment), and drifts apart if neglected or overstretched.
 - **System view**: battles with real hulls; the command mode's controls.
 - The **outliner** lists fleets, wars and movements; alerts follow the existing pause rules.
 
+### Placeholder assets (decided)
+
+New things that need models (more shipyards, factories, barracks, ship classes without a hull yet, armies, special
+forces) are drawn as **colour-coded cubes** for now; real Blender assets come later. **[builder's call]** One colour per
+kind, listed in `data/war.json` with a legend in the interface: factories orange, shipyards blue, barracks green,
+army transports olive, special forces purple, missing hull classes grey; cubes are sized by what they stand for and
+tinted by the owner's empire colour on one face.
+
 ## 6. Order of work (agreed)
 
 Several projects; each ships working and tested before the next:
