@@ -281,6 +281,8 @@ def orbit(frames=144, degrees=2.0):
 
 
 def export_interior():
+    for cn in ("Outpost", "OutpostInterior"):        # hidden objects can't be selected, so they'd silently drop out
+        bpy.data.collections[cn].hide_viewport = False
     for o in bpy.context.scene.objects: o.select_set(False)
     bpy.data.objects["Outpost"].select_set(True)
     for o in bpy.data.collections["Outpost"].objects:
