@@ -1,0 +1,24 @@
+# Godot / .NET
+.godot/
+bin/
+obj/
+*.translation
+
+# generated output (rebuild from the scripts)
+shots/
+assets/stations/renders/
+*.glb
+*.blend1
+docs/blueprints/cmp/
+docs/blueprints/sketch/*.png
+docs/blueprints/sketch/*.jpg
+docs/blueprints/outpost/*.png
+docs/blueprints/outpost/partial.pdf
+graphify-out/
+
+# tool / editor junk
+.playwright-mcp/
+__pycache__/
+*.pyc
+.vs/
+.vscode/

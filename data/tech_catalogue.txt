@@ -1,0 +1,582 @@
+# Starforge tech catalogue source. One tech per line:
+# ID | tier | Name | reqs (comma = AND, slash = OR) | flags | effects (;) | description
+# Flags: S start-known, R rare, D dangerous, K keystone, E event-gated, A atrocity, X:<group> mutually exclusive group
+# Spine techs (existing Starforge IDs X*, I*, E*, S*) keep their current requirements and effects.
+
+## ---------------- SPINE: Starflight (X) ----------------
+X0|0|Reusable Heavy Lift|-|S|-|Earth orbit is cheap
+X1|1|Nuclear Thermal Rockets|X0|-|flag:Fast|Mars in months; faster transit
+X2|2|Fusion Torch Drives|X1|-|flag:Jovian;flag:Fast;mod:Thrust>=2|The outer planets open up
+X3|3|Laser Sails|X2,E2|-|flag:Probes;mega:laser|Gram-scale probes to the nearest stars
+X4|4|Seed Ships|X3,S2|K|flag:Seed;mod:ShipSpeed>=0.05|Colonise other stars at 5% of light
+X5|5|Antimatter Catalysis|X4|-|mod:ShipSpeed>=0.15;mega:antimatter|Seed ships reach 15% of light
+X6|6|Fold Drive|X5|K|flag:Fold;mod:ShipSpeed>=20;mod:HubCost*0.8;mega:jumps|Ships cross light-years in days
+X7|7|Interstellar Deterrent|X6|-|flag:Deterrent;mega:beam;arms:doom>=7|Visitors no longer take what they want (absorbs Nicoll-Dyson Beam)
+X8|8|Fold Gates|X7|-|flag:Gate;mega:gateway|Permanent doors between stars
+X9|9|Galactic Gate Network|X8|-|flag:GateNet;mod:RegionRate*1.6;mod:ShipSpeed>=400;cond:colonies>=40|Regions fill 60% faster; cross the galaxy in years (absorbs Galactic Ring Network)
+X10|10|Andromeda Ark|X9,E9|-|flag:Ark;cond:kardashev>=3.0|A fleet leaves for another galaxy
+
+## ---------------- SPINE: Industry (I) ----------------
+I1|1|Lunar Industry|-|-|mod:Mine*1.2|Moon mining and mass drivers
+I2|2|Asteroid Mining|I1|-|flag:Belt;flag:Mercury;mod:Mine*1.3;mega:yard|The belt and Mercury open
+I3|3|Self-Replicating Foundries|I2|D|mod:Foundry*1.5;flag:Elevator;mega:foundry;meter:Goo+10|Foundry output +50%; space elevators (absorbs Von Neumann Fabricators)
+I4|4|Gas Skimmer Fleets|I3,X2|-|mod:GasYield*3;flag:Skimmers|Gas giant yield x3
+I5|5|Planetary Disassembly|I4|-|mod:Mine*2;mod:HubCost*0.5;flag:OrbitalRing;mega:cracker|Mining x2, hubs cost half
+I6|6|Stellar Lifting|I5|-|flag:StarLift;mega:lifter|Mine the star itself (absorbs Star Lifting, Star Lifter Array)
+I7|7|Star Husbandry|I6,E6|-|mod:RegionPower*1.25|Wrapped regions yield 25% more
+I8|8|Black Hole Forges|I7|-|mod:RegionRate*1.4;mega:forge|Regional harvesting 40% faster
+
+## ---------------- SPINE: Energy (E) ----------------
+E1|1|Commercial Fusion|-|-|mod:PlanetCap>=1.5e15|Planet-bound power ceiling x10 (absorbs Tokamak Fusion)
+E2|2|Orbital Solar Arrays|E1|-|mod:PlanetCap>=1.2e16;flag:Swarm|The first collectors (absorbs Orbital Solar Mirrors, Dyson Swarm)
+E3|3|Thin-Film Collectors|E2,I2|-|mod:Eff*1.4|Collectors +40% efficient
+E4|4|Flare Shielding|E3|-|mod:Shield<=0.5|Flare and collision losses halved
+E5|5|Statite Sails|E4|-|mod:Eff*1.3|Collectors +30% (absorbs Dyson Sphere)
+E6|6|Matrioshka Layers|E5|-|mod:Rp*1.4|Research x1.4 (absorbs Matrioshka Brain)
+E7|7|Shkadov Steering|E6|-|mod:Eff*1.3;mod:Shield<=0.1|Collectors +30%, flares nearly harmless (absorbs Stellar Engine)
+E8|8|Kugelblitz Engines|E7|-|mod:RegionPower*1.3;mega:kugel|Wrapped regions yield 30% more (absorbs Kugelblitz Forge)
+E9|9|Galactic Core Tap|E8|K|flag:CoreTap;mod:RegionPower*1.5;cond:core_colony|The central black hole is harnessed (absorbs Core Lattice)
+
+## ---------------- SPINE: Society (S) ----------------
+S1|1|Arcologies|-|-|mod:PopCap*1.4|Population ceiling +40% (absorbs Arcology Prefabs, Arcology Living)
+S2|2|Closed Ecologies|S1|-|flag:Venus;flag:Outer;mod:Growth*1.2|Venus aerostats, colonies anywhere (absorbs Dome Cities)
+S3|3|Radical Longevity|S2|-|mod:Rp*1.2;mod:Growth*1.3|Growth, research +20% (absorbs Telomere Mastery)
+S4|4|Habitat Rings|S3|-|mod:Rp*1.25;flag:Habitat;flag:Elevator|O'Neill habitats (absorbs Void Habitats)
+S5|5|Planetary Engineering|S4,I2|-|flag:Terraform;flag:OrbitalRing;mega:sentry|Terraforming Mars, orbital rings
+S6|6|Mind Uploading|S5|X:asc|mod:Rp*1.3;digital:0.5;mega:nexus;path:S|Synthetic path stage 1 (absorbs Synthetic Citizens)
+S7|7|Digital Ascension|S6|-|mod:Rp*1.5;mod:Mine*1.2;mod:Foundry*1.2;digital:0.97;conscience:-0.12;mega:bishop|Synthetic path stage 2
+S8|8|Hive Consensus|S7|X:ascS|mod:Rp*1.5;flag:Hive;mega:coord|Synthetic stage 3: one mind, no elections
+S9|9|The Long Memory|S8/ASC-S3b/ASC-S3c|-|mod:Rp*2;mega:memory|Synthetic capstone
+S10|10|Transcendence|S9|K|flag:Transcend;apotheosis:+3;cond:digital>=0.9&kardashev>=2.95|An apotheosis route
+
+## ---------------- PWR Power Generation (E) ----------------
+PWR-1|0|Fission Piles|-|S|-|Base reactors
+PWR-4|2|Aneutronic He-3 Fusion|E1,MIN-4|-|mod:PlanetCap>=4e15;mod:Foundry*1.05|Burns gas-giant helium
+PWR-5|3|Antimatter Containment Reactors|PWR-4,MAT-2|-|mod:Foundry*1.1;mod:PlanetCap>=8e15|Reactor IV
+PWR-6|3|Superconducting Grids|PWR-4,IND-5|-|mod:Eff*1.05;mod:Foundry*1.05|Less waste in every grid
+PWR-7|4|Annihilation Cores|PWR-5|K|mod:Foundry*1.1;mod:PlanetCap>=2e16|Capital-ship power threshold
+PWR-8|4|Ergosphere Taps|PWR-7,SEN-5|-|flag:BlackHoleTap;mod:RegionPower*1.05|Black-hole stations give energy
+PWR-9|5|Vacuum Flux Reactor|PWR-7,CHR-1|K|flag:VacuumFlux;mod:Foundry*1.15;mod:PlanetCap>=5e16|Zero-point power; opens the T5 great works
+PWR-10|5|Stellar Lattice Grid|E2,MEG-5|-|mod:RegionPower*1.1|Swarm output shared across systems
+PWR-11|6|Umbral Draw Reactor|PWR-9,UMB-2|-|use:Umbral;mod:Foundry*1.3|Burns Umbral Matter
+PWR-12|7|Abyssal Siphon Core|PWR-11,UMB-5|D|use:Abyssal;mod:Foundry*1.3;meter:Elders+15|The ancients take offence
+PWR-13|8|Glyph-Bound Engine|PWR-12/CHR-3,GLY-2|-|use:Anima;mod:Foundry*1.4|Anima-fuelled reactor
+PWR-14|9|Stellarine Heart|PWR-13,STL-2|D|use:Stellarine;mod:Foundry*1.5;meter:Flux+10|Overload mode risks detonation
+PWR-15|10|Lumen Receiver|PWR-14,LUX-1|-|use:Lumen;mod:Foundry*3|No fuel; Lumen-gated
+
+## ---------------- IND Materials & Industry (I) ----------------
+IND-1|0|Automated Foundries|-|S|-|Alloy production
+IND-2|0|Composite Metallurgy|-|S|-|Unlocks basic armour
+IND-3|1|Orbital Smelters|IND-1|-|mod:Foundry*1.1|Alloys from asteroid ore
+IND-4|1|Robotic Assembly Lines|IND-1,CMP-2|-|mod:Foundry*1.1;mod:Build*1.15|Faster construction everywhere
+IND-5|2|Zero-G Crystallisation|IND-3|-|mod:Eff*1.05|Superconductors and lattice crystals
+IND-6|2|Strategic Refineries|IND-3,MIN-3|-|mod:Mine*1.1|Rare materials from common ore
+IND-7|3|Nanofabrication|IND-5,MAT-3|-|mod:Foundry*1.15|Nano-scale parts
+IND-9|4|Molecular Assemblers|IND-7,MAT-4|K|mod:Foundry*1.2;mod:PopCap*1.05|Goods from energy; city-worlds possible
+IND-10|4|Living Alloy Cultivation|IND-9,BIO-9|R|mod:Foundry*1.1;mod:Build*1.1|Self-healing alloy
+IND-12|6|Umbral Forging|IND-9,UMB-2|-|use:Umbral;mod:Foundry*1.2|Umbral-grade components
+IND-13|7|Abyssal Transmutation|IND-12,UMB-5|-|use:Abyssal;mod:Mine*1.3|Any material into any other
+IND-14|8|Glyphcraft Workshops|IND-13/CHR-3,GLY-1|-|use:Anima;mod:Foundry*1.3|Rune-engraved parts
+IND-15|9|Star-Forging|IND-14,STL-2,I6|-|use:Stellarine;mod:Foundry*1.4;mega:coronaforge|Smelt in the corona
+IND-16|10|Lumen Weaving|IND-15,LUX-2|-|use:Lumen;mod:Foundry*2;mod:Build*2|Parts made of structured light
+
+## ---------------- MIN Mining & Extraction (I) ----------------
+MIN-1|0|Deep Surface Mining|-|S|-|Minerals
+MIN-3|1|Volatile Capture|MIN-1|-|mod:Comets*1.3|Volatiles from ice and comets
+MIN-4|2|He-3 Scoops|I2|-|mod:GasYield*1.5|First gas-giant harvest
+MIN-5|2|Core Drilling|I2|-|mod:Mine*1.15|Deep crust extraction
+MIN-6|3|Comet Wrangling|MIN-4,X2|-|mod:Comets*1.5;mod:Terra*1.2|Comets steered for water and volatiles
+MIN-7|3|Crystal Seeding|IND-5|-|mod:Eff*1.05|Crystal farms
+MIN-8|4|Neutron-Star Scraping|MIN-6,SEN-5|R|flag:Neutronium;mod:Mine*1.1|Neutronium
+MIN-9|5|Singularity Decompression|MIN-8,MEG-5|-|mod:Mine*1.3;mega:decompressor|Black-hole matter extraction (absorbs Singularity Drill)
+MIN-11|6|Dark Halo Dredging|I6,UMB-1|E|res:Umbral+1|Umbral Matter from halos
+MIN-12|7|Abyssal Wells|MIN-11,UMB-5|-|res:Abyssal+1|Abyssal Energy from rifts
+MIN-13|9|Stellar Core Tapping|I6,STL-1|D|res:Stellarine+1;meter:Flux+15|May destabilise the star
+MIN-14|10|Lumen Gleaning|LUX-3|-|res:Lumen+0.2|A trickle of Lumen from gate shrines
+
+## ---------------- MAT Matter Engineering (I) ----------------
+MAT-1|2|Metamaterials|IND-5|-|mod:Stealth*1.2;mod:Sense*1.1|Stealth coatings, better sensors
+MAT-2|3|Penning Containment|MAT-1,PWR-4|-|mod:Foundry*1.05|Antimatter storage
+MAT-3|3|Nanomachine Foundations|MAT-1,CMP-4|-|mod:Growth*1.05;mod:Foundry*1.05|Repair nanites, medicine
+MAT-4|3|Exotic Matter Synthesis|MAT-2|K|flag:ExoticMatter|Negative mass; needed for every metric trick
+MAT-5|4|Utility Fog|MAT-3|-|mod:PopCap*1.05|Morphing interiors
+MAT-6|4|Programmable Matter|MAT-5|-|mod:Build*1.2|Refit without a shipyard
+MAT-7|5|Neutronium Stabilisation|MAT-4,MIN-8|-|mod:HubCost*0.9|Neutronium armour and slugs
+MAT-8|5|Computronium|MAT-6,CMP-8|-|mod:Rp*1.15|Matter optimised for thought
+MAT-9|5|Nanite Swarm Doctrine|MAT-6|D|mod:Mine*1.3;meter:Goo+15|Nanites as a resource
+MAT-10|6|Strange-Matter Containment|MAT-7,UMB-3|D|mod:Foundry*1.2;meter:Strange+20|Strangelets, contained, mostly
+MAT-11|7|Quark-Gluon Sculpting|MAT-10,CHR-2|-|mod:Foundry*1.3|New elements by design
+MAT-12|8|Anima-Infused Matter|MAT-11,GLY-2|-|use:Anima;mod:Build*1.3|Matter that remembers its shape
+MAT-13|9|Stellarine Alloys|MAT-11,STL-2|-|use:Stellarine;mod:Foundry*1.2|Top mortal armour base
+MAT-14|10|Solid Light|MAT-13,LUX-2|-|use:Lumen;mod:Build*2|Hard-light constructs
+
+## ---------------- CMP Computing & AI (M) ----------------
+CMP-1|0|Silicon Computing|-|S|-|Labs
+CMP-2|1|Quantum Processing|CMP-1|-|mod:Rp*1.1|Research up
+CMP-3|1|Fire-Control Matrices|CMP-1|-|mod:Fleet*1.05|Combat computer II
+CMP-4|2|Neural-Lattice Computers|CMP-2|-|mod:Rp*1.1|Expert systems
+CMP-5|2|Autonomous Drones|CMP-3|-|mod:Mine*1.05;arms:craft>=2|Drone workers and craft
+CMP-6|3|Self-Evolving Logic|CMP-4|-|mod:Rp*1.1|Prerequisite for true AI
+CMP-7|3|Synthetic Personae|CMP-6,BIO-4|-|mod:PopCap*1.05;event:ai_rights|Androids; the rights question
+CMP-8|4|Distributed Cognition|CMP-6|-|mod:Rp*1.15|Research networks across colonies
+CMP-9|4|Sapient Battle Minds|CMP-6,CMP-3|D|mod:Fleet*1.15;meter:AI+10|Combat computer IV
+CMP-10|5|Sapient General Intelligence|CMP-8|D,K|mod:Rp*1.25;meter:AI+15|AI administrators
+CMP-12|6|Overmind Networks|CMP-10,MAT-8|-|mod:Rp*1.2;mod:Unity*1.2|An empire-wide mind
+CMP-13|7|Transapient Ascension|CMP-12,E6|D|mod:Rp*1.3;meter:Mind+20|A mind above the council
+CMP-14|8|Glyph-Coded Cognition|CMP-13,GLY-3a/GLY-3b|-|use:Anima;mod:Rp*1.2;meter:AI-20|Minds that cannot be hacked
+CMP-15|9|Stellar Cognition|CMP-13,STL-3,E6|-|use:Stellarine;mod:Rp*1.4|Star-powered thought
+CMP-16|10|Archailect Threshold|CMP-15,LUX-3|D|mod:Rp*2;meter:Mind+30;apotheosis:+1|A mind near godhood
+
+## ---------------- SEN Sensors (M) ----------------
+SEN-1|0|Radar & Optical Arrays|-|S|-|Base sensor range
+SEN-2|1|Gravimetric Sensors|SEN-1|-|mod:Sense*1.1|Detect anomalies
+SEN-3|2|Subspace Sensors|SEN-2,CMP-2|-|mod:Sense*1.2|Deep-space scans
+SEN-4|3|Deep Survey Scanners|SEN-3|-|mod:Mine*1.05;act:find_ruins|Hidden deposits and ruins
+SEN-5|4|Superluminal Pulse Sensors|SEN-4,PWR-7|-|mod:Sense*1.3|Long range; reveals lesser cloaks
+SEN-6|5|Deep Augury|SEN-5|-|mod:Sense*1.3;mod:Range*1.1|See systems far away
+SEN-7|6|Umbral Echo Mapping|SEN-6,UMB-1|-|flag:SeeHalos|Dark-matter halos revealed
+SEN-8|7|Chrono-Sight|SEN-7,CHR-3|-|mod:Fleet*1.2|Short-range precognition
+SEN-9|8|Fate-Reading|SEN-7,GLY-3a/GLY-3b|-|mod:Fleet*1.1;act:foresee|See events before they fire
+SEN-10|9|Stellar Web|SEN-9,STL-3|-|mod:Sense*2|Every owned star is a sensor
+SEN-11|10|Lucent Lens|SEN-10,LUX-2|-|mod:Sense*5|Galaxy-wide vision
+
+## ---------------- FTL Propulsion & FTL doctrines (X) ----------------
+## Sublight X0-X5 is the spine. The doctrine fork happens at the Fold Drive (T6).
+FTL-3a|6|Lane Folding|X6|X:ftl|flag:LaneDoc;mod:ShipSpeed*1.5;mod:Range*0.8|Fold only along charted lanes: fast, predictable, chokepoints
+FTL-3b|6|Metric Bubble|X6,MAT-4|X:ftl|flag:BubbleDoc;mod:Range*1.5;mod:ShipSpeed*0.7|Fold anywhere in range; slow
+FTL-3c|6|Gate Anchoring|X6|X:ftl|flag:GateDoc;mod:RegionRate*1.2;mod:HubCost*1.1|Instant between built anchors only
+FTL-4|7|Doctrine Mastery|FTL-3a/FTL-3b/FTL-3c|-|mod:ShipSpeed*1.5;mod:Range*1.2|Doctrine upgrade
+FTL-5|7|Interdiction Fields|X6,STB-3|-|flag:Interdict;guard:base>=7|Stop enemy folds at the border
+FTL-6|7|Hyper-Relay Grid|FTL-4,MEG-1|-|mod:RegionRate*1.1;mega:relay|Fold express lanes
+FTL-7|8|Secondary Doctrine|FTL-4|-|flag:SecondDoc|Learn one other doctrine
+FTL-8|8|Tear Drive|FTL-4,PWR-9|R,D|mod:Range*2;meter:Breach+20|Jump ignoring everything; attracts predators
+FTL-9|8|Wormhole Stabilisation|MAT-4,CHR-1,X6|K|flag:Wormhole;mega:wormhole|Hold natural wormholes open
+FTL-10|8|Umbral Slipstream|FTL-8,UMB-3|-|use:Umbral;mod:ShipSpeed*2;flag:IgnoreInterdict|Travel through dark-matter shadow
+FTL-12|8|Psi-Leap|FTL-8,PSI-6|D|mod:Range*2;meter:Veil+15|Jump through the Veil
+FTL-13|8|Glyph Waygates|X8,GLY-2|-|use:Anima;mod:RegionRate*1.2|Rune portals
+FTL-14|9|Starbridges|FTL-13,STL-3|-|use:Stellarine;mod:ShipSpeed*3|Star-to-star through coronae
+FTL-15|10|Lucent Translation|FTL-14,LUX-3|-|use:Lumen;mod:ShipSpeed*10|Instant travel to any explored point
+
+## ---------------- HUL Hull classes (X) ----------------
+HUL-1|1|Corvette Keels|I1|-|hull:Corvette|Fast picket
+HUL-2|1|Frigate Keels|HUL-1,MSL-2|-|hull:Frigate|Torpedo boat
+HUL-3|2|Destroyer Keels|HUL-1,STB-2|-|hull:Destroyer;mod:Fleet*1.03|Escort, PD screen
+HUL-4|3|Cruiser Keels|HUL-3,STB-3|-|hull:Cruiser;mod:Fleet*1.03|Line ship
+HUL-5|4|Battleship Keels|HUL-4,STB-4|-|hull:Battleship;mod:Fleet*1.05|Spinal weapon mount
+HUL-6|4|Battlecruiser Keels|HUL-4,X2|-|hull:Battlecruiser;mod:Fleet*1.03|Fast heavy raider
+HUL-7|5|Titan Keels|HUL-5,PWR-7,STB-5|K|hull:Titan;mod:Fleet*1.1|Flagship aura
+HUL-8|5|Juggernaut Keels|HUL-7,MEG-1|-|hull:Juggernaut;mod:Fleet*1.05|Mobile shipyard-citadel
+HUL-9|5|Colossus Platform|HUL-7,PKL-1|-|hull:Colossus|World-killer platform
+HUL-10|6|Umbral Dreadnought|HUL-7,UMB-3|-|hull:Dreadnought;mod:Fleet*1.1|Ancient-class hull
+HUL-11|7|Worldship|HUL-8,COL-9|-|hull:Worldship;act:nomad|Mobile colony-city
+HUL-12|7|Bonded Leviathan|XEN-8|E|hull:Leviathan;mod:Fleet*1.1|Tamed space-beast flagship
+HUL-13|8|Glyph Ark|HUL-11,GLY-3a/GLY-3b|-|hull:GlyphArk;mod:Fleet*1.1|Runic super-ark
+HUL-14|9|Star-Devourer|HUL-13,STL-4|-|hull:Devourer;mod:Fleet*1.15|A hull that eats stars
+HUL-15|10|Seraph|HUL-14,LUX-3|-|hull:Seraph;mod:Fleet*1.3|Lucent avatar-ship; one per civ
+
+## ---------------- CIV Support & civilian ships (X) ----------------
+CIV-1|0|Survey Vessels|-|S|-|Explore
+CIV-2|0|Constructors|-|S|-|Build stations
+CIV-3|0|Colony Pods|-|S|-|Settle
+CIV-4|1|Troop Transports|GND-1|-|mod:Ground*1.1|Ground invasion
+CIV-5|2|Freighter Convoys|ECO-2|-|mod:Trade*1.1|Physical trade lanes
+CIV-6|2|Mining Barges|I2|-|mod:Mine*1.05|Mobile extraction
+CIV-7|3|Fleet Tenders|HUL-3,MIL-3|-|mod:Fleet*1.05|Field repair
+CIV-8|3|Hospital Ships|BIO-5|-|mod:Growth*1.03;mod:WarLoss*0.9|Fewer lost in war
+CIV-9|4|Terraformer Ships|TER-3|-|mod:Terra*1.3|Mobile terraforming
+CIV-10|4|Deep Explorers|SEN-4|-|mod:Range*1.1|Long-range survey
+CIV-11|8|Gate Builders|X8|-|mod:RegionRate*1.1|Gates and anchors
+CIV-12|5|Diplomatic Flagships|DIP-6|-|mod:Diplo*1.2|Envoys carry weight
+CIV-13|6|Umbral Prospectors|UMB-1|-|res:Umbral+0.3|Dark-matter survey
+CIV-14|7|Ark of Peoples|HUL-11|-|act:migrate|Moves whole species
+CIV-15|8|Seedships|XEN-9|-|act:seed_life|Seeds life on dead worlds
+CIV-16|9|Star-Shepherds|STL-3|-|mod:RegionPower*1.1;act:move_star|Tend and move stars
+
+## ---------------- EWP Energy weapons (W) ----------------
+EWP-1|0|Infrared Lasers|-|S|arms:energy>=0;vis:laser|Laser I
+EWP-2|1|Visible-Band Lasers|EWP-1|-|arms:energy>=1|Laser II
+EWP-3|2|Ultraviolet Lasers|EWP-2|-|arms:energy>=2|Laser III
+EWP-4|2|Ion Disruptors|EWP-2,SHD-1|R|arms:energy>=2;vis:disruptor|Bypasses shields
+EWP-5|3|X-Ray Lasers|EWP-3|-|arms:energy>=3|Laser IV
+EWP-6|3|Plasma Projectors|EWP-3,PWR-4|R|arms:energy>=3;vis:plasma|Heavy anti-armour
+EWP-7|4|Gamma Lasers|EWP-5|-|arms:energy>=4|Laser V
+EWP-8|4|Plasma Accelerators|EWP-6|-|arms:energy>=4|Plasma II
+EWP-9|4|Particle Lance|EWP-6,HUL-5|-|arms:energy>=4;vis:lance|Spinal beam
+EWP-10|5|Tachyonic Lance|EWP-9,PWR-9|-|arms:energy>=5|Long-range lance
+EWP-11|5|Annihilator Beam|EWP-10,HUL-7|-|arms:energy>=5;mod:Fleet*1.05|Titan-only beam
+EWP-12|5|Phase Disruptors|EWP-4|-|arms:energy>=5|Drains enemy power to repair
+EWP-13|6|Umbral Beam|EWP-10,UMB-3|-|use:Umbral;arms:energy>=6|Ignores half of shields
+EWP-14|7|Abyssal Lance|EWP-13,UMB-5|-|use:Abyssal;arms:energy>=7|Stops armour regenerating
+EWP-15|8|Brand of Glyphs|EWP-14/EWP-13,GLY-2|-|use:Anima;arms:energy>=8|Morale damage to crews
+EWP-16|9|Corona Spear|EWP-15,STL-2|-|use:Stellarine;arms:energy>=9|Burns for three rounds
+EWP-17|10|Lumen Edge|EWP-16,LUX-2|-|use:Lumen;arms:energy>=10|Ignores non-Lucent defences
+
+## ---------------- KWP Kinetic weapons (W) ----------------
+KWP-1|0|Slug Launchers|-|S|arms:kinetic>=0;vis:slug|Kinetic I
+KWP-2|1|Coil Accelerators|KWP-1|-|arms:kinetic>=1|Kinetic II
+KWP-3|2|Rail Accelerators|KWP-2,IND-5|-|arms:kinetic>=2|Kinetic III
+KWP-4|2|Rotary Autocannons|KWP-2|R|arms:kinetic>=2;vis:autocannon|High rate of fire
+KWP-5|3|Hyper-Rails|KWP-3|-|arms:kinetic>=3|Kinetic IV
+KWP-6|3|Flak Batteries|KWP-3|-|guard:pd>=3|Point defence vs craft and missiles
+KWP-7|4|Gauss Drivers|KWP-5|-|arms:kinetic>=4|Kinetic V
+KWP-8|4|Siege Batteries|KWP-5,HUL-5|-|arms:kinetic>=4|Long-range artillery
+KWP-9|5|Spinal Mass Accelerator|KWP-8,PWR-9|-|arms:kinetic>=5|Relativistic spinal gun
+KWP-10|5|Neutronium Penetrators|KWP-7,MAT-7|-|arms:kinetic>=5|Armour penetration
+KWP-11|6|Umbral Shard Rounds|KWP-10,UMB-3|-|use:Umbral;arms:kinetic>=6|Pass partly through shields
+KWP-12|7|Mass-Fold Cannon|KWP-11,CHR-3|-|arms:kinetic>=7|Shells skip the space between
+KWP-13|8|Glyph-Etched Rounds|KWP-11,GLY-2|-|use:Anima;arms:kinetic>=8|Rounds return to the gun
+KWP-14|9|Star-Forged Driver|KWP-13,STL-2|-|use:Stellarine;arms:kinetic>=9|Area damage
+KWP-15|10|Lucent Javelin|KWP-14,LUX-2|-|use:Lumen;arms:kinetic>=10|Hits anything in the system
+
+## ---------------- MSL Missiles & torpedoes (W) ----------------
+MSL-1|0|Chemical Rockets|-|S|arms:missile>=0;vis:missile|Missile I
+MSL-2|1|Fission Warheads|MSL-1,PWR-1|-|arms:missile>=1|Missile II
+MSL-3|2|Fusion Warheads|MSL-2,E1|-|arms:missile>=2|Missile III
+MSL-4|2|Heavy Torpedoes|MSL-3|-|arms:missile>=2;vis:torpedo|Anti-capital
+MSL-5|3|Antimatter Warheads|MSL-3,MAT-2|-|arms:missile>=3|Missile IV
+MSL-6|3|Swarm Munitions|MSL-3,CMP-5|R|arms:missile>=3|Many small missiles
+MSL-7|4|Thinking Missiles|MSL-5,CMP-8|-|arms:missile>=4|Retarget mid-flight
+MSL-8|4|Energy Torpedoes|MSL-4,EWP-6|-|arms:missile>=4|Plasma torpedo
+MSL-9|5|Devastator Torpedoes|MSL-8|-|arms:missile>=5|Massive anti-armour
+MSL-10|5|Whirlwind Swarms|MSL-6|-|arms:missile>=5|Swarm II
+MSL-11|6|Umbral Warheads|MSL-9,UMB-3|-|use:Umbral;arms:missile>=6|Dark-matter implosions
+MSL-12|7|Abyssal Mines|MSL-11,UMB-5|-|use:Abyssal;arms:missile>=7;guard:base>=7|System-denial minefields
+MSL-13|8|Soul-Seekers|MSL-12/MSL-11,GLY-4|D,A|use:Anima;arms:missile>=8;meter:Atrocity+10|Home on life signatures
+MSL-14|9|Nova Torpedoes|MSL-13/MSL-11,STL-2|-|use:Stellarine;arms:missile>=9|Small stellar detonations
+MSL-15|10|Lumen Seekers|MSL-14,LUX-2|-|use:Lumen;arms:missile>=10|Pass through any matter
+
+## ---------------- SFC Strike craft (W) ----------------
+SFC-1|2|Interceptors|HUL-3|-|arms:craft>=2;vis:fighter|Anti-craft fighters
+SFC-2|2|Bombers|SFC-1|-|arms:craft>=2|Anti-ship craft
+SFC-3|3|Flight Decks|SFC-2,HUL-4|-|arms:craft>=3;hull:Carrier|Carrier hulls
+SFC-4|4|Drone Swarms|SFC-3,CMP-8|-|arms:craft>=4|Crewless craft
+SFC-5|4|Ace Academies|SFC-3,MIL-4|-|arms:craft>=4;mod:Fleet*1.05|Veteran wings
+SFC-6|5|Ghost Wings|SFC-4,DEF-7|-|arms:craft>=5|Cloaked strike craft
+SFC-7|6|Umbral Wraiths|SFC-6,UMB-3|-|use:Umbral;arms:craft>=6|Phase through shields
+SFC-8|7|Living Craft|SFC-7,BIO-10|-|arms:craft>=7|Grown fighters that breed
+SFC-9|8|Spirit Wings|SFC-8,GLY-3a/GLY-3b|-|use:Anima;arms:craft>=8|Re-form after death
+SFC-10|9|Sun-Moths|SFC-9,STL-3|-|use:Stellarine;arms:craft>=9|Stellar-energy swarms
+SFC-11|10|Lumen Choir|SFC-10,LUX-2|-|use:Lumen;arms:craft>=10|Light-constructs
+
+## ---------------- XWP Exotic & psionic weapons (W) ----------------
+XWP-1|4|Arc Casters|EWP-6,SHD-3|R|arms:exotic>=4|Random huge damage
+XWP-2|4|Storm Projectors|XEN-6|R,E|arms:exotic>=4|Cloud lightning from beast study
+XWP-3|5|Graviton Snare|CHR-1|-|arms:exotic>=5|Pins ships in place
+XWP-4|5|Matter Unbinders|ARC-5|E|arms:exotic>=5|From extradimensional debris
+XWP-5|5|Nanite Flechettes|MAT-9|-|arms:exotic>=5|Converts wrecks
+XWP-6|6|Mind Lance|PSI-4|-|arms:exotic>=6|Damages crews
+XWP-7|6|Entropy Projector|CHR-2|-|arms:exotic>=6|Ages its target
+XWP-8|7|Veil Scream|PSI-6|D|arms:exotic>=7;meter:Veil+15|Area psionic strike
+XWP-9|7|Temporal Displacer|CHR-3|-|arms:exotic>=7|Removes a ship from time
+XWP-10|8|Soul Reaver|GLY-4|D,A|arms:exotic>=8;res:Anima+0.5;meter:Atrocity+15|Kills crews, harvests them
+XWP-11|9|Flare Director|STL-3|-|arms:exotic>=9|Aims a star's flares
+XWP-12|10|Word of Unmaking|LUX-4|-|arms:exotic>=10|Deletes what it fully understands
+
+## ---------------- PKL Planet-killers (W) ----------------
+PKL-1|3|Orbital Bombardment Doctrines|MIL-3|-|arms:doom>=3;act:bombard|Selective to Armageddon
+PKL-3|4|Planetary Siege Lasers|EWP-7,STB-5|-|arms:doom>=4|Planet-to-orbit beams
+PKL-2|5|Kinetic Kill Vehicles|KWP-7,X5|-|arms:doom>=5;act:kkv|Relativistic impactors
+PKL-4|5|Doomsday Platforms|HUL-9|K|arms:doom>=5;act:planet_killer|Colossus weapons
+PKL-5|5|Crust Cracker|PKL-4,KWP-9|-|act:crack_world|Shatters a world into a belt
+PKL-6|5|Neutron Purge|PKL-4,BIO-8|D,A|act:purge;meter:Atrocity+15|Kills people, keeps buildings
+PKL-7|5|Pacifier Shell|PKL-4,SHD-6|-|act:seal_world|Seals a world forever
+PKL-8|6|Nanite Transmutation Beam|PKL-4,MAT-9|D|act:nanite_world;meter:Goo+10|Turns a world to nanites
+PKL-9|6|Umbral Collapser|PKL-5,UMB-3|-|use:Umbral;act:collapse_world|Planet into black-hole mass
+PKL-10|7|Nicoll-Dyson Lance|PKL-4,X7|-|arms:doom>=7;act:beam_strike|Star-powered beam across systems
+PKL-11|8|Soul Harvester Engine|GLY-4|D,A|res:Anima+3;act:harvest;meter:Atrocity+30|A world's people into Anima
+PKL-12|9|Star-Eater|STL-4,HUL-13|D|act:eat_star|Collapses stars
+PKL-13|9|Nova Trigger|STL-4|D,A|act:nova;meter:Atrocity+20|Forced supernova
+PKL-14|10|Sector Erasure|LUX-4|D,A|act:erase_cluster;meter:Atrocity+40|Deletes a cluster
+
+## ---------------- ARM Armour (W) ----------------
+ARM-1|0|Layered Carbide|IND-2|S|guard:armor>=0|Armour I
+ARM-2|1|Ceramic Ablatives|ARM-1|-|guard:armor>=1|Armour II
+ARM-3|2|Diamondoid Weave|ARM-2,IND-5|-|guard:armor>=2|Armour III
+ARM-4|2|Damage-Control Teams|ARM-2|-|mod:Fleet*1.03;mod:WarLoss*0.95|Hull repairs between battles
+ARM-5|3|Nano-Lattice Plating|ARM-3,MAT-3|-|guard:armor>=3|Armour IV
+ARM-6|4|Neutronium Laminate|ARM-5,MIN-8|-|guard:armor>=4|Armour V
+ARM-7|4|Reinforced Frames|ARM-4,HUL-5|-|mod:Fleet*1.05|More hull
+ARM-8|5|Living Alloy Hulls|ARM-6,IND-10|-|guard:armor>=5|Armour regenerates
+ARM-9|6|Umbral Plate|ARM-8,UMB-3|-|use:Umbral;guard:armor>=6|Powered, regenerating
+ARM-10|7|Abyssal Carapace|ARM-9,UMB-5|-|use:Abyssal;guard:armor>=7|Reflects energy
+ARM-11|8|Glyph-Ward Plating|ARM-10/ARM-9,GLY-2|-|use:Anima;guard:armor>=8|Rebuilds after battle
+ARM-12|9|Stellarine Mantle|ARM-11,STL-2|-|use:Stellarine;guard:armor>=9|Immune to stellar hazards
+ARM-13|10|Lucent Aegis|ARM-12,LUX-2|-|use:Lumen;guard:armor>=10|Hard-light armour
+
+## ---------------- SHD Shields (W) ----------------
+SHD-1|1|Deflector Screens|E1|-|guard:shield>=1|Shield I
+SHD-2|2|Layered Deflectors|SHD-1|-|guard:shield>=2|Shield II
+SHD-3|3|Hardened Deflectors|SHD-2|-|guard:shield>=3|Shield III
+SHD-4|3|Planetary Shield Dome|SHD-3,STB-3|-|mega:shield;guard:base>=3|Bombardment protection
+SHD-5|4|Hyper-Coherent Shields|SHD-3,PWR-7|-|guard:shield>=4|Shield IV
+SHD-6|5|Phase-Shift Barriers|SHD-5,PWR-9|-|guard:shield>=5|Brief immunity pulses
+SHD-7|5|Kinetic Barrier Layer|SHD-5|-|guard:shield>=5|Second anti-kinetic layer
+SHD-8|6|Umbral Deflectors|SHD-6,UMB-3|-|use:Umbral;guard:shield>=6|Shield VI
+SHD-9|7|Abyssal Veil|SHD-8,UMB-5|-|use:Abyssal;guard:shield>=7|Absorbs and re-emits
+SHD-10|7|System Aegis|SHD-9/CHR-3,E5|-|guard:base>=7;mega:aegis|A whole system shielded
+SHD-11|8|Glyph Ward|SHD-9/SHD-8,GLY-2|-|use:Anima;guard:shield>=8;meter:Veil-10|Blocks psionic and soul attacks
+SHD-12|9|Corona Shell|SHD-11,STL-2|-|use:Stellarine;guard:shield>=9|Solar-plasma shield
+SHD-13|10|Lucent Sanctum|SHD-12,LUX-2|-|use:Lumen;guard:shield>=10|Near-invulnerability
+
+## ---------------- DEF Point defence, ECM, cloaking (W) ----------------
+DEF-1|1|PD Lasers|EWP-1|-|guard:pd>=1|Shoot down missiles
+DEF-2|2|Jamming Suites|CMP-3|-|mod:Fleet*1.03|Enemy tracking down
+DEF-3|3|Decoy Emitters|DEF-2|-|guard:pd>=3|Misdirection
+DEF-4|3|Basic Cloaking|MAT-1,SEN-3|R|mod:Stealth*1.3|Cloak small hulls
+DEF-5|4|Interceptor Drones|DEF-1,CMP-5|-|guard:pd>=4|Strong PD
+DEF-6|4|Phase-Scatter Fields|DEF-3|-|mod:Fleet*1.05|Evasion
+DEF-7|5|Advanced Cloaking|DEF-4|-|mod:Stealth*1.5|Cloak cruisers and larger
+DEF-8|6|Umbral Shroud|DEF-7,UMB-3|-|use:Umbral;mod:Stealth*2|Near-undetectable fleets
+DEF-9|7|Density-Shift Hulls|DEF-6,CHR-2|-|guard:pd>=7|Attacks pass through
+DEF-10|8|Fate-Blur|DEF-9,GLY-3a/GLY-3b|-|mod:Fleet*1.15|Enemy luck fails
+DEF-11|10|The Unseen|DEF-10,LUX-3|-|mod:Stealth*5|Untargetable below Lucent sensors
+
+## ---------------- STB Starbases (W) ----------------
+STB-1|0|Outposts|-|S|guard:base>=0|Claim systems
+STB-2|1|Starports|STB-1|-|guard:base>=1;mod:Base>=1|Starbase level 2
+STB-3|2|Starholds|STB-2|-|guard:base>=2;mod:Base>=2|Starbase level 3
+STB-4|3|Star Fortresses|STB-3|-|guard:base>=3;mod:Base>=3|Starbase level 4
+STB-5|4|Citadels|STB-4|-|guard:base>=4;mod:Base>=4|Starbase level 5
+STB-6|5|Bastion Arrays|STB-5,MEG-1|-|guard:base>=5|System-wide gun networks
+STB-7|6|Umbral Fortress|STB-6,UMB-3|-|use:Umbral;guard:base>=6;mod:Base>=5;mega:umbralfort|Dark-matter superbase
+STB-8|7|Gate Bastion|STB-7,ARC-8|-|guard:base>=7;mega:gatebastion|Guardian station
+STB-9|8|Glyph Sanctum|STB-8/STB-7,GLY-3a/GLY-3b|-|use:Anima;guard:base>=8;mega:sanctum|Regenerating rune-fortress
+STB-10|9|Sun Citadel|STB-9,STL-3|-|use:Stellarine;guard:base>=9;mega:suncitadel|Draws on the star
+STB-11|10|Lucent Throne|STB-10,LUX-3|-|use:Lumen;guard:base>=10;mega:throne|Seat for divine contact
+
+## ---------------- MIL Military theory (W) ----------------
+MIL-1|1|Fleet Command Doctrine|-|-|mod:Fleet*1.05|Command limit up
+MIL-2|2|Supply Chains|MIL-1|-|mod:Fleet*1.05|Naval capacity
+MIL-3|3|Admiralty Academies|MIL-2|-|mod:Fleet*1.05|Admirals
+MIL-4|4|Combat Doctrine Nets|MIL-3,CMP-8|-|mod:Fleet*1.1|Fleet doctrines
+MIL-5|4|Combined-Arms Theory|MIL-3,GND-3|-|mod:Ground*1.2|Army and fleet synergy
+MIL-6|5|Total-War Economy|MIL-4|-|mod:Fleet*1.15;mod:WarLoss*1.1|Stronger in war, costlier peace
+MIL-7|6|Coordinated Fold Strikes|MIL-6,X6|-|mod:Fleet*1.15|Fleets arrive together
+MIL-8|8|Oathbound Legions|MIL-7,GLY-3a/GLY-3b|-|mod:Fleet*1.2;mod:Ground*1.2|Crews never break
+
+## ---------------- GND Ground forces (W) ----------------
+GND-1|0|Militia & Assault Troops|-|S|arms:ground>=0|Basic armies
+GND-2|1|Powered Armour|GND-1,IND-2|-|arms:ground>=1|Armour for soldiers
+GND-3|2|Clone Legions|BIO-7|-|arms:ground>=2|Cheap, fast to raise
+GND-4|2|Robotic Infantry|CMP-5|-|arms:ground>=2|No morale to break
+GND-5|3|Gene-Warriors|BIO-8|-|arms:ground>=3|Elite, volatile
+GND-6|4|Siege Walkers|GND-2,IND-9|-|arms:ground>=4|Anti-fortification
+GND-7|4|Psi-Templars|PSI-3|-|arms:ground>=4;meter:Veil-5|Anti-psionic elites
+GND-8|5|Nanite Swarm Legions|MAT-9|-|arms:ground>=5;meter:Goo+5|Self-replicating armies
+GND-9|6|Umbral Phalanx|UMB-3|-|use:Umbral;arms:ground>=6|Dark-matter shock troops
+GND-10|7|Abyssal Juggernauts|UMB-5|-|use:Abyssal;arms:ground>=7|One unit takes a planet
+GND-11|8|Glyph Knights|GLY-3a/GLY-3b|-|use:Anima;arms:ground>=8|Soulbound; they return
+GND-12|9|Sun-Wardens|STL-3|-|use:Stellarine;arms:ground>=9|Stellarine heroes
+GND-13|10|Lucent Champions|LUX-3|-|use:Lumen;arms:ground>=10|Avatar-grade single units
+
+## ---------------- BIO Biology & medicine (L) ----------------
+BIO-1|0|Hydroponics|-|S|-|Food
+BIO-2|0|Genome Mapping|-|S|-|Genetics begins
+BIO-3|1|Gene Clinics|BIO-2|-|mod:Growth*1.1|Growth, longer-lived leaders
+BIO-4|1|Neural Mapping|BIO-2|-|mod:Rp*1.03|Basis for androids and implants
+BIO-5|2|Regenerative Medicine|BIO-3|-|mod:Growth*1.05;mod:Ground*1.1|Fewer deaths
+BIO-6|2|Gene Tailoring|BIO-3|-|mod:PopCap*1.05|Edit species traits
+BIO-7|2|Clone Vats|BIO-6|-|mod:Growth*1.15|Grown people
+BIO-8|3|Targeted Gene Expression|BIO-6|-|mod:PopCap*1.05;mod:Growth*1.05|Edit any trait
+BIO-9|3|Engineered Biomass|BIO-7|-|mod:Foundry*1.05|Living building material
+BIO-10|4|Grown Starships|BIO-9,HUL-4|-|flag:GrownHulls;vis:organic|Switches the civ to the organic hull family
+BIO-12|5|Directed Evolution|BIO-8,CMP-8|-|mod:Growth*1.1|Gateway to the genetic path
+BIO-13|6|Umbral Physiology|BIO-12,UMB-2|-|mod:Habs*1.2|People who live in the void
+BIO-14|7|World-Organisms|BIO-13,TER-6|-|act:living_world|Living planets
+BIO-15|8|Soul-Flesh Symbiosis|BIO-14,GLY-2|-|use:Anima;mod:Growth*1.3|Bodies bound to Anima
+BIO-16|9|Starborn Biology|BIO-15,STL-3|-|use:Stellarine;mod:PopCap*1.3|People who photosynthesise starlight
+BIO-17|10|Light-Bodies|BIO-16,LUX-3|-|use:Lumen;mod:PopCap*2;apotheosis:+1|People who can exist as light
+
+## ---------------- XEN Xenobiology & uplift (L) ----------------
+XEN-1|1|Xenobiology Survey|BIO-2|-|mod:Uplift*1.1|Study alien life
+XEN-2|2|Symbiont Domestication|XEN-1|-|mod:Growth*1.03|Alien livestock
+XEN-3|3|Xeno-Compatibility|XEN-2,BIO-6|-|mod:Diplo*1.1|Cross-species hybrids
+XEN-4|3|Pre-Sapient Ethology|XEN-1|-|mod:Uplift*1.2|Observation posts on native worlds
+XEN-5|4|Uplift Protocols|XEN-4,BIO-8|-|mod:Uplift*1.5;act:uplift|Raise natives to the stars
+XEN-6|4|Leviathan Anatomy|XEN-2|E,R|flag:BeastLore|Needs a space-beast encounter
+XEN-7|5|Hive-Link Interfacing|XEN-5,CMP-8|-|mod:Diplo*1.1|Talk to hive minds
+XEN-8|5|Beast Bonding|XEN-6|E|act:tame|Tame space beasts
+XEN-9|6|Void Fauna Husbandry|XEN-8/XEN-5,UMB-2|-|use:Umbral;mod:Mine*1.1|Breed space creatures
+XEN-10|7|Gaia Seeding|XEN-9,TER-6|-|act:gaia|Create living ecosystems
+XEN-11|8|Panspermia Engines|XEN-10,GLY-1|-|act:seed_life_far|Create new life far away
+XEN-12|9|Star-Life Communion|XEN-11,STL-3|-|mod:Diplo*1.3|Contact plasma life
+
+## ---------------- TER Terraforming & planetary engineering (L) ----------------
+TER-1|1|Atmospheric Processors|BIO-1|-|mod:Terra*1.1;mod:PopCap*1.03|Better air everywhere
+TER-2|2|Climate Shifting|TER-1|-|mod:Terra*1.2|Shift a world's climate
+TER-3|3|Full Terraforming|TER-2,MIN-6|-|mod:Terra*1.5;act:terraform_any|Any world can be made home
+TER-4|3|Ecological Restoration|TER-3|-|act:restore|Restore ruined worlds
+TER-5|4|City-World Engineering|TER-3,IND-9|-|mod:PopCap*1.2|Ecumenopolis
+TER-6|5|Garden-World Transform|TER-4,BIO-12|-|act:garden|Perfect worlds
+TER-7|5|Orbital Reshaping|TER-3,COL-10|-|act:shift_orbit|Move moons, change a world's orbit
+TER-8|6|World Synthesis|TER-7,MIN-9|-|act:build_planet|Build planets from belts
+TER-9|7|Gas-Giant Ignition|TER-8,PWR-11|-|act:ignite|Mortal version of Ignite
+TER-10|8|Living-World Awakening|BIO-14,GLY-2|-|act:awaken_world|Planets become allies
+TER-11|9|Star Kindling|TER-9,STL-4|-|act:kindle_star|Make stars from nebulae
+
+## ---------------- COL Colonisation & habitats (S) ----------------
+COL-1|0|Colony Pods|-|S|-|Settle habitable worlds
+COL-2|1|Prefab Settlements|COL-1|-|mod:Settle*1.2|Faster colony setup
+COL-3|1|Orbital Stations|COL-1,STB-2|-|mod:Habs*1.1|Small habitats
+COL-5|2|Adaptive Habitation|COL-2,BIO-6|-|mod:PopCap*1.05|Better on hard worlds
+COL-8|4|Ring Habitats|S4,MEG-1|-|mod:Habs*1.3|Large rotating rings
+COL-9|4|Ark Colonisation|COL-8,HUL-4|-|mod:Range*1.1;mod:Settle*1.2|Settle from mobile arks
+COL-10|5|Ringworlds|COL-8,MEG-5|-|mega:ringworld;mod:Habs*1.5|Ringworld habitation (absorbs Ringworld structure)
+COL-11|6|Halo Habitats|COL-10,UMB-2|-|use:Umbral;mod:Habs*1.3|Live in dark-matter halos
+COL-12|7|Birch Shells|COL-11/COL-10,MEG-13/MEG-15|-|mod:Habs*1.5|Shellworld living
+COL-13|8|Pocket-Dimension Habitats|COL-12,CHR-4|-|mod:Habs*2|Bigger inside than out
+COL-14|9|Corona Hearths|COL-12,STL-3|-|use:Stellarine;mod:Habs*1.5|Live inside stars
+COL-15|10|Lucent Realms|COL-14,LUX-3|-|use:Lumen;mod:Habs*3|Light-built worlds
+
+## ---------------- GOV Governance (S) ----------------
+GOV-1|0|Planetary Unification|-|S|-|Base administration
+GOV-2|1|Colonial Charters|GOV-1|-|mod:Admin*1.2|Larger before schisms bite
+GOV-3|2|Sector Governance|GOV-2|-|mod:Admin*1.3|Governors
+GOV-4|2|Bureaucratic Algorithms|GOV-2,CMP-2|-|mod:Unity*1.1|Size penalty down
+GOV-5|3|Imperial Mandate|GOV-3|-|mod:Unity*1.1|The centre holds
+GOV-6|4|Psychohistory|GOV-4,CMP-8|R|mod:Unity*1.3|Predict unrest
+GOV-7|4|Consensus Networks|GOV-4|-|mod:Unity*1.1;mod:Rp*1.05|Direct democracy
+GOV-8|5|Algorithmic Administration|GOV-6,CMP-10|D|mod:Admin*1.5;meter:AI+15|Machines govern
+GOV-9|6|Collective Will|GOV-7,PSI-4|-|mod:Rp*1.15|Unity into research
+GOV-10|8|Soul Census|GOV-9,GLY-3a/GLY-3b|-|mod:Unity*1.5|Legitimacy by Anima
+GOV-11|10|Covenant of Light|GOV-10,LUX-4|-|flag:Covenant;apotheosis:+1|A Lucent theocracy
+
+## ---------------- ECO Economics & trade (S) ----------------
+ECO-1|0|Planetary Markets|-|S|-|Trade
+ECO-2|1|Interplanetary Commerce|ECO-1|-|mod:Trade*1.1|Trade routes
+ECO-3|2|Commercial Pacts|ECO-2,DIP-2|-|mod:Diplo*1.1;mod:Trade*1.1|Trade deals
+ECO-4|3|Galactic Exchange|ECO-3,DIP-4|-|mod:Trade*1.2|A market across civs
+ECO-5|4|Replicator Economy|ECO-4,IND-9|-|mod:Growth*1.05;mod:Trade*1.1|Goods are cheap
+ECO-6|5|Post-Scarcity Doctrine|ECO-5|-|mod:Unity*1.2|Nobody needs anything
+ECO-7|6|Umbral Futures|ECO-6,UMB-2|-|res:Umbral+0.3|Trade in dark matter
+ECO-8|8|Thought-Economy|ECO-7,GLY-1|-|res:Anima+1|Anima from ideas, ethically
+
+## ---------------- DIP Diplomacy (S) ----------------
+DIP-1|1|Universal Translators|CMP-2|-|mod:Diplo*1.1|Talk to aliens
+DIP-2|2|First-Contact Protocols|DIP-1|-|mod:Diplo*1.1|Better first meetings
+DIP-3|2|Xeno-Cultural Studies|DIP-1,XEN-1|-|mod:Diplo*1.1|Understand them
+DIP-4|3|Federation Charters|DIP-2|-|act:federation|Federations
+DIP-5|4|Galactic Assembly|DIP-4|-|act:assembly|A galactic council
+DIP-6|4|Memetic Engineering|DIP-3,CMP-8|-|act:memetic|Shift a rival's ethics
+DIP-7|5|Custodian Mandate|DIP-5|X:mandate|act:custodian|Lead the galaxy peacefully
+DIP-8|5|Imperial Proclamation|DIP-5,MIL-6|X:mandate|act:empire|Rule it instead
+DIP-9|6|Ancient Accords|DIP-5,ARC-6|-|act:ancient_accord|Talks with the ancient empires
+DIP-10|8|Communion of Souls|DIP-9,GLY-3a/GLY-3b|-|mod:Diplo*1.5|Shared Anima pacts
+DIP-11|10|Embassy to the Divine|DIP-10,LUX-4|-|act:hear_voice;apotheosis:+1|They can sense the voice
+
+## ---------------- ESP Espionage (S) ----------------
+ESP-1|1|Encryption Standards|CMP-2|-|mod:Spy*1.1|Defence against spies
+ESP-2|1|Signal Decryption|CMP-2|-|mod:Spy*1.1|Read their signals
+ESP-3|2|Intelligence Agency|ESP-2,GOV-3|-|act:spy|Spy networks
+ESP-4|3|Sleeper Cells|ESP-3|-|act:sabotage|Sabotage
+ESP-5|4|Memetic Infiltration|ESP-4,DIP-6|-|act:incite|Incite rebellion
+ESP-6|5|Tech Theft Ops|ESP-5|-|act:steal_tech|Steal a tech (a gate-event key)
+ESP-7|6|Proton-Eyes|ESP-6,CHR-1|D|act:block_research;meter:Spy+20|Particle spies stall rival research
+ESP-8|7|Silent Doctrine|ESP-7,DEF-8/DEF-7|-|mod:Stealth*2|Hide from the galaxy
+ESP-9|8|Dream-Walking|ESP-8,PSI-7|-|act:dreamwalk|Psionic espionage
+
+## ---------------- MEG Great works (E) ----------------
+MEG-1|3|Orbital Ring Lattice|STB-3,IND-7|-|flag:OrbitalRing;mod:Build*1.1|Kilostructure tier
+MEG-2|3|Launch Loops|MEG-1|-|mod:Trade*1.1;mega:launchloop|Cheap lift
+MEG-3|4|Grand Shipyard|MEG-1,HUL-5|-|mod:Fleet*1.1;mod:Build*1.1|Titans laid down faster
+MEG-5|5|Mega-Engineering|PWR-9,MEG-3|K|mod:Build*1.3|Unlocks the T5 great works
+MEG-9a|5|Command Lattice|MEG-5|-|mod:Fleet*1.1;mega:lattice|Fleet coordination hub
+MEG-9b|5|Cognition Spire|MEG-5|-|mod:Rp*1.1;mega:spire|Research spire
+MEG-13|7|Birch Shellworld|I6,UMB-5|-|mega:birch;mod:Habs*1.5|Shells around a black hole
+MEG-15|7|Penrose Sphere|E5,PWR-8|-|mega:penrose;mod:RegionPower*1.1|A Dyson sphere for a black hole
+MEG-16|8|Alderson Disk|MEG-13/MEG-15,GLY-1|-|mega:alderson;mod:Habs*2|A disk world
+MEG-18|9|Star Forge|TER-11,STL-4|-|mega:starforge;act:forge_star|Build and reshape stars
+
+## ---------------- PSI Psionics (M) ----------------
+PSI-1|3|Psionic Theory|GOV-3|R|flag:Psi|Opens the psionic field
+PSI-2|4|Telepathic Networks|PSI-1|-|mod:Unity*1.2|Telepaths in the council
+PSI-3|4|Precognition Interfaces|PSI-1,CMP-6|-|mod:Fleet*1.1|Psionic fire control
+PSI-4|5|Psionic Shields|PSI-2,SHD-5|-|meter:Veil-10|Shields against the mind
+PSI-5|5|Veil Contact|PSI-2|D,E|meter:Veil+20;act:veil_pact|Speak with what lives in the Veil
+PSI-6|6|Psi-Leap Theory|PSI-5|-|flag:PsiLeap|Prerequisite for psionic travel
+PSI-7|7|Will-Shaping|PSI-6|-|mod:Unity*1.3|Edit thoughts
+PSI-8|8|Veil Mastery|PSI-7,GLY-3a/GLY-3b|-|mod:Rp*1.2|Enter the Veil in body
+PSI-9|9|Stellar Resonance|PSI-8,STL-3|-|mod:Unity*1.5|Psionics amplified by stars
+PSI-10|10|Avatar Projection|PSI-9,LUX-4|-|act:avatar;apotheosis:+1|The civ's will made flesh
+
+## ---------------- UMB Umbral science (Q) ----------------
+UMB-1|5|Umbral Detection|SEN-6|-|flag:SeeHalos;event:GE6_start|Starts the T6 gate event
+UMB-2|6|Umbral Extraction|UMB-1|E|gate:GE6;res:Umbral+1|Umbral Matter resource
+UMB-3a|6|Umbral Containment|UMB-2|-|-|Triad part one (Engineering)
+UMB-3b|6|Umbral Generation|UMB-2|-|-|Triad part two (Physics)
+UMB-3c|6|Umbral Application|UMB-2|-|-|Triad part three (Society)
+UMB-3|6|Umbral Triad|UMB-3a,UMB-3b,UMB-3c|K|flag:UmbralTier|Unlocks every T6 Umbral component
+UMB-4|6|Umbral Mastery|UMB-3|-|meter:Elders+5;res:Umbral+0.5|The ancients notice
+UMB-5|7|Abyssal Drawing|UMB-4|E,D,K,X:fork7|gate:GE7;res:Abyssal+1;meter:Elders+25|Dark energy; the ancients demand tribute
+UMB-6|7|Void Reservoirs|UMB-5|-|flag:Reservoir|Store Abyssal Energy; overflow tears rifts
+UMB-7|7|Abyssal Rifts|UMB-6|D|res:Abyssal+2;meter:Breach+20|Open rifts on purpose
+
+## ---------------- CHR Chronogravitics (Q) ----------------
+CHR-1|5|Graviton Manipulation|PWR-7,SEN-5|-|flag:Graviton|Gravity as a tool
+CHR-2|6|Metric Engineering|CHR-1,MAT-4|-|mod:Build*1.1|Shape spacetime
+CHR-3|7|Local Time Dilation|CHR-2|X:fork7,K|mod:Rp*1.3;mod:Build*1.3|Faster time in bubbles (the other road from Abyssal)
+CHR-4|7|Chronal Stasis|CHR-3|-|act:stasis|Freeze worlds and ships
+CHR-5|8|Causality Shielding|CHR-4|-|mod:Fleet*1.1;meter:Breach-10|Immune to time weapons
+CHR-6|9|Nascent Universe Theory|CHR-5,E8|-|mod:Rp*1.3|Study baby universes
+CHR-7|10|Horizon Egress|CHR-6|D|act:egress;meter:Egress+50;apotheosis:+2|Leave for a younger universe
+
+## ---------------- GLY Glyphic / Anima science (Q) ----------------
+GLY-1|8|Glyph Analysis|UMB-5/CHR-3|E|gate:GE8|Unlocks the Glyph tier
+GLY-2|8|Anima Theory|GLY-1|K|res:Anima+1|Anima resource
+GLY-3a|8|Thought-Siphon|GLY-2|X:siphon|res:Anima+1|Anima from research and culture
+GLY-3b|8|Life-Siphon|GLY-2|X:siphon,D,A|res:Anima+3;meter:Atrocity+15|Anima from lifeforce
+GLY-4|8|Runic Mastery|GLY-3a/GLY-3b,ARC-9|-|use:Anima;mod:Fleet*1.1|Glyph-II tier; soul weapons
+GLY-5|8|Everlasting Constructs|GLY-4|-|mod:Build*1.3|Self-sustaining rune works
+
+## ---------------- STL Stellarine science (Q) ----------------
+STL-1|9|Stellarine Discovery|ARC-7/CHR-5,GLY-2|E|gate:GE9|Stellarine stars revealed
+STL-2|9|Stellarine Generators|STL-1|D,K|res:Stellarine+1;meter:Flux+15|Unstable star essence
+STL-3|9|Stellar Adaptation|STL-2|-|mod:Foundry*1.2|Techno-biological star power
+STL-4|9|Star Dominion|STL-3|-|act:star_weapons|Star-scale engineering
+STL-5|9|Stellar Venting|STL-2|-|meter:Flux-30|Safely discharge stockpiles
+
+## ---------------- LUX Lucent science (Q) ----------------
+LUX-1|10|Lumen Reception|STL-3|E|gate:GE10;res:Lumen+0.1|First trial passed
+LUX-2|10|Lumen Weaving|LUX-1|-|-|Lucent components
+LUX-3|10|Trials of the Gate|LUX-2|E|gate:GE10b|Lucent hulls and units
+LUX-4|10|Lucent Covenant|LUX-3|K|flag:Covenant;apotheosis:+3|Accept, and step toward the divine
+
+## ---------------- ARC Archaeotech (S) ----------------
+ARC-1|1|Xenoarchaeology|CIV-1|-|act:dig|Dig sites
+ARC-2|2|Relic Conservation|ARC-1|-|mod:Unity*1.05|Relics with powers
+ARC-3|3|Debris Analysis|ARC-1,SEN-3|-|act:salvage_tech|Learn from wrecks (a gate-event key)
+ARC-4|4|Archaeotech Components|ARC-2|-|mod:Fleet*1.05|Artifact-powered parts
+ARC-5|5|Extradimensional Forensics|ARC-3|E|flag:Forensics|From crisis or Visitor debris
+ARC-6|6|Ancient Hull Studies|ARC-4,UMB-3|-|vis:precursor|Precursor hull sections
+ARC-7|7|Archive Uplink|UMB-4/CHR-3|E|gate:GE7b|Talk to the archive mind
+ARC-8|7|Warden Protocols|ARC-7|-|guard:base>=7|Warden ships and bastions
+ARC-9|8|Vault Breaching|GLY-1|-|act:vault_raid|Raid the vault (four stages)
+ARC-10|9|Shard Rekindling|ARC-7,STL-1|-|mod:RegionPower*1.1|Relight the ancient star
+ARC-11|10|Gate Riddles|ARC-10|-|act:gate_riddle|Solve the trials
+
+## ---------------- ASCENSION PATHS (one path's stage 1 only: X:asc) ----------------
+ASC-G1|5|Engineered Destiny|BIO-12|X:asc|mod:Growth*1.2;path:G|Genetic path stage 1
+ASC-G2|6|Biomorphic Crucible|ASC-G1|-|mod:PopCap*1.2|Genetic stage 2
+ASC-G3a|7|Exemplar Lineage|ASC-G2|X:ascG|mod:Rp*1.3;mod:Growth*0.8|Few, perfect people
+ASC-G3b|7|Multiplicity|ASC-G2|X:ascG|mod:Growth*1.5|Cloned multitudes
+ASC-G3c|7|Adaptive Strain|ASC-G2|X:ascG|mod:Habs*1.5;flag:AnyWorld|Any world is home
+ASC-G4|9|Living Godflesh|ASC-G3a/ASC-G3b/ASC-G3c|K|mod:PopCap*1.5;apotheosis:+2|Genetic capstone
+ASC-C1|5|Augmented Flesh|BIO-4,CMP-6|X:asc|mod:Rp*1.1;mod:Ground*1.2;path:C|Cybernetic path stage 1
+ASC-C2|6|Integration Crisis|ASC-C1|-|event:integration_crisis;mod:Foundry*1.1|Cybernetic stage 2
+ASC-C3a|7|Augmenters|ASC-C2|X:ascC|mod:Rp*1.2;mod:Growth*1.1|Upgrade, don't replace
+ASC-C3b|7|Link-Hive|ASC-C2|X:ascC|flag:Hive;mod:Rp*1.3|One linked mind
+ASC-C3c|7|Assimilators|ASC-C2|X:ascC,A|act:assimilate;meter:Atrocity+10|Take others in, by force
+ASC-C4|9|Unified Chassis|ASC-C3a/ASC-C3b/ASC-C3c|K|mod:Fleet*1.3;apotheosis:+2|Cybernetic capstone
+ASC-S3b|8|Modular Bodies|S7|X:ascS|mod:PopCap*1.3|Synthetic stage 3: swap bodies at will
+ASC-S3c|8|Nanite Becoming|S7|X:ascS|mod:Mine*1.5;meter:Goo+20|Synthetic stage 3: spread and convert
+ASC-P1|5|Mind over Matter|PSI-2|X:asc|mod:Unity*1.2;path:P|Psionic path stage 1
+ASC-P2|6|Veil Opening|ASC-P1|-|meter:Veil+10;mod:Rp*1.2|Psionic stage 2
+ASC-P3a|7|Covenant|ASC-P2|X:ascP|act:veil_patron;meter:Veil+20|Bind to a Veil patron
+ASC-P3b|7|The Chosen|ASC-P2|X:ascP|mod:Unity*1.5|One psychic sovereign
+ASC-P3c|7|The Severed|ASC-P2|X:ascP|meter:Veil-50|Cut themselves off from the Veil
+ASC-P4|9|Veil Ascendancy|ASC-P3a/ASC-P3b/ASC-P3c|K|mod:Rp*1.5;apotheosis:+2|Psionic capstone
+ASC-D1|6|Chronogravitic Mandate|CHR-2|X:asc|mod:Build*1.2;path:D|Departure path stage 1
+ASC-D2|8|Horizon Project|ASC-D1,CHR-5|-|mod:Rp*1.2|Departure stage 2 (capstone is Horizon Egress)
+ASC-L1|10|Purity of Form|LUX-1,ASC-G2/ASC-C2/S7/ASC-P2/ASC-D2|-|apotheosis:+1|Luminary 1: the perfect vessel
+ASC-L2|10|Purity of Essence|ASC-L1,GLY-2|-|apotheosis:+1|Luminary 2: the perfect soul
+ASC-L3|10|Purity of Will|ASC-L2,STL-3,LUX-2|K|apotheosis:+4|Luminary 3: champion of the Light

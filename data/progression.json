@@ -1,0 +1,643 @@
+{
+  "version": 1,
+  "notes": "Systems referenced by techs.json effects. Names here are working names; lore pass comes later.",
+  "tierPower": {
+    "note": "Multiplier for each arms/guard tier step. TierPow(t) = product of steps 1..t.",
+    "steps": [
+      1,
+      1.3,
+      1.3,
+      1.3,
+      1.3,
+      1.3,
+      1.3,
+      1.3,
+      1.4,
+      1.5,
+      3.0
+    ]
+  },
+  "research": {
+    "areas": {
+      "Physics": [
+        "E",
+        "M",
+        "Q"
+      ],
+      "Engineering": [
+        "I",
+        "X",
+        "W"
+      ],
+      "Society": [
+        "S",
+        "L"
+      ]
+    },
+    "slots": 3,
+    "handSize": 3,
+    "costScaleNonSpine": 1.0,
+    "tierGate": {
+      "note": "To draw a non-spine tech of tier t in branch b, the civ must know min(need, count) techs of tier t-1 in b.",
+      "need": 3,
+      "spineExempt": true
+    },
+    "weights": {
+      "rare": 0.125,
+      "keystone": 2.0,
+      "repeatPenalty": 0.5,
+      "neighbourKnows": 2.0,
+      "tierExponent": 0.8,
+      "dangerByEthic": {
+        "Reverent": 0.5,
+        "Pragmatic": 1.0,
+        "Ruthless": 1.3
+      },
+      "atrocityByEthic": {
+        "Reverent": 0.0,
+        "Pragmatic": 0.2,
+        "Ruthless": 1.5
+      },
+      "pityDraws": 8
+    },
+    "driveWeights": {
+      "Expansionist": {
+        "X": 2.2,
+        "I": 1.3,
+        "E": 1.0,
+        "S": 0.7,
+        "L": 0.8,
+        "M": 0.9,
+        "W": 1.4,
+        "Q": 1.0
+      },
+      "Contemplative": {
+        "X": 0.9,
+        "I": 0.8,
+        "E": 1.2,
+        "S": 2.2,
+        "L": 1.6,
+        "M": 2.0,
+        "W": 0.6,
+        "Q": 1.6
+      },
+      "Industrious": {
+        "X": 0.9,
+        "I": 2.2,
+        "E": 1.5,
+        "S": 0.8,
+        "L": 0.9,
+        "M": 1.0,
+        "W": 1.3,
+        "Q": 1.1
+      }
+    },
+    "branchFaction": {
+      "X": "Expansionist",
+      "W": "Expansionist",
+      "S": "Contemplative",
+      "L": "Contemplative",
+      "M": "Contemplative",
+      "Q": "Contemplative",
+      "I": "Industrious",
+      "E": "Industrious"
+    },
+    "aiExclusivePrefs": {
+      "ftl": {
+        "Expansionist": "FTL-3a",
+        "Contemplative": "FTL-3b",
+        "Industrious": "FTL-3c",
+        "randomChance": 0.25
+      },
+      "fork7": {
+        "Expansionist": "UMB-5",
+        "Contemplative": "CHR-3",
+        "Industrious": "UMB-5",
+        "randomChance": 0.3
+      },
+      "asc": {
+        "Expansionist": "ASC-G1",
+        "Contemplative": "S6",
+        "Industrious": "ASC-C1",
+        "alternates": [
+          "ASC-P1",
+          "ASC-D1"
+        ],
+        "randomChance": 0.35
+      },
+      "siphon": {
+        "Reverent": "GLY-3a",
+        "Pragmatic": "GLY-3a",
+        "Ruthless": "GLY-3b"
+      },
+      "mandate": {
+        "Reverent": "DIP-7",
+        "Pragmatic": "DIP-7",
+        "Ruthless": "DIP-8"
+      }
+    },
+    "spineBias": 4.0,
+    "spineNote": "Spine techs (the original 38) are weighted x spineBias and the lowest-tier available one is always dealt into its area's hand, so the old milestones keep their pace.",
+    "nonSpineTierMult": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1.2,
+      1.5,
+      2,
+      3,
+      4,
+      5
+    ],
+    "nonSpineTierNote": "Extra cost multiplier for non-spine techs by tier, on top of costScaleNonSpine, so the exotic tiers stay rare (T8+ for only a few civs)."
+  },
+  "pools": {
+    "Umbral": {
+      "tier": 6,
+      "note": "Dark matter. res:X+n adds n x 0.01 per year per colony, scaled by colony capture (min 0.1)."
+    },
+    "Abyssal": {
+      "tier": 7,
+      "note": "Dark energy. Reservoir (UMB-6) raises the cap; overflow adds Breach."
+    },
+    "Anima": {
+      "tier": 8,
+      "note": "Soul/thought energy."
+    },
+    "Stellarine": {
+      "tier": 9,
+      "note": "Star essence. Stockpile above cap adds Flux and can spawn a Star-Wyrm."
+    },
+    "Lumen": {
+      "tier": 10,
+      "note": "Static light. Only from gate trials, gifts, or LUX/MIN-14."
+    },
+    "upkeep": "Each known tech with use:Pool drains 0.002 per year per colony. While a pool is empty, effects of techs that use it are skipped in ComputeMods (arms/guard tiers fall back to the best tier that is still fed)."
+  },
+  "gateEvents": {
+    "GE6": {
+      "name": "Umbral Breakthrough",
+      "opens": "UMB-2",
+      "trigger": "civ knows UMB-1 and at least 4 tier-5 techs",
+      "keys": [
+        {
+          "id": "independent",
+          "what": "special project: 40 x TierCost[6] x costScaleNonSpine research, paid from the Physics slot",
+          "ai": "Industrious"
+        },
+        {
+          "id": "salvage",
+          "what": "win 3 battles against a civ that knows UMB-3",
+          "ai": "Expansionist"
+        },
+        {
+          "id": "taught",
+          "what": "relations >= +50 with a civ that knows UMB-3; they choose Charity/Gift/Teach/Refuse/Insult/Trade by ethic",
+          "ai": "Contemplative"
+        },
+        {
+          "id": "purchase",
+          "what": "pay an ancient civ 2 x stock fraction; starts the project at 75%",
+          "ai": "any"
+        }
+      ],
+      "consequence": "meter Elders +5 on every ancient civ that has met them"
+    },
+    "GE7": {
+      "name": "Abyssal Drawing",
+      "opens": "UMB-5",
+      "trigger": "civ knows UMB-4",
+      "keys": [
+        {
+          "id": "research",
+          "what": "normal research once triggered"
+        }
+      ],
+      "consequence": "ancient civs demand a sample: if refused, relations -40 and war if below -60 (meter Elders)"
+    },
+    "GE7b": {
+      "name": "Archive Uplink",
+      "opens": "ARC-7",
+      "trigger": "civ knows UMB-4 or CHR-3",
+      "keys": [
+        {
+          "id": "ancients",
+          "what": "relations >= +30 with an ancient civ"
+        },
+        {
+          "id": "visitor",
+          "what": "the Visitor encounter ended in Talk or Study"
+        },
+        {
+          "id": "signal",
+          "what": "the Signal was answered"
+        },
+        {
+          "id": "selfbuild",
+          "what": "pay stock; roll 45% success / 45% fail / 10% fail and devastate the colony"
+        }
+      ]
+    },
+    "GE8": {
+      "name": "The Vault",
+      "opens": "GLY-1",
+      "trigger": "civ knows UMB-5 or CHR-3",
+      "galaxyContent": "one Vault system flagged at galaxy creation (StarInfo.Special = \"vault\"), guarded",
+      "keys": [
+        {
+          "id": "wrecks",
+          "what": "win a battle against a civ that knows GLY-1"
+        },
+        {
+          "id": "contract",
+          "what": "relations >= +40 with the vault holder (if one exists)"
+        },
+        {
+          "id": "raid",
+          "what": "ARC-9 raids on the Vault system, 4 stages; each stage grants one more GLY tech"
+        }
+      ]
+    },
+    "GE9": {
+      "name": "Rekindled Star",
+      "opens": "STL-1",
+      "trigger": "civ knows GLY-2 and (ARC-7 or CHR-5)",
+      "galaxyContent": "one dormant Shard star flagged at galaxy creation (StarInfo.Special = \"shard\"); it reignites when the first civ triggers GE9",
+      "keys": [
+        {
+          "id": "proximity",
+          "what": "a colony within 60 units of the Shard, or the Archive Uplink"
+        }
+      ]
+    },
+    "GE10": {
+      "name": "Sealed Gates",
+      "opens": "LUX-1",
+      "trigger": "civ knows STL-3",
+      "galaxyContent": "4 Gate systems on the galaxy rim (StarInfo.Special = \"gate\"), guarded and hidden until perceived (see perception); seals weaken from year 2600 (tunable)",
+      "keys": [
+        {
+          "id": "trial1",
+          "what": "reach a Gate and pass trial 1 (battle vs guardian, or riddle choice made by council ethic)"
+        }
+      ]
+    },
+    "GE10b": {
+      "name": "Trials of the Gate",
+      "opens": "LUX-3",
+      "keys": [
+        {
+          "id": "trials23",
+          "what": "pass trials 2 and 3; wrong riddle answers still grant a minor tech and allow a retry"
+        }
+      ]
+    }
+  },
+  "meters": {
+    "decayPerYear": 0.5,
+    "list": {
+      "AI": {
+        "threshold": 60,
+        "crisis": "secession",
+        "note": "reuse existing digital secession crisis; machines break away as a splinter civ"
+      },
+      "Mind": {
+        "threshold": 50,
+        "crisis": "overmind",
+        "note": "new: a transapient mind takes the council for a decade"
+      },
+      "Goo": {
+        "threshold": 40,
+        "crisis": "runaway",
+        "note": "reuse existing runaway replicators"
+      },
+      "Strange": {
+        "threshold": 40,
+        "crisis": "strange",
+        "note": "new: a world converts to strange matter"
+      },
+      "Breach": {
+        "threshold": 40,
+        "crisis": "incursion",
+        "note": "new: hostile fleet appears at the colony (reuse Rival fleet mechanics)"
+      },
+      "Veil": {
+        "threshold": 40,
+        "crisis": "possession",
+        "note": "new: council possessed; drive flips at random"
+      },
+      "Atrocity": {
+        "threshold": 60,
+        "crisis": "judgement",
+        "note": "every met civ relations -2 per point; at threshold ancients or divine civs declare war"
+      },
+      "Elders": {
+        "threshold": 50,
+        "crisis": "elders_wrath",
+        "note": "ancient civs demand tribute, then war"
+      },
+      "Flux": {
+        "threshold": 40,
+        "crisis": "storms+wyrm",
+        "note": "reuse stellar storms; above 80 spawn a Star-Wyrm (roaming hostile)"
+      },
+      "Spy": {
+        "threshold": 50,
+        "crisis": "exposed",
+        "note": "every met civ relations -30"
+      },
+      "Egress": {
+        "threshold": 50,
+        "crisis": "horizon_shock",
+        "note": "galaxy-wide: every civ loses some capture when a civ leaves the universe"
+      }
+    },
+    "crisisCooldownYears": 50
+  },
+  "hulls": {
+    "order": [
+      "Shuttle",
+      "Corvette",
+      "Frigate",
+      "Destroyer",
+      "Cruiser",
+      "Battlecruiser",
+      "Battleship",
+      "Carrier",
+      "Titan",
+      "Juggernaut",
+      "Colossus",
+      "Dreadnought",
+      "Worldship",
+      "Leviathan",
+      "GlyphArk",
+      "Devourer",
+      "Seraph"
+    ],
+    "scale": [
+      1,
+      1.4,
+      1.9,
+      2.5,
+      3.3,
+      3.8,
+      4.4,
+      4.8,
+      7,
+      8,
+      8.5,
+      9,
+      10,
+      9,
+      11,
+      12,
+      6
+    ],
+    "existingAsset": {
+      "Shuttle": "Shuttle",
+      "Corvette": "Corvette",
+      "Frigate": "Frigate",
+      "Destroyer": "Destroyer",
+      "Cruiser": "Cruiser",
+      "Battleship": "Battleship",
+      "Carrier": "Carrier",
+      "Titan": "Titan",
+      "Worldship": "Colossus"
+    },
+    "fallbackUntilModelled": {
+      "Battlecruiser": "Cruiser",
+      "Juggernaut": "Titan",
+      "Colossus": "Titan",
+      "Dreadnought": "Titan",
+      "Leviathan": "Carrier",
+      "GlyphArk": "Colossus",
+      "Devourer": "Colossus",
+      "Seraph": "Battleship"
+    },
+    "warBonusPerClass": 0.04
+  },
+  "megastructures": {
+    "moved": {
+      "shield": "SHD-4",
+      "relay": "FTL-6",
+      "wormhole": "FTL-9"
+    },
+    "new": {
+      "decompressor": {
+        "tech": "MIN-9",
+        "blurb": "A drill sunk into a black hole's ergosphere"
+      },
+      "launchloop": {
+        "tech": "MEG-2",
+        "blurb": "A magnetic loop that throws cargo to orbit"
+      },
+      "lattice": {
+        "tech": "MEG-9a",
+        "blurb": "Fleet command lattice"
+      },
+      "spire": {
+        "tech": "MEG-9b",
+        "blurb": "Cognition spire"
+      },
+      "ringworld": {
+        "tech": "COL-10",
+        "blurb": "Reuse the Vessh Ringworld asset"
+      },
+      "umbralfort": {
+        "tech": "STB-7",
+        "blurb": "Dark-matter superbase"
+      },
+      "gatebastion": {
+        "tech": "STB-8",
+        "blurb": "Guardian station"
+      },
+      "aegis": {
+        "tech": "SHD-10",
+        "blurb": "A shield around a whole system"
+      },
+      "birch": {
+        "tech": "MEG-13",
+        "blurb": "Nested shells around a black hole"
+      },
+      "penrose": {
+        "tech": "MEG-15",
+        "blurb": "A sphere around a black hole"
+      },
+      "alderson": {
+        "tech": "MEG-16",
+        "blurb": "A disk world"
+      },
+      "sanctum": {
+        "tech": "STB-9",
+        "blurb": "Rune-fortress"
+      },
+      "coronaforge": {
+        "tech": "IND-15",
+        "blurb": "Foundries inside the corona"
+      },
+      "suncitadel": {
+        "tech": "STB-10",
+        "blurb": "A citadel drawing on the star"
+      },
+      "starforge": {
+        "tech": "MEG-18",
+        "blurb": "A machine that builds stars"
+      },
+      "throne": {
+        "tech": "STB-11",
+        "blurb": "A seat of light"
+      }
+    }
+  },
+  "civActs": {
+    "note": "Unlocked by act: effects. Councils consider them in Colony.Decide(). Each reuses the god-power implementation with the civ as the actor, so the chronicle and ripples work the same way.",
+    "ethicGate": {
+      "atrocity": [
+        "purge",
+        "harvest",
+        "nova",
+        "erase_cluster",
+        "assimilate",
+        "crack_world_inhabited"
+      ],
+      "allowedFor": "Ruthless (Pragmatic only at war and losing)"
+    },
+    "reusesGodPower": {
+      "ignite": "Ignite",
+      "shift_orbit": "ShiftOrbit",
+      "seed_life": "SeedLife",
+      "seed_life_far": "SeedLife",
+      "gaia": "SeedLife",
+      "crack_world": "Shatter",
+      "nova": "Nova",
+      "kindle_star": "KindleStar",
+      "move_star": "MoveStar"
+    }
+  },
+  "apotheosis": {
+    "scoreFrom": "sum of apotheosis:+n on known techs",
+    "rollEveryYears": 10,
+    "minScore": 3,
+    "chance": "0.004 x score x luck, capped at 0.25 per roll",
+    "luck": {
+      "faithInVoice": "x (0.5 + Faith)",
+      "Reverent": 1.2,
+      "Pragmatic": 1.0,
+      "Ruthless": 0.8,
+      "atrocityMeter": "x (1 - Atrocity/100)"
+    },
+    "onFailAtHighScore": {
+      "minScore": 6,
+      "fallChance": 0.2,
+      "result": "Fallen: vigour x0.3, research x0.5, stops seeding (like the Vessh)"
+    },
+    "note": "Civs can come close to godhood but never reach it. The voice is the only true god; an Exalted civ is a lesser power with hard limits.",
+    "exaltedCiv": {
+      "flag": "Civ.Exalted",
+      "keeps": "its colonies, which become sacred worlds; economy continues at a slow pace",
+      "gains": "autonomous lesser acts on a 15-40 year rhythm, chosen by drive and ethic: seed_life, ignite, shift_orbit, uplift natives, gift a tech it knows to a favoured civ, smite a hated civ's swarm",
+      "limits": {
+        "reach": "acts only inside its own territory plus 40 units",
+        "understanding": "can only gift techs it knows, and can only create what its own research covers (e.g. kindle_star needs TER-11); the rule dropped for the voice applies to them",
+        "neverAllowed": [
+          "SnuffStar",
+          "MoveStar beyond its territory",
+          "EraseTech",
+          "RewriteLaw",
+          "SeedSpecies",
+          "OpenLane",
+          "CastDown",
+          "RaiseDivine",
+          "Possess",
+          "BendFate"
+        ],
+        "strain": "each act adds 5 to a Strain value that decays 1/yr; above 40 the civ risks Falling (see onFailAtHighScore result)",
+        "cap": "Exalted power never exceeds 'nearly': no act a civ can take is irreversible by the voice"
+      },
+      "toTheVoice": "relations with the player as a pseudo-civ; if the player harms them they may answer in kind against the player's favoured civs, never against the voice itself",
+      "visual": "gold glow on its territory and hulls"
+    },
+    "maxExaltedCivs": 3
+  },
+  "godActs": {
+    "note": "The player is unlimited: no Will, no cost, no cooldown. Faith and Dread remain as witnessed consequences only.",
+    "existing": [
+      "Comet",
+      "Flare",
+      "Dream",
+      "PointConstructor",
+      "Protect",
+      "DrawThemHere",
+      "Intervene",
+      "Peace",
+      "SeedLife",
+      "Ignite",
+      "Shatter",
+      "Nova",
+      "Revelation",
+      "ShiftOrbit",
+      "HeraldShip",
+      "Summon",
+      "Raise"
+    ],
+    "new": {
+      "GiftTech": "Give any tech (including exotic and gate-locked) to any civ. Ripple: exotic gifts add Elders on ancients; others who notice get jealous (relations).",
+      "EraseTech": "Remove a tech from one civ, or from every civ (Erase Concept). Ripple: confusion events; Dread.",
+      "KindleStar": "Create a sim star in empty space or from a nebula.",
+      "SnuffStar": "Put a star out. Anyone there is gone. Horror.",
+      "MoveStar": "Move a star and its system across the galaxy.",
+      "ForgeWorld": "Add a planet to a system, chosen kind and orbit.",
+      "UpliftNow": "Raise a native world straight to spacefaring: it becomes a new young civ.",
+      "SeedSpecies": "Place a brand-new civ on any world.",
+      "BendFate": "Choose the outcome of the current crisis or event.",
+      "Possess": "Speak through the Speaker: force a council decision or research choice.",
+      "OpenLane": "Create a permanent gate between any two stars.",
+      "Quarantine": "Seal a region: no seed ships in or out.",
+      "RaiseDivine": "Lift a civ to Exalted now (still never a true god).",
+      "CastDown": "Strip an Exalted civ back to mortal, or make it Fallen.",
+      "RewriteLaw": "Toggle a global rule (no war, research x2, fold impossible, ...).",
+      "RaiseAny": "Build: raise any megastructure in the catalogue, including the new great works.",
+      "Steer": "See each civ's research hand in every slot. Swap a card, redraw the hand, pin a tech so it comes up next, ban a tech for N years, or decide an exclusive choice (FTL doctrine, Abyssal vs Chrono, ascension path, siphon, mandate) before the council does. Ripple: small Faith; banning or overriding the council adds Dread."
+    },
+    "deferred": {
+      "TimeTurn": "Rewind a colony N years: needs snapshotting.",
+      "Genesis": "Create a pocket galaxy: needs a second galaxy instance."
+    }
+  },
+  "perception": {
+    "note": "Special systems exist from galaxy creation but are hidden until perceived. Civs perceive them by advancement; the galaxy view keeps them hidden from the player until the first civ perceives one, so the reveal is a cinematic moment (toggle: showHiddenToVoice, default false).",
+    "gate": [
+      {
+        "stage": "rumour",
+        "needs": "SEN-7",
+        "what": "chronicle: something at the rim bends the halo maps; no location"
+      },
+      {
+        "stage": "located",
+        "needs": "SEN-9 or ARC-7",
+        "what": "the Gate systems appear for this civ; first civ to reach this triggers the reveal cinematic"
+      },
+      {
+        "stage": "approachable",
+        "needs": "STL-3",
+        "what": "GE10 can trigger; trials possible"
+      }
+    ],
+    "vault": [
+      {
+        "stage": "located",
+        "needs": "ARC-5 or SEN-7",
+        "what": "Vault system appears"
+      }
+    ],
+    "shard": [
+      {
+        "stage": "located",
+        "needs": "GLY-2",
+        "what": "the dormant Shard appears as a dead star; it rekindles at GE9"
+      }
+    ]
+  }
+}

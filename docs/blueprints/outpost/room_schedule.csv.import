@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://b586abx26hwby"
+
+[deps]
+
+files=["res://docs/blueprints/outpost/room_schedule.compartment.translation", "res://docs/blueprints/outpost/room_schedule.room.translation", "res://docs/blueprints/outpost/room_schedule.name.translation", "res://docs/blueprints/outpost/room_schedule.area.translation"]
+
+source_file="res://docs/blueprints/outpost/room_schedule.csv"
+dest_files=["res://docs/blueprints/outpost/room_schedule.compartment.translation", "res://docs/blueprints/outpost/room_schedule.room.translation", "res://docs/blueprints/outpost/room_schedule.name.translation", "res://docs/blueprints/outpost/room_schedule.area.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

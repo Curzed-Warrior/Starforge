@@ -1,0 +1,296 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Project Kardashev</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: full-bleed 3D system; telemetry strip top, civ log + command deck bottom, development tree as a bottom sheet. Single dark look by design. */
+  :root {
+    --void: #050607;
+    --ink: #d2ccbf;
+    --dim: #747068;
+    --amber: #dd8c3c;
+    --steel: #8fb0c4;
+    --heat: #b04a30;
+    --omen: #a99ad0;
+    --veil: rgba(5, 6, 7, 0.62);
+    --deck: rgba(10, 11, 13, 0.88);
+    --rule: rgba(210, 204, 191, 0.16);
+    --f-head: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+    --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { background: var(--void); color: var(--ink); overflow: hidden; font-family: var(--f-mono); }
+  canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  .hud { position: fixed; left: 0; right: 0; display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+         padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
+  .hud.top { top: 0; padding-top: calc(12px + env(safe-area-inset-top, 0px)); padding-bottom: 26px;
+             background: linear-gradient(var(--veil), transparent); }
+  .hud.bottom { bottom: 0; padding-top: 36px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+                background: linear-gradient(transparent, var(--veil) 30%); }
+
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font: 600 1.05rem/1.1 var(--f-head); letter-spacing: 0.3em; text-transform: uppercase; }
+  .sub { font-size: 0.64rem; color: var(--dim); letter-spacing: 0.08em; }
+  .sub b { color: var(--steel); font-weight: 500; }
+  .focus { font-size: 0.66rem; color: var(--dim); display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .focus span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .focus i { flex: 0 0 60px; height: 3px; background: var(--rule); position: relative; }
+  .focus.project span { color: var(--amber); }
+  .focus.project i::after { background: var(--amber); }
+  .focus i::after { content: ""; position: absolute; inset: 0; width: calc(var(--p, 0) * 100%); background: var(--steel); }
+
+  .tele { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 14px; border-top: 1px solid var(--rule); padding-top: 8px; }
+  .tele div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .tele dt { font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
+  .tele dd { margin: 0; font-size: 0.84rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tele dd.hot { color: var(--amber); }
+  @media (max-width: 520px) { .tele { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .log { max-width: 62ch; display: flex; flex-direction: column; gap: 4px; font-size: 0.76rem; line-height: 1.45; min-height: 3.2em; }
+  .log .prev { color: var(--dim); font-size: 0.66rem; }
+  .log .stamp { color: var(--amber); margin-right: 0.6em; }
+  .log.typing .cur::after { content: "▌"; color: var(--amber); margin-left: 2px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.15; } }
+
+  .card { pointer-events: auto; background: var(--deck); border: 1px solid var(--rule); border-left: 2px solid var(--steel);
+          padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; max-width: 460px; width: 100%; box-sizing: border-box; }
+  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .card h2 { margin: 0; font: 600 0.95rem/1.1 var(--f-head); letter-spacing: 0.12em; text-transform: uppercase; }
+  .card .kind { font-size: 0.66rem; color: var(--steel); }
+  .card dl { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; }
+  .card dl div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .card dt { font-size: 0.54rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+  .card dd { margin: 0; font-size: 0.76rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .view { font-size: 0.68rem; color: var(--steel); }
+  .card .note { font-size: 0.68rem; color: var(--heat); }
+  .card .note:empty, .card .view:empty { display: none; }
+  @media (max-width: 420px) { .card dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .bar { pointer-events: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .seg { display: flex; }
+  .seg button + button { border-left-width: 0; }
+  button { font: 500 0.66rem/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink);
+           background: var(--deck); border: 1px solid var(--rule); padding: 10px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled) { border-color: var(--amber); }
+  button:disabled { color: var(--dim); cursor: not-allowed; }
+  button[aria-pressed="true"] { color: var(--void); background: var(--amber); border-color: var(--amber); }
+  button.primary { border-color: var(--amber); color: var(--amber); }
+  button.primary:disabled, button.danger:disabled { border-color: var(--rule); color: var(--dim); }
+  button.danger { border-color: var(--heat); color: #e58a70; }
+  button:focus-visible { outline: 1px solid var(--steel); outline-offset: 2px; }
+  .cost { color: var(--dim); margin-left: 6px; text-transform: none; letter-spacing: 0; }
+  button.primary .cost, button.danger .cost { color: inherit; opacity: 0.75; }
+
+  #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .plabel { position: absolute; left: 0; top: 0; pointer-events: auto;
+            font: 500 0.6rem/1 var(--f-mono); letter-spacing: 0.1em; color: var(--ink); opacity: 0.75;
+            background: transparent; border: none; padding: 8px 6px; text-transform: uppercase; }
+  .plabel.hub { color: var(--amber); opacity: 1; }
+  .plabel.home { color: var(--ink); opacity: 1; text-decoration: underline; text-underline-offset: 3px; }
+  .plabel.sel { color: var(--steel); opacity: 1; }
+  .plabel.gone { color: var(--dim); text-decoration: line-through; }
+  .plabel.fleet { color: var(--steel); }
+
+  .sheet { position: fixed; inset: 0; display: flex; align-items: flex-end; justify-content: center; background: rgba(5,6,7,0.5); z-index: 5; }
+  .sheet-in { background: var(--deck); border-top: 1px solid var(--rule); width: 100%; max-width: 760px; max-height: 80%; overflow: auto;
+              box-sizing: border-box; padding: 14px max(16px, env(safe-area-inset-left, 0px)) calc(14px + env(safe-area-inset-bottom, 0px));
+              display: flex; flex-direction: column; gap: 12px; }
+  .sheet-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .sheet h2 { margin: 0; font: 600 1rem/1.1 var(--f-head); letter-spacing: 0.24em; text-transform: uppercase; }
+  .sheet .rate { font-size: 0.66rem; color: var(--dim); flex: 1; min-width: 0; }
+  .branches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 400px) { .branches { grid-template-columns: minmax(0, 1fr); } }
+  .branch { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .bhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--rule); padding-bottom: 6px; }
+  .bhead h3 { margin: 0; font: 600 0.82rem/1.1 var(--f-head); letter-spacing: 0.16em; text-transform: uppercase; }
+  .bhead small { display: block; font-size: 0.58rem; color: var(--dim); letter-spacing: 0.04em; margin-top: 2px; }
+  .interest { font-size: 0.6rem; color: var(--steel); letter-spacing: 0.1em; }
+  .bhead button { padding: 7px 8px; font-size: 0.6rem; }
+  .tech { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 0.7rem; line-height: 1.35; }
+  .tech .st { width: 8px; height: 8px; margin-top: 4px; border: 1px solid var(--dim); }
+  .tech b { font-weight: 500; display: block; }
+  .tech small { color: var(--dim); font-size: 0.62rem; }
+  .tech .pb { display: block; height: 2px; background: var(--rule); margin-top: 4px; position: relative; }
+  .tech .pb::after { content: ""; position: absolute; inset: 0; width: calc(var(--p, 0) * 100%); background: var(--steel); }
+  .tech.done .st { background: var(--amber); border-color: var(--amber); }
+  .tech.active .st { border-color: var(--steel); background: var(--steel); animation: blink 1.4s steps(2) infinite; }
+  .tech.locked { opacity: 0.45; }
+  .tech:not(.active) .pb { display: none; }
+
+  .chron { display: flex; flex-direction: column; gap: 2px; }
+  .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 10px; }
+  @media (max-width: 480px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+  .chart { margin: 0; position: relative; min-width: 0; }
+  .chart figcaption { font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
+  .chart canvas { width: 100%; height: 96px; display: block; touch-action: none; }
+  .chart .tip { position: absolute; top: 18px; padding: 4px 6px; background: var(--void); border: 1px solid var(--rule); font-size: 0.62rem; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+  .chart-sum { grid-column: 1 / -1; margin: 0; font-size: 0.64rem; color: var(--dim); line-height: 1.5; }
+  .lineage { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px solid var(--rule); margin-bottom: 8px; font-size: 0.68rem; color: var(--steel); font-variant-numeric: tabular-nums; }
+  .chron h4 { margin: 10px 0 4px; font: 600 0.72rem/1.2 var(--f-head); letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+  .chron h4:first-child { margin-top: 0; }
+  .entry { display: grid; grid-template-columns: 4.6em minmax(0, 1fr); gap: 10px; padding: 5px 0 5px 8px; border-left: 2px solid var(--rule); font-size: 0.72rem; line-height: 1.45; }
+  .entry .y { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .entry p { margin: 0; }
+  .entry.k-council { border-left-color: var(--steel); }
+  .entry.k-break { border-left-color: var(--amber); }
+  .entry.k-god { border-left-color: var(--omen); }
+  .entry.k-loss { border-left-color: var(--heat); }
+  .entry.k-omen { border-left-color: var(--omen); color: var(--omen); }
+  .entry.k-era { border-left-color: var(--ink); }
+  .entry.k-era p { font-weight: 500; color: var(--amber); }
+
+  .help { pointer-events: auto; padding: 4px 9px; font-size: 0.72rem; margin-left: auto; }
+  .guide { display: flex; flex-direction: column; gap: 10px; font-size: 0.76rem; line-height: 1.55; max-width: 62ch; }
+  .guide p, .guide ul { margin: 0; }
+  .guide ul { padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+  .guide h3 { margin: 6px 0 0; font: 600 0.72rem/1.2 var(--f-head); letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+  .guide b { font-weight: 500; color: var(--amber); }
+
+  .win { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(5,6,7,0.55); z-index: 6; }
+  .win > div { background: var(--deck); border: 1px solid var(--amber); padding: 20px; max-width: 420px; display: flex; flex-direction: column; gap: 12px; }
+  .win h2 { margin: 0; font: 600 1.2rem/1.2 var(--f-head); letter-spacing: 0.2em; text-transform: uppercase; color: var(--amber); text-wrap: balance; }
+  .win p { margin: 0; font-size: 0.8rem; line-height: 1.5; }
+  .err { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--dim); }
+</style>
+
+<canvas id="scene" aria-label="3D star system watched over by the player"></canvas>
+<div id="labels"></div>
+
+<div class="hud top">
+  <div class="head">
+    <h1 id="sysName">—</h1>
+    <span class="sub" id="sysSub">Project Kardashev</span>
+    <button id="helpBtn" type="button" class="help" aria-label="How to watch">?</button>
+  </div>
+  <dl class="tele">
+    <div><dt>Elapsed</dt><dd id="tYear">—</dd></div>
+    <div><dt>Stockpile</dt><dd id="tStock">—</dd></div>
+    <div><dt>Output captured</dt><dd id="tCap" class="hot">—</dd></div>
+    <div><dt>Kardashev</dt><dd id="tK">—</dd></div>
+  </dl>
+  <div class="focus" id="focus" hidden><span id="focusText">—</span><i id="focusBar"></i></div>
+  <div class="focus project" id="project" hidden><span id="projectText">—</span><i id="projectBar"></i></div>
+</div>
+
+<div class="hud bottom">
+  <div class="log typing" id="log" aria-live="polite">
+    <div class="prev" id="logPrev"></div>
+    <div class="cur" id="logCur"></div>
+  </div>
+
+  <div class="card" id="card" hidden>
+    <div class="card-head"><h2 id="cName">—</h2><span class="kind" id="cKind"></span></div>
+    <dl id="cStats">
+      <div><dt id="cL1">Mass</dt><dd id="cV1">—</dd></div>
+      <div><dt id="cL2">Remaining</dt><dd id="cV2">—</dd></div>
+      <div><dt id="cL3">Mining hub</dt><dd id="cV3">—</dd></div>
+      <div><dt id="cL4">Yield</dt><dd id="cV4">—</dd></div>
+    </dl>
+    <div class="view" id="cView"></div>
+    <div class="note" id="cNote"></div>
+    <div class="bar">
+      <button id="cAct2" type="button" class="primary" hidden>Protect them</button>
+      <button id="cAct" type="button" class="primary">Order a hub here</button>
+      <button id="cClose" type="button">Close</button>
+    </div>
+  </div>
+
+  <div class="bar" id="introBar">
+    <button id="skipBtn" type="button">Skip intro</button>
+    <button id="resumeBtn" type="button" class="primary" hidden>Resume</button>
+  </div>
+  <div class="bar" id="simBar" hidden>
+    <div class="seg" role="group" aria-label="Simulation speed">
+      <button type="button" data-speed="0" aria-pressed="false">Pause</button>
+      <button type="button" data-speed="1" aria-pressed="true">1×</button>
+      <button type="button" data-speed="4" aria-pressed="false">4×</button>
+      <button type="button" data-speed="12" aria-pressed="false">12×</button>
+    </div>
+    <button id="treeBtn" type="button">Development</button>
+    <button id="chronBtn" type="button">Chronicle</button>
+    <button id="dirBtn" type="button" aria-pressed="true" title="Camera follows events">Auto camera</button>
+    <button id="soundBtn" type="button" aria-pressed="false">Sound</button>
+    <button id="autoBtn" type="button" aria-pressed="true" title="Dismiss milestones and follow seed ships automatically">Autoplay</button>
+  </div>
+  <div class="bar" id="godBar" hidden>
+    <button id="giftBtn" type="button" class="primary">Send comet<span class="cost" id="giftCd"></span></button>
+    <button id="smiteBtn" type="button" class="danger">Stellar flare<span class="cost" id="smiteCd"></span></button>
+    <button id="fixBtn" type="button" class="primary" hidden>Intervene</button>
+    <button id="seedBtn" type="button" class="primary" hidden>Follow the seed ship</button>
+    <button id="newBtn" type="button">New system</button>
+  </div>
+</div>
+
+<div class="sheet" id="tree" hidden>
+  <div class="sheet-in" role="dialog" aria-label="Development">
+    <div class="sheet-head">
+      <h2>Development</h2>
+      <span class="rate" id="rpRate"></span>
+      <button id="treeClose" type="button">Close</button>
+    </div>
+    <div class="branches" id="branches"></div>
+  </div>
+</div>
+
+<div class="sheet" id="chron" hidden>
+  <div class="sheet-in" role="dialog" aria-label="Chronicle">
+    <div class="sheet-head">
+      <h2>Chronicle</h2>
+      <span class="rate" id="chronSub"></span>
+      <button id="chronClose" type="button">Close</button>
+    </div>
+    <div class="chron" id="chronList"></div>
+  </div>
+</div>
+
+<div class="sheet" id="guide" hidden>
+  <div class="sheet-in" role="dialog" aria-label="How to watch">
+    <div class="sheet-head">
+      <h2>How to watch</h2>
+      <button id="guideClose" type="button">Got it</button>
+    </div>
+    <div class="guide">
+      <p>A spacefaring civilization has arrived in a star system it has never seen. <b>It makes its own decisions</b>: what to research, which worlds to mine or settle, what to do about anyone already living here, and whether to answer when something calls.</p>
+      <p>Its personality shapes everything. Its <b>drive</b> (Expansionist, Contemplative, Industrious) belongs to whichever faction holds the council, and changes when elections or schisms do. Its <b>ethics</b> (Reverent, Pragmatic, Ruthless) drift with what it does.</p>
+      <h3>Watching</h3>
+      <ul>
+        <li><b>Autoplay</b> keeps the story going on its own: milestone banners close themselves, and once a seed ship has left and the work here is done, the chronicle follows it to the next star.</li>
+        <li><b>Auto camera</b> cuts to wherever something is happening. Drag or pinch to take over; it resumes after a while.</li>
+        <li><b>Chronicle</b> holds the whole history, with charts. <b>Development</b> shows what it is researching and what it cares about.</li>
+        <li>Tap a planet, or the flotilla's label, to see what the council thinks of it.</li>
+      </ul>
+      <h3>Interfering</h3>
+      <ul>
+        <li><b>Inspire</b> a direction in Development, <b>send a comet</b> of raw material, or <b>trigger a flare</b>. Each has a cooldown, and the civilization reacts to it.</li>
+        <li>On a planet card you can order a world mined, or protect a native species.</li>
+        <li>During a crisis, <b>Intervene</b> ends it.</li>
+      </ul>
+      <p>The goal, if it has one, is Kardashev Type II: capturing almost all of a star's output. After that, each drive has its own great project, and seed ships can carry the civilization to a new star.</p>
+    </div>
+  </div>
+</div>
+
+<div class="win" id="win" hidden>
+  <div>
+    <h2 id="winTitle">Type II threshold</h2>
+    <p id="winText"></p>
+    <div class="bar">
+      <button id="winGo" type="button" class="primary">Keep watching</button>
+      <button id="winNew" type="button">New system</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="game.js"></script>
+
+</body></html>

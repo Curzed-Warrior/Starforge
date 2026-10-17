@@ -1,0 +1,316 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Godot;
+using Starforge.Sim;
+
+namespace Starforge.View;
+
+/// <summary>
+/// Galaxy-scale view of the simulation: colony markers, ships crossing between stars, and the territory
+/// textures that tint empires and darken every star wrapped in a swarm.
+/// </summary>
+public partial class GalaxyOverlay : Node3D
+{
+    Main _main;
+    Simulation _sim;
+    MultiMeshInstance3D _markers, _shipHeads;
+    ShaderMaterial _markerMat;
+    MeshInstance3D _lines;
+    ImmediateMesh _im;
+    ShaderMaterial _lineMat;
+    public ImageTexture OwnTex, CapTex;
+    Image _own, _cap;
+    MeshInstance3D _borders;
+    ShaderMaterial _borderMat;
+    public const int TexSize = 256;
+    public const float TexExtent = 1150f;   // galaxy units from centre to texture edge
+    float _texT = 99f;
+    public bool ShowBorders = true;
+    public float TranscendT = -1f;   // seconds since Transcendence; < 0 never
+    const int MaxMarkers = 3000, MaxHeads = 1000;
+
+    public void Setup(Main main, Simulation sim)
+    {
+        _main = main; _sim = sim;
+        _markerMat = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/marker.gdshader"), RenderPriority = 7 };
+        _markers = Make(MaxMarkers);
+        _shipHeads = Make(MaxHeads);
+        AddChild(_markers);
+        AddChild(_shipHeads);
+
+        _im = new ImmediateMesh();
+        _lineMat = new ShaderMaterial
+        {
+            RenderPriority = 6,
+            Shader = new Shader
+            {
+                Code = @"shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled, skip_vertex_transform;
+uniform float sky_k = 1e6;
+uniform float alpha = 1.0;
+varying vec4 v_col;
+void vertex(){
+	vec3 w = VERTEX;
+	vec3 cw = CAMERA_POSITION_WORLD;
+	float d = length(w - cw);
+	if (d > sky_k) w = cw + (w - cw) * (sky_k / d);
+	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(w, 1.0);
+	v_col = COLOR;
+}
+void fragment(){ ALBEDO = v_col.rgb * v_col.a * alpha; }"
+            }
+        };
+        _lines = new MeshInstance3D { Mesh = _im, MaterialOverride = _lineMat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, ExtraCullMargin = 16384 };
+        AddChild(_lines);
+
+        _own = Image.CreateEmpty(TexSize, TexSize, false, Image.Format.Rgba8);
+        _cap = Image.CreateEmpty(TexSize, TexSize, false, Image.Format.Rgba8);
+        OwnTex = ImageTexture.CreateFromImage(_own);
+        CapTex = ImageTexture.CreateFromImage(_cap);
+
+        _borderMat = new ShaderMaterial
+        {
+            RenderPriority = 5,
+            Shader = new Shader
+            {
+                Code = @"shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+uniform sampler2D own : filter_linear, repeat_disable;
+uniform float strength = 0.0;
+uniform vec2 sol = vec2(0.5);
+uniform float wave = -1.0;      // Transcendence: a ring of light running out from Sol, in uv
+uniform float after = 0.0;      // and the shimmer it leaves behind
+uniform float time = 0.0;
+void fragment(){
+	vec4 o = texture(own, UV);
+	// glowing edges where one empire meets another or empty space
+	vec2 px = vec2(1.0 / 256.0);
+	vec4 n = texture(own, UV + vec2(px.x, 0)) + texture(own, UV - vec2(px.x, 0)) + texture(own, UV + vec2(0, px.y)) + texture(own, UV - vec2(0, px.y));
+	float edge = clamp(length(o.rgb * 4.0 - n.rgb) * 1.5, 0.0, 1.0) * max(o.a, n.a * 0.25);
+	float d = length(UV - sol);
+	float ring = wave > 0.0 ? exp(-(d - wave) * (d - wave) * 1600.0) + 0.35 * step(d, wave) * exp(-(wave - d) * 12.0) : 0.0;
+	float shim = after * (0.5 + 0.5 * sin(d * 300.0 - time * 1.5));
+	vec3 light = vec3(1.0, 0.93, 0.78) * o.a * (ring * 2.5 + shim * 0.25);
+	ALBEDO = o.rgb * (o.a * 0.10 + edge * 0.6) * strength + light;
+}"
+            }
+        };
+        _borderMat.SetShaderParameter("own", OwnTex);
+        _borders = new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(TexExtent * 2, TexExtent * 2) }, MaterialOverride = _borderMat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        AddChild(_borders);
+    }
+
+    MultiMeshInstance3D Make(int n)
+    {
+        var quad = new QuadMesh { Size = new Vector2(1, 1), Material = _markerMat };
+        var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, UseCustomData = true, Mesh = quad, InstanceCount = n, VisibleInstanceCount = 0 };
+        return new MultiMeshInstance3D { Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, ExtraCullMargin = 16384, CustomAabb = new Aabb(-Vector3.One * 1e10f, Vector3.One * 2e10f) };
+    }
+
+    public void Tick(float dt)
+    {
+        var cam = _main.Cam;
+        float skyK = cam.Far * 0.5f;
+        float zoomGal = cam.GlobalPosition.DistanceTo(Frame.Star) / Main.G;
+        // overlays fade in as the view widens beyond the home system
+        float vis = Mathf.Clamp((zoomGal - 0.15f) / 2f, 0, 1);
+        _markerMat.SetShaderParameter("sky_k", skyK);
+        _markerMat.SetShaderParameter("fade", vis);
+        _lineMat.SetShaderParameter("sky_k", skyK);
+        _lineMat.SetShaderParameter("alpha", vis);
+
+        // galaxy-plane borders, positioned in world space
+        _borders.Position = _main.GalWorld(Vector3.Zero);
+        _borders.Scale = Vector3.One * Main.G;
+        _borderMat.SetShaderParameter("strength", ShowBorders ? Mathf.Clamp((zoomGal - 60f) / 300f, 0, 1) : 0);
+        if (TranscendT >= 0f)
+        {
+            TranscendT += dt;
+            var sol = _sim.HomeColony.Star.Pos;
+            _borderMat.SetShaderParameter("sol", new Vector2((sol.X + TexExtent) / (TexExtent * 2), (sol.Z + TexExtent) / (TexExtent * 2)));
+            _borderMat.SetShaderParameter("wave", TranscendT < 14f ? TranscendT * 0.07f : -1f);
+            _borderMat.SetShaderParameter("after", Mathf.Clamp(TranscendT / 10f, 0, 1));
+            _borderMat.SetShaderParameter("time", TranscendT);
+        }
+
+        UpdateMarkers(zoomGal);
+        UpdateShips(zoomGal);
+        _texT += dt;
+        if (_texT > 1.0f) { _texT = 0; UpdateTerritory(); }
+    }
+
+    float[] _markerBuf = new float[MaxMarkers * 20];
+    float _markerT = 99f;
+    StarInfo _markerView;
+
+    /// <summary>All colony markers in one buffer upload (12 transform + 4 colour + 4 custom floats each).</summary>
+    void UpdateMarkers(float zoomGal)
+    {
+        _markerT += (float)GetProcessDeltaTime();
+        if (_markerT < 0.3f && _markerView == _main.ViewStar) return;
+        _markerT = 0; _markerView = _main.ViewStar;
+        var mm = _markers.Multimesh;
+        int k = 0;
+        var buf = _markerBuf;
+        foreach (var c in _sim.Colonies)
+        {
+            if (k >= MaxMarkers) break;
+            var wp = _main.StarWorld(c.Star);
+            float size = c.Home ? 11f : c.Civ.Main ? 7f : 5.5f;
+            var col = c.Civ.Exalted ? c.Civ.Color.Lerp(Gold, 0.6f) : c.Civ.Color;
+            if (c.Civ.Exalted) size *= 1.3f;
+            int o = k * 20;
+            buf[o] = 1; buf[o + 1] = 0; buf[o + 2] = 0; buf[o + 3] = wp.X;
+            buf[o + 4] = 0; buf[o + 5] = 1; buf[o + 6] = 0; buf[o + 7] = wp.Y;
+            buf[o + 8] = 0; buf[o + 9] = 0; buf[o + 10] = 1; buf[o + 11] = wp.Z;
+            buf[o + 12] = col.R; buf[o + 13] = col.G; buf[o + 14] = col.B; buf[o + 15] = c.Complete ? 0.9f : 0.7f;
+            buf[o + 16] = size; buf[o + 17] = c.Complete ? 1f : 0f; buf[o + 18] = c.Civ.Main ? 1f : 0f; buf[o + 19] = 0;
+            k++;
+        }
+        // the exotic layer's places (once someone has found them), and stars the voice has lit or put out
+        foreach (var st in _sim.Gal.Stars)
+        {
+            if (k >= MaxMarkers) break;
+            Color col; float size;
+            if (st.Special != null && (_sim.ShowHiddenToVoice || _sim.Revealed.Contains(st.Special)))
+            {
+                col = st.Special switch { "vault" => new Color(0.75f, 0.45f, 1f), "gate" => Gold, _ => st.Dead ? new Color(0.6f, 0.15f, 0.1f) : new Color(0.5f, 0.95f, 1f) };
+                size = 10f;
+            }
+            else if (st.Kindled && !st.Dead) { col = new Color(1f, 0.95f, 0.8f); size = 6f; }
+            else if (st.Dead && st.Special == null && _sim.Edited.Contains(st)) { col = new Color(0.45f, 0.12f, 0.08f); size = 5f; }
+            else continue;
+            var wp = _main.StarWorld(st);
+            int o = k * 20;
+            buf[o] = 1; buf[o + 1] = 0; buf[o + 2] = 0; buf[o + 3] = wp.X;
+            buf[o + 4] = 0; buf[o + 5] = 1; buf[o + 6] = 0; buf[o + 7] = wp.Y;
+            buf[o + 8] = 0; buf[o + 9] = 0; buf[o + 10] = 1; buf[o + 11] = wp.Z;
+            buf[o + 12] = col.R; buf[o + 13] = col.G; buf[o + 14] = col.B; buf[o + 15] = 0.95f;
+            buf[o + 16] = size; buf[o + 17] = 1f; buf[o + 18] = 1f; buf[o + 19] = 0;
+            k++;
+        }
+        mm.Buffer = buf;
+        mm.VisibleInstanceCount = k;
+    }
+    static readonly Color Gold = new(1f, 0.82f, 0.38f);
+
+    void UpdateShips(float zoomGal)
+    {
+        _im.ClearSurfaces();
+        var heads = _shipHeads.Multimesh;
+        int k = 0;
+        bool lines = _sim.Ships.Count > 0 || _sim.Lanes.Count > 0 || _sim.Quarantines.Count > 0;
+        if (lines)
+        {
+            _im.SurfaceBegin(Mesh.PrimitiveType.Lines);
+            // the voice's permanent lanes, and the walls round the regions it has sealed
+            foreach (var (la, lb) in _sim.Lanes)
+            {
+                _im.SurfaceSetColor(new Color(0.8f, 0.6f, 1f, 0.7f)); _im.SurfaceAddVertex(_main.StarWorld(la));
+                _im.SurfaceSetColor(new Color(0.8f, 0.6f, 1f, 0.7f)); _im.SurfaceAddVertex(_main.StarWorld(lb));
+            }
+            foreach (var (qc, qr) in _sim.Quarantines)
+                for (int i = 0; i < 64; i++)
+                {
+                    float a0 = i * Mathf.Tau / 64, a1 = (i + 1) * Mathf.Tau / 64;
+                    _im.SurfaceSetColor(new Color(1f, 0.4f, 0.35f, 0.4f)); _im.SurfaceAddVertex((qc + new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0)) * qr - _main.ViewStar.Pos) * Main.G);
+                    _im.SurfaceSetColor(new Color(1f, 0.4f, 0.35f, 0.4f)); _im.SurfaceAddVertex((qc + new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1)) * qr - _main.ViewStar.Pos) * Main.G);
+                }
+            foreach (var s in _sim.Ships)
+            {
+                float u = s.Progress(_sim.Year);
+                var a = _main.StarWorld(s.Origin);
+                var b = _main.StarWorld(s.Target);
+                var p = a.Lerp(b, u);
+                var col = s.Civ.Color;
+                _im.SurfaceSetColor(new Color(col.R, col.G, col.B, 0.02f));
+                _im.SurfaceAddVertex(a);
+                _im.SurfaceSetColor(new Color(col.R, col.G, col.B, 0.3f));
+                _im.SurfaceAddVertex(p);
+                _im.SurfaceSetColor(new Color(col.R, col.G, col.B, 0.12f));
+                _im.SurfaceAddVertex(p);
+                _im.SurfaceSetColor(new Color(col.R, col.G, col.B, 0.0f));
+                _im.SurfaceAddVertex(b);
+                if (k < MaxHeads)
+                {
+                    heads.SetInstanceTransform(k, new Transform3D(Basis.Identity, p));
+                    heads.SetInstanceColor(k, new Color(col.R * 0.5f + 0.5f, col.G * 0.5f + 0.5f, col.B * 0.5f + 0.5f, 1f));
+                    heads.SetInstanceCustomData(k, new Color(4.5f, 2f, 0, 0));
+                    k++;
+                }
+            }
+            _im.SurfaceEnd();
+        }
+        // the Andromeda Ark: a long stream of ships leaving the galaxy
+        if (_sim.ArkYear > 0 && _sim.Humanity.Colonies.Count > 0)
+        {
+            var andro = _main.AndromedaWorld();
+            var homes = _sim.Humanity.Colonies;
+            for (int i = 0; i < 120 && k < MaxHeads; i++)
+            {
+                var from = homes[(i * 37) % homes.Count];
+                double age = _sim.Year - _sim.ArkYear - i * 2.0;
+                if (age < 0) continue;
+                float u = (float)Math.Min(1, age / 1200.0);
+                var a = _main.StarWorld(from.Star);
+                var p = a.Lerp(andro, u * 0.06f);
+                heads.SetInstanceTransform(k, new Transform3D(Basis.Identity, p));
+                heads.SetInstanceColor(k, new Color(0.85f, 0.92f, 1f, 1f - u));
+                heads.SetInstanceCustomData(k, new Color(3.5f, 2f, 0, 0));
+                k++;
+            }
+        }
+        heads.VisibleInstanceCount = k;
+    }
+
+    /// <summary>Rebuild the ownership and capture maps the galaxy shaders sample.</summary>
+    float[] _ownW, _capV;
+    byte[] _ownBytes, _capBytes;
+
+    void UpdateTerritory()
+    {
+        int N = TexSize * TexSize;
+        _ownW ??= new float[N]; _capV ??= new float[N];
+        _ownBytes ??= new byte[N * 4]; _capBytes ??= new byte[N * 4];
+        Array.Clear(_ownW); Array.Clear(_capV); Array.Clear(_ownBytes);
+        const float splat = 22f;    // galaxy units each sim star stands for
+        float pxPer = TexSize / (TexExtent * 2);
+        float rpx = splat * pxPer;
+        int rad = (int)Math.Ceiling(rpx) + 1;
+        foreach (var c in _sim.Colonies)
+        {
+            var p = c.Star.Pos;
+            float cx = (p.X + TexExtent) * pxPer, cz = (p.Z + TexExtent) * pxPer;
+            var col = c.Civ.Exalted ? c.Civ.Color.Lerp(Gold, 0.65f) : c.Civ.Color;      // Exalted territory burns gold
+            byte cr = (byte)(col.R * 255), cg = (byte)(col.G * 255), cb = (byte)(col.B * 255);
+            float capf = (float)Math.Clamp(Math.Max(c.Capture * 0.35, c.Region), 0, 1);
+            for (int y = (int)cz - rad; y <= (int)cz + rad; y++)
+            {
+                if (y < 0 || y >= TexSize) continue;
+                for (int x = (int)cx - rad; x <= (int)cx + rad; x++)
+                {
+                    if (x < 0 || x >= TexSize) continue;
+                    float dx = x + 0.5f - cx, dy = y + 0.5f - cz;
+                    float d2 = (dx * dx + dy * dy) / (rpx * rpx);
+                    if (d2 > 1) continue;
+                    float w = 1 - d2;
+                    int i = y * TexSize + x;
+                    if (w > _ownW[i])
+                    {
+                        _ownW[i] = w;
+                        int o = i * 4;
+                        _ownBytes[o] = cr; _ownBytes[o + 1] = cg; _ownBytes[o + 2] = cb; _ownBytes[o + 3] = (byte)(w * 255);
+                    }
+                    float v = capf * w;
+                    if (v > _capV[i]) _capV[i] = v;
+                }
+            }
+        }
+        for (int i = 0; i < N; i++) { int o = i * 4; _capBytes[o] = (byte)(_capV[i] * 255); _capBytes[o + 1] = 0; _capBytes[o + 2] = 0; _capBytes[o + 3] = 255; }
+        _own.SetData(TexSize, TexSize, false, Image.Format.Rgba8, _ownBytes);
+        _cap.SetData(TexSize, TexSize, false, Image.Format.Rgba8, _capBytes);
+        OwnTex.Update(_own);
+        CapTex.Update(_cap);
+    }
+}
