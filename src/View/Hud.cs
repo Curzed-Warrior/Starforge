@@ -517,10 +517,9 @@ public partial class Hud : CanvasLayer
         v.AddChild(Ui.Label("CHRONICLE", 22, Ui.Accent, true));
         _chart = new HistoryChart { CustomMinimumSize = new Vector2(800, 150), Sim = Sim };
         v.AddChild(_chart);
-        var sc = new ScrollContainer { CustomMinimumSize = new Vector2(800, 440), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
-        _chronText = new RichTextLabel { BbcodeEnabled = true, FitContent = true, CustomMinimumSize = new Vector2(780, 0), ScrollFollowing = true };
-        sc.AddChild(_chronText);
-        v.AddChild(sc);
+        // the label scrolls itself, so it can open on (and follow) the newest entry
+        _chronText = new RichTextLabel { BbcodeEnabled = true, ScrollActive = true, ScrollFollowing = true, CustomMinimumSize = new Vector2(800, 440) };
+        v.AddChild(_chronText);
         _root.AddChild(_chron);
     }
 
@@ -707,6 +706,7 @@ public partial class Hud : CanvasLayer
             var sv = _main.SysView;
             _sysOuter = sv.Sys.Bodies.Count > 0 ? sv.Sys.Bodies.Max(x => x.Orbit) : 300f;
             float camFromStar = cam.GlobalPosition.DistanceTo(sv.TrueStar);
+            var bodyLabels = new List<(Body B, Vector2 Pos, Color Col, float Alpha, float Rank)>();
             foreach (var bv in sv.Bodies)
             {
                 var b = bv.B;
@@ -728,7 +728,19 @@ public partial class Hud : CanvasLayer
                 var c = _main.ViewColony;
                 Color col = c != null && c.Settled.ContainsKey(b) ? Ui.Warm : c != null && c.Hubs.ContainsKey(b) ? new Color(1f, 0.55f, 0.35f) : Ui.Dim;
                 if (b == _main.SelectedBody) col = Colors.White;
-                wanted[b] = (sp + new Vector2(0, Mathf.Clamp(rpx, 0, 300) + 6), b.Name, col, alpha);
+                float rank = (b == _main.SelectedBody ? 1000 : 0) + (c != null && c.Settled.ContainsKey(b) ? 100 : 0) + (c != null && c.Hubs.ContainsKey(b) ? 50 : 0) + (b.Parent == null ? 20 : 0) + b.Radius;
+                bodyLabels.Add((b, sp + new Vector2(0, Mathf.Clamp(rpx, 0, 300) + 6), col, alpha, rank));
+            }
+            // from far out the inner worlds bunch together: the one that matters most keeps its name, the rest wait to be zoomed apart
+            // seen from far out the star's own name comes first (it is what the view is of)
+            bool starWins = !cam.IsPositionBehind(sv.TrueStar) && camFromStar > _sysOuter * 1.6f;
+            var keep = new List<Vector2>();
+            if (starWins) keep.Add(cam.UnprojectPosition(sv.TrueStar) + new Vector2(0, 14));
+            foreach (var l in bodyLabels.OrderByDescending(x => x.Rank))
+            {
+                if (keep.Any(q => Mathf.Abs(q.X - l.Pos.X) < 56 && Mathf.Abs(q.Y - l.Pos.Y) < 15)) continue;
+                keep.Add(l.Pos);
+                wanted[l.B] = (l.Pos, l.B.Name, l.Col, l.Alpha);
             }
             var vis = sv.Spectacle.Visitor;
             if (vis != null && !cam.IsPositionBehind(vis.GlobalPosition))
@@ -750,7 +762,8 @@ public partial class Hud : CanvasLayer
             if (!cam.IsPositionBehind(sv.TrueStar) && camFromStar > sv.Sys.StarRadius * 4)
             {
                 float a = Mathf.Clamp(camFromStar / (_sysOuter * 1.6f) - 0.3f, 0, 1) * Mathf.Clamp(3f - camFromStar / (_sysOuter * 160f), 0, 1);
-                if (a > 0.02f) wanted["star"] = (cam.UnprojectPosition(sv.TrueStar) + new Vector2(0, 14), sv.Sys.Name, Ui.Text, a);
+                var spStar = cam.UnprojectPosition(sv.TrueStar) + new Vector2(0, 14);
+                if (a > 0.02f && (starWins || !keep.Any(q => Mathf.Abs(q.X - spStar.X) < 56 && Mathf.Abs(q.Y - spStar.Y) < 15))) wanted["star"] = (spStar, sv.Sys.Name, Ui.Text, a);
             }
         }
         // stars of the galaxy: colonies and famous neighbours, or whole empires when the view is wide
@@ -784,7 +797,8 @@ public partial class Hud : CanvasLayer
         {
             var lw = _main.LandmarkWorld(lm);
             float dl = cam.GlobalPosition.DistanceTo(lw) / Main.G;
-            if (cam.IsPositionBehind(lw) || dl < lm.Radius * 1.6f || dl > 600f) continue;
+            // nebulae are galaxy-scale sights: inside a star system their names float over the planets as clutter
+            if (cam.IsPositionBehind(lw) || dl < lm.Radius * 1.6f || dl > 600f || zoomGal < 0.02f) continue;
             var sp = cam.UnprojectPosition(lw);
             if (sp.X < 0 || sp.Y < 0 || sp.X > vp.X || sp.Y > vp.Y) continue;
             if (Free(sp, 30)) wanted[lm] = (sp + new Vector2(0, 12), lm.Name, new Color(1f, 0.7f, 0.8f), Mathf.Clamp(1.2f - dl / 600f, 0.3f, 0.9f));

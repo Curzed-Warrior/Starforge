@@ -263,7 +263,9 @@ public partial class Simulation
     /// <summary>Worlds slowly coming alive after being moved into the warmth.</summary>
     public readonly List<Body> Thawing = new();
     public static float HabitableOrbit(StarSystem sys) => StarSystem.AU * Mathf.Sqrt(Mathf.Max(sys.Star.Lum, 0.01f));
-    public static bool Movable(StarSystem sys, Body b) => b.Parent == null && b.Kind != BodyKind.Belt && b.Mined < 0.5f && Mathf.Abs(b.Orbit - HabitableOrbit(sys)) > HabitableOrbit(sys) * 0.12f;
+    /// <summary>A world already moved sits in the nearest free lane to the warm band (which may still be outside it, when
+    /// the band is taken): moving it again changes nothing, so it can be moved once.</summary>
+    public static bool Movable(StarSystem sys, Body b) => b.Orbit0 < 0 && b.Parent == null && b.Kind != BodyKind.Belt && b.Mined < 0.5f && Mathf.Abs(b.Orbit - HabitableOrbit(sys)) > HabitableOrbit(sys) * 0.12f;
     /// <summary>Walk a world into the band where water stays liquid. Over the next years it warms (or cools) toward life.</summary>
     public bool ShiftOrbit(Colony c, StarSystem sys, Body b, Civ actor = null)
     {

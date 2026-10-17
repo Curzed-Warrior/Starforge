@@ -91,6 +91,10 @@ public partial class Colony
         Star.Owner = civ.Id; Star.Visited = true;
     }
 
+    /// <summary>Routine news from here reaches the chronicle: the home system, the one being watched, or a young empire's
+    /// few colonies. (Three hundred systems each eating their moons would otherwise be most of history.)</summary>
+    public bool Newsworthy => Home || Sim.Focus == this || Civ.Colonies.Count <= 8;
+
     public double Power => PlanetPower + Capture * L + MegaPower;
     public double PFrac => Power / L;
     public double Kardashev => Defs.Kardashev(Power);
@@ -153,7 +157,7 @@ public partial class Colony
                 if (b.Mined >= 0.9999f)
                 {
                     b.Mined = 1;
-                    Sim.Log(this, $"{b.Name} is gone. Every gram of it is in orbit now.", "loss", b);
+                    if (Newsworthy) Sim.Log(this, $"{b.Name} is gone. Every gram of it is in orbit now.", "loss", b);
                 }
             }
             if (M.StarLift) Stock += Tempo * 0.3 * P * M.Mine * LiftShare * Boost * dy;
@@ -409,7 +413,7 @@ public partial class Colony
             Settled.Remove(b);
             Pop *= 0.95;
             Sim.NudgeConscience(Civ, -0.08f);
-            Sim.Log(this, $"{b.Name} is evacuated so it can be mined. Not everyone leaves in time.", "loss", b);
+            if (Newsworthy) Sim.Log(this, $"{b.Name} is evacuated so it can be mined. Not everyone leaves in time.", "loss", b);
         }
         if (byPlayer)
         {

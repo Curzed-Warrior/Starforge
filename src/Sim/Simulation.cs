@@ -194,7 +194,9 @@ public partial class Simulation
     {
         var civ = c?.Civ ?? Humanity;
         // the chronicle follows humanity, the watched system, and anyone humanity has met
-        bool relevant = civ.Main || c == Focus || kind == "god" || civ.Met.Contains(Humanity.Id) && (kind == "era" || kind == "omen" || kind == "loss");
+        // (a met empire's own losses only when humanity is part of them: a big empire at war loses dozens of worlds a year,
+        // and every one of those lines would bury humanity's history)
+        bool relevant = civ.Main || c == Focus || kind == "god" || civ.Met.Contains(Humanity.Id) && (kind == "era" || kind == "omen" || kind == "loss" && civ.AtWar.Contains(Humanity.Id));
         // far-flung human colonies only make the chronicle with turning points, not routine news
         if (civ.Main && c != null && !c.Home && c != Focus && (kind == "event" || kind == "council")) relevant = false;
         if (!relevant) return;
@@ -507,6 +509,7 @@ public partial class Simulation
                 }
                 else if (war && border) Battle(a, b, nv);
             }
+        DarkStars();
         // Type III watch
         if (!TypeIIIAnnounced && Defs.Kardashev(Humanity.GalacticPower) >= 3.0)
         {
@@ -524,6 +527,30 @@ public partial class Simulation
             Humanity.Used.Add("typei");
             Milestone(HomeColony, "Type I", $"Year {Year:0}. Humanity commands as much power as falls on the whole Earth.", "seat");
         }
+    }
+
+    /// <summary>
+    /// Long before anyone meets, astronomy finds them: a finished swarm is a star gone dark in the visible and bright in
+    /// the infrared, plain across the galaxy to anyone with a big enough mirror (the lightsail era's arrays). One empire
+    /// at a time, the old ones first, so humanity spends the centuries before contact knowing it is not alone.
+    /// </summary>
+    void DarkStars()
+    {
+        if (!Humanity.Knows("X3") || _r.NextDouble() > 0.15) return;
+        var seen = Civs.Where(o => o.Alien && !o.Dead && !Humanity.Met.Contains(o.Id) && !Humanity.Used.Contains("seen:" + o.Id) && o.Colonies.Any(x => x.Complete))
+            .OrderByDescending(o => o.Age).FirstOrDefault();
+        if (seen == null) return;
+        Humanity.Used.Add("seen:" + seen.Id);
+        var home = seen.Colonies[0];
+        int dark = seen.Colonies.Count(x => x.Complete);
+        float ly = home.Star.Pos.DistanceTo(Gal.Sol.Pos) * Galaxy.LyPerUnit;
+        bool first = !Humanity.Used.Contains("darkstars");
+        Humanity.Used.Add("darkstars");
+        string text = $"Astronomers find {(dark == 1 ? "a star" : $"{dark} stars")} near {home.Star.Name}, {ly:#,0} light-years away, shining only in the infrared. "
+            + (first ? "Someone has wrapped them. Whoever they are, they were doing it before humanity learned to write." : "Another builder. The dark patches on the sky charts are starting to look like a map.");
+        Log(HomeColony, text, "omen", null);
+        if (first) Milestone(HomeColony, "Dark Stars", $"Year {Year:0}. {text}", "galaxy");
+        else Raise("Milestone", "Dark stars", text, HomeColony);
     }
 
     public void StartWar(Civ a, Civ b)
