@@ -252,11 +252,11 @@ def view(name, deck, x, y, yaw=0.0, pitch=0.0, lens=18.0, eye=1.65, exposure=0.0
     os.makedirs(OUTR, exist_ok=True)
     sc = bpy.context.scene
     if animate:
-        sc.render.image_settings.file_format = "FFMPEG"; sc.render.ffmpeg.format = "MPEG4"; sc.render.ffmpeg.codec = "H264"
-        sc.render.ffmpeg.constant_rate_factor = "HIGH"
-        sc.render.filepath = os.path.join(OUTR, name + "_")
-        bpy.ops.render.render(animation=True)
+        # PNG frames (Blender 5.x moved video output); encode afterwards with ffmpeg
         sc.render.image_settings.file_format = "PNG"
+        os.makedirs(os.path.join(OUTR, name), exist_ok=True)
+        sc.render.filepath = os.path.join(OUTR, name, "f_####")
+        bpy.ops.render.render(animation=True)
         return sc.render.filepath
     sc.render.image_settings.file_format = "PNG"
     sc.render.filepath = os.path.join(OUTR, name + ".png")
@@ -272,7 +272,11 @@ def orbit(frames=144, degrees=2.0):
         x0, y0, z0 = EARTH_ROT
         o.rotation_euler = (x0, y0, z0); o.keyframe_insert("rotation_euler", frame=1)
         o.rotation_euler = (x0, y0, z0 + math.radians(degrees) * (1.0 if nm == "Earth" else 1.08)); o.keyframe_insert("rotation_euler", frame=frames)
-        for fc in o.animation_data.action.fcurves:
+        act = o.animation_data.action
+        fcs = getattr(act, "fcurves", None)
+        if fcs is None:          # Blender 4.4+: layered actions keep their curves in channel bags
+            fcs = [fc for lay in act.layers for st in lay.strips for cb in st.channelbags for fc in cb.fcurves]
+        for fc in fcs:
             for kp in fc.keyframe_points: kp.interpolation = "LINEAR"
 
 
