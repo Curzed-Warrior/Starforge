@@ -61,8 +61,45 @@ def window_frames(acc):
             acc.add("accent", [tuple(p0), tuple(Vector(P3(cw, A * 0.8, -B - OCT_F - 0.05, -0.03))), tuple(p1), tuple(Vector(P3(cw, -A * 0.8, -B - OCT_F - 0.03, -0.05)))], [(0, 1, 2, 3)])
 
 
+PROP_COLLIDE = ("bed", "bunk", "medbed", "wardrobe", "desk", "table", "sofa", "counter", "cabinet", "locker", "machine",
+                "storage_rack", "hydro_rack", "console", "treadmill", "shower", "bench")
+
+
+def place_props(coll):
+    """One linked instance of the prop kit (assets/props, objects P_<kind>) per piece of furniture in the plan, scaled to
+    its footprint and turned to face the way the plan says (or the corridor). Returns the count per kind."""
+    ns = {}
+    exec(open(SF + "/assets/props/props.py").read(), ns)        # (re)build the kit so instances match the current props
+    nom = ns["NOMINAL"]
+    out = {}
+    for deck in ("A", "B"):
+        ffl = DATA[deck]["ffl"]
+        for q in DATA[deck].get("props", []):
+            k = q["kind"]; src = bpy.data.objects.get("P_" + k)
+            if src is None: continue
+            W, Dn, _ = nom[k]
+            dx, dy = q["x1"] - q["x0"], q["y1"] - q["y0"]
+            xc, yc = (q["x0"] + q["x1"]) / 2, (q["y0"] + q["y1"]) / 2
+            f = q["front"]
+            if f is None:       # long side along the long side of the footprint; face the corridor (or the room's middle)
+                f = (0, -1 if yc > 0 else 1) if (W >= Dn) == (dx >= dy) else (1 if q["cx"] > xc else -1, 0)
+            stretch = (R_MID + yc) / R_MID                      # plans are developed at R_MID: true length along the ring
+            if abs(f[1]) >= abs(f[0]): F = (0.0, math.copysign(1, f[1])); width, depth = dx * stretch, dy
+            else: F = (math.copysign(1, f[0]), 0.0); width, depth = dy, dx * stretch
+            th = TH0 + xc / R_MID
+            t, r = Vector((-math.sin(th), math.cos(th), 0)), Vector((math.cos(th), math.sin(th), 0))
+            Fw = t * F[0] + r * F[1]
+            o = bpy.data.objects.new(f"Prop_{k}", src.data); coll.objects.link(o)
+            o.location = r * (R_MID + yc) + Vector((0, 0, ffl))
+            o.rotation_euler = (0, 0, math.atan2(Fw.x, -Fw.y))    # local -Y (the front) onto Fw
+            o.scale = (width / W, depth / Dn, 1.0)
+            out[k] = out.get(k, 0) + 1
+    return out
+
+
 def build_interior():
     coll = _coll("OutpostInterior")
+    PROPS[0] = True
     acc = Acc()
     L = R_MID * math.radians(30)
     for deck in ("A", "B"):
@@ -75,6 +112,7 @@ def build_interior():
     window_frames(acc)
     acc.build(coll)
     for o in coll.objects: o.name = "Int_" + o.name.split("_", 1)[1].split(".")[0]
+    acc.props = place_props(coll)
     return acc
 
 
@@ -312,6 +350,8 @@ def export_interior():
     for o in list(bpy.data.collections["OutpostInterior"].objects) + [bpy.data.objects["Ring_Windows"]]:
         if o.name == "Ring_Windows" or o.name[4:] in COLLIDE:
             old = o.name; o.name = old + "-col"; renamed.append((o, old))
+        elif o.name.startswith("Prop_") and o.name[5:].split(".")[0] in PROP_COLLIDE:     # furniture: a convex hull each
+            old = o.name; o.name = old + "-convcol"; renamed.append((o, old))
     godot_extras()
     for o in bpy.context.scene.objects: o.select_set(False)
     bpy.data.objects["Outpost"].select_set(True)

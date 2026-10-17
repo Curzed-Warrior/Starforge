@@ -10,8 +10,8 @@ KEEP = ("A-WALL", "A-WALL-SHFT", "A-WALL-BHD", "A-WALL-PRHU", "A-FURN", "A-EQPM"
 
 
 def deck(dk):
-    v, doors, rooms = View(dk), [], []
-    O.ring_plan(v, dk, list(range(1, 13)), -15.0, grid=False, doors_out=doors, rooms_out=rooms)  # developed: the sketch bends it
+    v, doors, rooms, props = View(dk), [], [], []
+    O.ring_plan(v, dk, list(range(1, 13)), -15.0, grid=False, doors_out=doors, rooms_out=rooms, props_out=props)  # developed: the sketch bends it
     prims = []
     for pr in v.prims:
         if pr.layer not in KEEP: continue
@@ -23,7 +23,7 @@ def deck(dk):
     tags = [{"p": pr.data["p"], "n": pr.data["name"], "num": pr.data["number"]} for pr in v.prims if pr.kind == "tag"]
     ffl, clg = O.FFL[dk], O.CLG[dk]
     # "r" / "clg" keep the sketch's H = r - clg: the plan radius and that minus the clear height
-    return {"r": O.R_MID, "clg": O.R_MID - (clg - ffl), "ffl": ffl, "prims": prims, "doors": doors, "texts": texts, "tags": tags}
+    return {"r": O.R_MID, "clg": O.R_MID - (clg - ffl), "ffl": ffl, "prims": prims, "doors": doors, "texts": texts, "tags": tags, "props": props}
 
 
 if __name__ == "__main__":

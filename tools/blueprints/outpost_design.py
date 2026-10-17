@@ -103,6 +103,22 @@ class PolarView(View):
         View._p(self, kind, layer, **d)
 
 
+LABEL_KIND = [("BUNK", "bunk"), ("TRAUMA", "medbed"), ("EXAM", "medbed"), ("SOFA", "sofa"), ("TREADMILL", "treadmill"),
+              ("SEATING", "bench"), ("FOLD BENCH", "counter"), ("COUNTER", "counter"), ("COOKING", "counter"), ("ISLAND", "counter"),
+              ("DISHWASH", "counter"), ("SINK", "counter"), ("WASH", "counter"), ("BENCH", "counter"), ("SHELV", "storage_rack"),
+              ("SHELF", "storage_rack"), ("RACK", "storage_rack"), ("SUIT", "locker"), ("LOCKER", "locker"), ("LATHE", "machine"),
+              ("MILL", "machine"), ("CNC", "machine"), ("PRESS", "machine"), ("3D PRT", "machine"), ("ERG", "machine"),
+              ("RESISTANCE", "machine"), ("HOOD", "machine"), ("GAMES", "console"), ("NCP", "console")]
+
+
+def prop_kind(label, layer):
+    u = label.upper()
+    if u.strip() == "BENCH": return "bench"
+    for key, k in LABEL_KIND:
+        if key in u: return k
+    return "cabinet" if layer != "A-FURN" else None
+
+
 class D:
     """A drawing pen offset onto a sheet: draws compartment-local geometry at x*sx + ox."""
 
@@ -112,6 +128,14 @@ class D:
         self.dp, self.dn = None, 0       # door-tag prefix (the compartment, e.g. A05) and counter
         self.vx = []                     # cross partitions (x, y0, y1) for the dimension strings
         self.dj = []                     # door openings in walls along x: (a, b, y)
+        self.props = []                  # furniture for the 3D build: (kind, x0, y0, x1, y1, front or None), developed coords
+
+    def prop(self, kind, x0, y0, x1, y1, front=None):
+        """Record a piece of furniture for the furnished build (assets/props). front: the way its front faces, in this
+        pen's local axes; None lets the build choose (facing the corridor)."""
+        (a0, b0), (a1, b1) = self.P(x0, y0), self.P(x1, y1)
+        f = None if front is None else (front[0] * (1 if self.sx > 0 else -1), front[1])
+        self.props.append((kind, min(a0, a1), min(b0, b1), max(a0, a1), max(b0, b1), f))
 
     def door_tag(self, x, y, kind="S"):
         if self.dp is None: return
@@ -125,6 +149,7 @@ class D:
 
     def bed(self, x0, y0, x1, y1, head="x0", label=None):
         """Bed: frame, pillow at the head end (x0, x1, y0 or y1), the turned-down sheet."""
+        self.prop("bunk" if label and "BUNK" in label.upper() else "bed", x0, y0, x1, y1)
         self.box(x0, y0, x1, y1, "A-FURN")
         if head in ("x0", "x1"):
             s = 1 if head == "x0" else -1; e = x0 if s > 0 else x1
@@ -138,6 +163,7 @@ class D:
                             rot=0 if head in ("x0", "x1") else 90)
 
     def wardrobe(self, x0, y0, x1, y1):
+        self.prop("wardrobe", x0, y0, x1, y1)
         self.box(x0, y0, x1, y1, "A-FURN")
         if (x1 - x0) >= (y1 - y0):
             ym = (y0 + y1) / 2; self.line(x0 + 0.05, ym, x1 - 0.05, ym, "A-HIDN")
@@ -152,12 +178,18 @@ class D:
         self.box(x0, y0, x1, y1, "A-FURN")
         if chair:
             cx, cy = chair; s = 0.22
+            dx, dy = cx - (x0 + x1) / 2, cy - (y0 + y1) / 2
+            f = (1 if dx > 0 else -1, 0) if abs(dx) >= abs(dy) else (0, 1 if dy > 0 else -1)
+            self.prop("desk", x0, y0, x1, y1, f)
+            self.prop("chair", cx - s, cy - s, cx + s, cy + s, (-f[0], -f[1]))
             self.box(cx - s, cy - s, cx + s, cy + s, "A-FURN")
             self.line(cx - s, cy - s, cx - s + 0.05, cy + s)
 
     def wc(self, x, y, facing=(0, 1)):
         """Wall-hung WC: cistern against the wall, pan projecting along `facing`."""
         fx, fy = facing
+        if fy: self.prop("wc", x - 0.2, min(y - fy * 0.18, y + fy * 0.55), x + 0.2, max(y - fy * 0.18, y + fy * 0.55), facing)
+        else: self.prop("wc", min(x - fx * 0.18, x + fx * 0.55), y - 0.2, max(x - fx * 0.18, x + fx * 0.55), y + 0.2, facing)
         if fy:
             self.box(x - 0.2, y - fy * 0.09 - 0.09, x + 0.2, y - fy * 0.09 + 0.09, "A-FURN")
             self.ellipse(x, y + fy * 0.28, 0.18, 0.27)
@@ -169,6 +201,8 @@ class D:
 
     def basin(self, x, y, facing=(0, 1), w=0.5):
         fx, fy = facing
+        if fy: self.prop("basin", x - w / 2, min(y, y + fy * 0.42), x + w / 2, max(y, y + fy * 0.42), facing)
+        else: self.prop("basin", min(x, x + fx * 0.42), y - w / 2, max(x, x + fx * 0.42), y + w / 2, facing)
         if fy:
             self.box(x - w / 2, y - (0.0 if fy > 0 else 0.42), x + w / 2, y + (0.42 if fy > 0 else 0.0), "A-FURN")
             self.ellipse(x, y + fy * 0.23, w * 0.36, 0.14); self.circ(x, y + fy * 0.06, 0.025)
@@ -177,6 +211,7 @@ class D:
             self.ellipse(x + fx * 0.23, y, 0.14, w * 0.36); self.circ(x + fx * 0.06, y, 0.025)
 
     def shower(self, x0, y0, x1, y1):
+        self.prop("shower", x0, y0, x1, y1)
         self.box(x0, y0, x1, y1, "A-FURN")
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         for px, py in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)): self.line(px, py, cx, cy)
@@ -216,6 +251,9 @@ class D:
         for a, b in zip(ys[::2], ys[1::2]): self.wall_rect(x - t / 2, a, x + t / 2, b, layer, fill)
 
     def box(self, x0, y0, x1, y1, layer="A-FURN", label=None, h=1.4, hatch=None, fill=None):
+        if label and layer in ("A-FURN", "A-EQPM", "M-HVAC-EQPM"):
+            k = prop_kind(label, layer)
+            if k: self.prop(k, min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
         self.v.rect(*self.P(x0, y0), *self.P(x1, y1), layer, hatch=hatch, fill=fill)
         if label: self.v.text(self.P((x0 + x1) / 2, (y0 + y1) / 2), label, "A-ANNO-NOTE", h=h * TS[0], rot=90 if (y1 - y0) > (x1 - x0) * 1.6 and (y1 - y0) > 1.2 else 0)
 
@@ -494,6 +532,7 @@ def hydroponics(d, k, xs, n):
             for (y0, y1, lab) in ((0.85, 1.75, "RACK · 2-SIDED · 4 TIER"), (2.95, 3.85, "RACK · 4 TIER")):
                 if hx is not None and sgn > 0 and b > hx - 1.6 and a < hx + 1.6: continue
                 ya, yb = sorted((sgn * y0, sgn * y1))
+                d.prop("hydro_rack", a, ya, b, yb)
                 d.box(a, ya, b, yb, "A-EQPM")
                 for f in (0.25, 0.5, 0.75): d.line(a, ya + (yb - ya) * f, b, ya + (yb - ya) * f, "A-FURN")
                 d.text((a + b) / 2, (ya + yb) / 2, lab, h=1.15)
@@ -575,9 +614,10 @@ def galley(d, k, xs, n):
     tables = [(x, y) for x in (-6.0, -3.4, -0.8, 1.8, 4.4, 7.0, 9.6) for y in (2.6,)] + [(x, -2.6) for x in (-0.6, 2.0, 4.6, 7.2, 9.6)]
     for (x, y) in tables:
         if x + 0.6 > xs - 0.1: x = xs - 0.75
-        d.box(x - 0.6, y - 0.4, x + 0.6, y + 0.4, "A-FURN")
+        d.box(x - 0.6, y - 0.4, x + 0.6, y + 0.4, "A-FURN"); d.prop("table", x - 0.6, y - 0.4, x + 0.6, y + 0.4)
         for cx in (x - 0.3, x + 0.3):
-            for cy in (y - 0.65, y + 0.65): d.box(cx - 0.2, cy - 0.2, cx + 0.2, cy + 0.2, "A-FURN")
+            for cy in (y - 0.65, y + 0.65):
+                d.box(cx - 0.2, cy - 0.2, cx + 0.2, cy + 0.2, "A-FURN"); d.prop("stool", cx - 0.2, cy - 0.2, cx + 0.2, cy + 0.2, (0, 1 if cy < y else -1))
     d.room("WARDROOM · 48 SEATS", f"{n}-00", -7.5, -1.2, xs, HW, tag_at=(-4.0, 0.0))
 
 
@@ -592,7 +632,7 @@ def recreation(d, k, xs, n):
     d.slide_h(-1.6, -0.6, -0.9, side=1, pocket=-1)
     for x in (-9.5, -5.5, 2.5, 7.5):
         d.box(x - 1.0, 3.0, x + 1.0, 3.85, "A-FURN", "SOFA", h=1.0)
-        d.box(x - 0.5, 2.0, x + 0.5, 2.6, "A-FURN")
+        d.box(x - 0.5, 2.0, x + 0.5, 2.6, "A-FURN"); d.prop("coffee_table", x - 0.5, 2.0, x + 0.5, 2.6)
     d.room("LOUNGE", f"{n}-03", -xs, -0.9, xs, HW, tag_at=(-1.0, 1.5))
     d.box(9.0, -3.9, xs - 0.1, -1.0, "A-EQPM", "GAMES / VR", h=1.05)
 
@@ -802,7 +842,7 @@ def laboratory(d, k, xs, n):
 
 
 # ------------------------------------------------------------------ assembling ring deck plans
-def ring_plan(v, deck, comps, theta_start, grid=True, contents=True, rooms_out=None, scale=100, doors_out=None):
+def ring_plan(v, deck, comps, theta_start, grid=True, contents=True, rooms_out=None, scale=100, doors_out=None, props_out=None):
     """Developed plan of `comps` (consecutive compartment numbers) for a deck, x from 0 at theta_start (deg).
     Annotation offsets outside the hull are set for 1:`scale` so they sit the same paper distance at any scale."""
     kk = scale / 100.0
@@ -817,6 +857,7 @@ def ring_plan(v, deck, comps, theta_start, grid=True, contents=True, rooms_out=N
             (deckA if deck == "A" else deckB)(d, k, L)
         if rooms_out is not None: rooms_out.extend((deck, k, *rm) for rm in d.rooms)
         if doors_out is not None: doors_out.extend((xc + a_, xc + b_, y_) for a_, b_, y_ in d.dj)
+        if props_out is not None: props_out.extend(dict(kind=k_, x0=a0, y0=b0, x1=a1, y1=b1, front=f_, cx=xc) for k_, a0, b0, a1, b1, f_ in d.props)
         if grid and contents:
             for sgn in (1, -1):
                 xs_ = sorted({round(xc + x, 3) for x, y0_, y1_ in d.vx if (y0_ + y1_) / 2 * sgn > 1.0 and abs(x) < L / 2 - 0.4})

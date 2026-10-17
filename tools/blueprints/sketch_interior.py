@@ -34,7 +34,8 @@ SHADE = {"floor": (0.20, 0.21, 0.23), "wall": (0.50, 0.52, 0.55), "ceil": (0.32,
 
 # ------------------------------------------------------------------ helpers
 R_MID = 40.0
-PBR = [False]        # True: the furnished build (assets/stations/outpost/interior.py): real materials, no ink, no own glass
+PBR = [False]
+PROPS = [False]      # True: furniture the plan records (blocking.json "props") is left out here; the build places prop-kit instances        # True: the furnished build (assets/stations/outpost/interior.py): real materials, no ink, no own glass
 FFL = [0.0]          # z of the deck being built (REV B: flat decks, down = -Z)
 WIN = {"A": {1: (0.8, 2.6), -1: (0.8, 2.4)}, "B": {1: (0.8, 2.0)}}     # window sill/head above FFL: outer (+1), hub (-1)
 
@@ -233,6 +234,10 @@ def blocking(acc, data, deck, x_lo, x_hi):
         elif L == "A-DOOR" and not STYLE.get("doors_closed", True): acc.prism("door", pr["p"], 0, 2.1, rf)
         elif L in ("A-FURN", "A-EQPM"): furn.append((pr, bb, L))
     # furniture: children (pillows, bowls) sit a little proud of their parent
+    if PROPS[0]:        # the prop kit supplies these: drop every furniture shape whose centre lies in a recorded prop
+        boxes = [(q["x0"] - 0.03, q["y0"] - 0.03, q["x1"] + 0.03, q["y1"] + 0.03) for q in D.get("props", [])]
+        inside_prop = lambda c: any(b0 <= c[0] <= b2 and b1 <= c[1] <= b3 for b0, b1, b2, b3 in boxes)
+        furn = [f for f in furn if not inside_prop(((f[1][0] + f[1][2]) / 2, (f[1][1] + f[1][3]) / 2))]
     for pr, bb, L in furn:
         h, lab = furn_height(pr, bb, texts, L)
         parent = [q for q in furn if q[1] != bb and q[1][0] <= bb[0] and q[1][1] <= bb[1] and q[1][2] >= bb[2] and q[1][3] >= bb[3]]
@@ -486,18 +491,18 @@ def cabins(acc, data, deck, x_lo, x_hi):
                 cx0, cx1 = e[i], e[i + 1]
                 if cx1 < x_lo or cx0 > x_hi: continue
                 yb0, yb1 = sorted((sgn * (HW - 0.95), sgn * (HW - 0.05)))
-                # headboard at the head (x0) end and drawer fronts on the bed's room-side face
-                acc.box("furn", cx0 + 0.1, yb0, cx0 + 0.16, yb1, 0.5, 1.15 if deck == "A" else 1.25, rf)
                 yf = sgn * (HW - 0.95)
-                for xd in (cx0 + 0.75, cx0 + 1.45):
+                # headboard and drawer fronts (the prop kit's bed has its own)
+                if not PROPS[0]: acc.box("furn", cx0 + 0.1, yb0, cx0 + 0.16, yb1, 0.5, 1.15 if deck == "A" else 1.25, rf)
+                for xd in ((cx0 + 0.75, cx0 + 1.45) if not PROPS[0] else ()):
                     acc.box("frame", xd - 0.005, yf - 0.012 if sgn > 0 else yf, xd + 0.005, yf if sgn > 0 else yf + 0.012, 0.08, 0.42, rf)
-                acc.box("frame", cx0 + 0.1, yf - 0.012 if sgn > 0 else yf, cx0 + 2.1, yf if sgn > 0 else yf + 0.012, 0.24, 0.25, rf)
+                if not PROPS[0]: acc.box("frame", cx0 + 0.1, yf - 0.012 if sgn > 0 else yf, cx0 + 2.1, yf if sgn > 0 else yf + 0.012, 0.24, 0.25, rf)
                 if deck == "A":
                     # locker bank along the partition at the bed's foot is the wardrobe; over the bed: a shelf with a light
                     ys0, ys1 = sorted((sgn * (HW - 0.22), sgn * HW))
                     acc.box("eqpm", cx0 + 0.1, ys0, cx1 - 0.08, ys1, 0.72, 0.8, rf)            # sill ledge over the bed head
                     acc.box("light", cx0 + 0.1, ys0, cx1 - 0.08, ys1, 2.86, 2.88, rf)          # cove light in the window head
-                else:
+                elif not PROPS[0]:
                     # upper bunk: a second platform, a privacy curtain rail, a ladder at the foot
                     acc.box("furn", cx0 + 0.1, yb0, cx0 + 2.1, yb1, 1.35, 1.55, rf)
                     acc.box("light", cx0 + 0.3, sgn * (HW - 0.12) - 0.01, cx0 + 1.9, sgn * (HW - 0.12) + 0.01, 1.3, 1.33, rf)
