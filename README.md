@@ -28,6 +28,10 @@ Double-click `run.bat` (builds the C# and launches Godot 4.7 .NET).
 | C | chronicle · **T** technology · **B** empire borders |
 | Esc | menu · **F5** save · **F9** load (autosave every 5 minutes) · **F6** write the chronicle out as a history book |
 | F12 | screenshot (**Shift+F12** without the interface), saved to the user folder's `screenshots` |
+
+**Mods:** the rules are plain JSON (`data/war.json`, `data/techs.json`, `data/progression.json`). Copy one into the
+Godot user folder as `mods/data/<file>.json` (on Windows `%APPDATA%\Godot\app_userdata\Starforge\mods\data\`) and edit
+it: the game reads it in place of the built-in one.
 | V | hide the HUD (cinematic) · **L** labels · **M** music · **F11** fullscreen |
 
 ## The unseen voice

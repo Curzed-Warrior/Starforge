@@ -15,7 +15,7 @@ public static class WarData
     {
         get
         {
-            _doc ??= JsonDocument.Parse(FileAccess.GetFileAsString(Path));
+            _doc ??= JsonDocument.Parse(DataFiles.Read(Path));
             return _doc.RootElement;
         }
     }
