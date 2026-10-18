@@ -64,6 +64,15 @@ public static class InterfaceTests
             var all = WarModel.ReasonById(w2.Reason).Terms.Select(WarModel.TermById).ToList();
             SelfTest.Check(!sim2.ProposeTerms(w2, h2, all, out var why) && !string.IsNullOrEmpty(why) && w2.Open, "asking everything of a fresh enemy is refused");
             SelfTest.Check(!sim2.ProposeTerms(w2, h2, new(), out _), "nothing asked is no offer");
+            var (sim4, h4, o4, w4) = BorderWar();
+            Term T(string id) => WarModel.TermById(id);
+            var collapse = new Term("collapse", "Collapse", 0, true);
+            SelfTest.Check(!sim4.ProposeTerms(w4, h4, new() { collapse }, out _) && w4.Open, "no collapse asked of a fresh enemy at a stalemate");
+            w4.Score = 60; w4.ExhB = 70;
+            SelfTest.Check(!sim4.ProposeTerms(w4, h4, new() { T("reparations"), collapse }, out _) && w4.Open && o4.Overlord != h4, "collapse does not ride along with an accepted ask");
+            SelfTest.Check(!sim4.ProposeTerms(w4, h4, new() { T("vassal") }, out var why4) && w4.Open && !string.IsNullOrEmpty(why4), "terms outside the reason's list are refused");
+            foreach (var c in o4.Colonies) c.OccupiedBy = h4.Id;
+            SelfTest.Check(sim4.ProposeTerms(w4, h4, new() { collapse }, out _) && !w4.Open, "collapse is asked when it is the peace on offer");
             var (sim3, h3, o3, w3) = BorderWar();
             w3.Score = -60; w3.ExhA = 70;
             var (wins3, terms3) = sim3.TermsOnOffer(w3, h3);

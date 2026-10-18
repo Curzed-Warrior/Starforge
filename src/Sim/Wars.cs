@@ -392,6 +392,14 @@ public partial class Simulation
         int s = Side(w, by);
         var other = Lead(w, 1 - s);
         var (byWins, offer) = TermsOnOffer(w, by);
+        // only the reason's own terms; collapse only alone, and only when it is the peace on offer
+        var allowed = WarModel.ReasonById(w.Reason).Terms;
+        bool collapseOnOffer = offer.Count == 1 && offer[0].Id == "collapse";
+        if (terms.Any(t => t.Id == "collapse" ? !(collapseOnOffer && terms.Count == 1) : !allowed.Contains(t.Id)))
+        {
+            why = "Those terms are not on the table.";
+            return false;
+        }
         if (!byWins && offer.Count > 0 && offer.All(t => terms.Any(x => x.Id == t.Id)))
         {
             EndWarWith(w, s == 1, terms);
