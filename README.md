@@ -26,7 +26,8 @@ Double-click `run.bat` (builds the C# and launches Godot 4.7 .NET).
 | P / N / U | cosmic powers · raise a megastructure · the voice's greater acts |
 | J | board the Outpost and walk it in first person (WASD, mouse, Space jetpack, Shift run, Esc to leave) |
 | C | chronicle · **T** technology · **B** empire borders |
-| Esc | menu · **F5** save · **F9** load (autosave every 5 minutes) |
+| Esc | menu · **F5** save · **F9** load (autosave every 5 minutes) · **F6** write the chronicle out as a history book |
+| F12 | screenshot (**Shift+F12** without the interface), saved to the user folder's `screenshots` |
 | V | hide the HUD (cinematic) · **L** labels · **M** music · **F11** fullscreen |
 
 ## The unseen voice
