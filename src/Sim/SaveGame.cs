@@ -26,6 +26,8 @@ public static class SaveGame
         public float[] Culture; public bool? MandatoryService; public int Mobilisation; public double? MilShare, MilFrom, Efficiency;
         public double MilSince, Materiel, Manpower, WarStrain; public List<Slip> Yard; public List<Training> Barracks;
         public Dictionary<int, double> Truce; public int TributeTo = -1; public double TributeUntil;
+        // infighting (zero in older saves)
+        public double JuntaUntil;
     }
     public class SlotDto { public string Id, Pinned; public double P; public List<string> Hand, LastHand; }
     public class StarDto { public int Id, Seed; public float X, Y, Z, Lum, Temp; public bool Dead, Kindled; public string Name, Cls, Special; }
@@ -46,6 +48,9 @@ public static class SaveGame
         public string SplFaction; public double SplPop, SplAt, SplBack; public bool SplReturned, HasSplinter;
         public double? WorksOverride;
         public int OccupiedBy = -1; public double BlockadedUntil; public float DefenceLoss;
+        // infighting (zero in older saves); the home system's worlds by body name
+        public float Grievance; public int Unrest; public string Cause, CauseKey, Movement; public bool Autonomy; public double InvestedUntil;
+        public Dictionary<string, float> WorldGrievance; public Dictionary<string, int> WorldUnrest;
     }
     public class ShipDto { public int Civ, Origin, Target, FromStar; public double Depart, Arrive; public string Name; }
     public class LogDto { public double Year; public int Civ, Star; public string System, Text, Kind; }
@@ -89,6 +94,7 @@ public static class SaveGame
                 Culture = new[] { c.Culture.Martial, c.Culture.Duty, c.Culture.Resolve }, MandatoryService = c.MandatoryService, Mobilisation = c.Mobilisation,
                 MilShare = c.MilShare, MilFrom = c.MilFrom, MilSince = c.MilSince, Efficiency = c.Efficiency, Materiel = c.Materiel, Manpower = c.Manpower,
                 WarStrain = c.WarStrain, Yard = c.Yard, Barracks = c.Barracks, Truce = c.Truce, TributeTo = c.TributeTo, TributeUntil = c.TributeUntil,
+                JuntaUntil = c.JuntaUntil,
             }).ToList(),
             Fleets = sim.Fleets, Armies = sim.Armies, NextFleetId = sim.NextFleetId, NextArmyId = sim.NextArmyId, Wars = sim.Wars, NextWarId = sim.NextWarId,
             Colonies = sim.Colonies.Select(c => new ColonyDto
@@ -107,6 +113,9 @@ public static class SaveGame
                 CrisisId = c.Crisis?.Id, CrisisTarget = c.Crisis?.Target?.Name, CrisisT0 = c.Crisis?.T0 ?? 0, CrisisAcc = c.Crisis?.Acc ?? 0,
                 RivalName = c.Rival?.Name, RivalPlanet = c.Rival?.Planet?.Name, RivalStance = c.Rival?.Stance, RivalPop = c.Rival?.Pop ?? 0, RivalT0 = c.Rival?.T0 ?? 0, RivalShips = c.Rival?.Ships ?? 0,
                 WorksOverride = c.WorksOverride, OccupiedBy = c.OccupiedBy, BlockadedUntil = c.BlockadedUntil, DefenceLoss = c.DefenceLoss,
+                Grievance = c.Grievance, Unrest = c.Unrest, Cause = c.Cause, CauseKey = c.CauseKey, Movement = c.Movement, Autonomy = c.Autonomy, InvestedUntil = c.InvestedUntil,
+                WorldGrievance = c.WorldGrievance.Count == 0 ? null : c.WorldGrievance.ToDictionary(k => k.Key.Name, k => k.Value),
+                WorldUnrest = c.WorldUnrest.Count == 0 ? null : c.WorldUnrest.ToDictionary(k => k.Key.Name, k => k.Value),
                 HasSplinter = c.Splinter.HasValue, SplFaction = c.Splinter?.Faction, SplPop = c.Splinter?.Pop ?? 0, SplAt = c.Splinter?.At ?? 0, SplBack = c.Splinter?.Back ?? 0, SplReturned = c.Splinter?.Returned ?? false,
             }).ToList(),
             Ships = sim.Ships.Select(s => new ShipDto { Civ = s.Civ.Id, Origin = s.Origin.Id, Target = s.Target.Id, FromStar = s.From?.Star.Id ?? -1, Depart = s.Depart, Arrive = s.Arrive, Name = s.Name }).ToList(),
@@ -199,7 +208,7 @@ public static class SaveGame
             c.Mobilisation = cd.Mobilisation; c.MilShare = cd.MilShare ?? Simulation.Level(0).GetProperty("military").GetDouble();
             c.MilFrom = cd.MilFrom ?? c.MilShare; c.MilSince = cd.MilSince; c.Efficiency = cd.Efficiency ?? 1;
             if (cd.Truce != null) foreach (var kv in cd.Truce) c.Truce[kv.Key] = kv.Value;
-            c.TributeTo = cd.TributeTo; c.TributeUntil = cd.TributeUntil;
+            c.TributeTo = cd.TributeTo; c.TributeUntil = cd.TributeUntil; c.JuntaUntil = cd.JuntaUntil;
             c.Materiel = cd.Materiel; c.Manpower = cd.Manpower; c.WarStrain = cd.WarStrain;
             if (cd.Yard != null) c.Yard.AddRange(cd.Yard);
             if (cd.Barracks != null) c.Barracks.AddRange(cd.Barracks);
@@ -254,6 +263,9 @@ public static class SaveGame
             if (cd.CrisisId != null) c.Crisis = new Crisis { Id = cd.CrisisId, T0 = cd.CrisisT0, Acc = cd.CrisisAcc, Target = cd.CrisisTarget == null ? null : sys.Find(cd.CrisisTarget) };
             if (cd.RivalName != null) c.Rival = new Rival { Name = cd.RivalName, Pop = cd.RivalPop, Ships = cd.RivalShips, Planet = sys.Find(cd.RivalPlanet ?? ""), T0 = cd.RivalT0, Stance = cd.RivalStance };
             c.WorksOverride = cd.WorksOverride; c.OccupiedBy = cd.OccupiedBy; c.BlockadedUntil = cd.BlockadedUntil; c.DefenceLoss = cd.DefenceLoss;
+            c.Grievance = cd.Grievance; c.Unrest = cd.Unrest; c.Cause = cd.Cause; c.CauseKey = cd.CauseKey; c.Movement = cd.Movement; c.Autonomy = cd.Autonomy; c.InvestedUntil = cd.InvestedUntil;
+            foreach (var (n, v) in cd.WorldGrievance ?? new()) if (sys.Find(n) is { } b) c.WorldGrievance[b] = v;
+            foreach (var (n, v) in cd.WorldUnrest ?? new()) if (sys.Find(n) is { } b) c.WorldUnrest[b] = v;
             if (cd.HasSplinter) c.Splinter = (cd.SplFaction, cd.SplPop, cd.SplAt, cd.SplBack, cd.SplReturned);
             star.Capture = (float)c.Capture;
             sim.Colonies.Add(c);
@@ -270,6 +282,8 @@ public static class SaveGame
         if (d.Timeline != null) foreach (var t in d.Timeline) sim.Timeline.Add((t[0], t[1], t[2], (int)t[3]));
         foreach (var cd in d.Civs) if (cd.Overlord >= 0 && cd.Overlord < sim.Civs.Count) sim.Civs[cd.Id].Overlord = sim.Civs[cd.Overlord];
         foreach (var c in sim.Civs) sim.RefreshFed(c);
+        // a player who leads a splinter has no home system: their first system stands in for it
+        sim.HomeColony ??= sim.Humanity?.Colonies.FirstOrDefault(x => x.Home) ?? sim.Humanity?.Colonies.FirstOrDefault();
         sim.Focus = sim.HomeColony;
         if (d.Fleets != null) sim.Fleets.AddRange(d.Fleets);
         if (d.Wars != null) sim.Wars.AddRange(d.Wars);

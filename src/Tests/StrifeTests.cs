@@ -141,5 +141,36 @@ public static class StrifeTests
             }
             SelfTest.Check(h.Drive != d0 || sim.StrifeStats.GetValueOrDefault("revolutions") > 0, "a people pushed too far overturns its council");
         }),
+        ("switch_player_clean", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; sim.SetManual(h, Area.Research, true);
+            var s = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: true);
+            SelfTest.Check(sim.Alerts.Any(a => a.Cat == "Decision" && !a.Done && a.Key == "lead:" + s.Id), "the player is offered the splinter");
+            sim.Raise("Decision", "test", "test", h.Colonies[0], "k", new() { ("ok", () => { }) });
+            sim.SwitchPlayer(s);
+            SelfTest.Check(sim.Humanity == s && s.Main && !h.Main && s.Policy.IsManual(Area.Research), "the player leads the splinter, with their policies");
+            SelfTest.Check(sim.Alerts.All(a => a.Done), "the old civ's decisions are closed");
+            SelfTest.Check(sim.HomeColony.Civ == s && sim.Focus.Civ == s && !h.Policy.IsManual(Area.Research), "the view follows; the old civ is the council's");
+            sim.Warp(2);
+            SelfTest.Check(sim.Civs.Count(c => c.Main) == 1, "one player");
+        }),
+        ("strife_saved", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(150); var h = sim.Humanity; var home = h.Colonies.First(c => c.Home);
+            var b = home.Sys.Find("Mars"); home.WorldGrievance[b] = 42; home.WorldUnrest[b] = 2; h.JuntaUntil = 2300;
+            var c = h.Colonies.FirstOrDefault(x => !x.Home) ?? home; c.Grievance = 33; c.Unrest = 1; c.Movement = "m"; c.Autonomy = true; c.InvestedUntil = 2400; c.Cause = "why";
+            SaveGame.Save(sim, 20610, "user://selftest_strife.json");
+            var (s2, _) = SaveGame.Load("user://selftest_strife.json");
+            var h2 = s2.Humanity; var home2 = h2.Colonies.First(x => x.Home); var c2 = h2.Colonies.First(x => x.Star.Id == c.Star.Id);
+            SelfTest.Check(home2.WorldGrievance[home2.Sys.Find("Mars")] == 42 && home2.WorldUnrest[home2.Sys.Find("Mars")] == 2 && h2.JuntaUntil == 2300, "worlds and the junta round-trip");
+            SelfTest.Check(c2.Grievance == 33 && c2.Unrest == 1 && c2.Movement == "m" && c2.Autonomy && c2.InvestedUntil == 2400 && c2.Cause == "why", "a system's strife round-trips");
+        }),
+        ("switched_save_loads", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var s = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: true);
+            sim.SwitchPlayer(s);
+            SaveGame.Save(sim, 20610, "user://selftest_switch.json");
+            var (s2, _) = SaveGame.Load("user://selftest_switch.json");
+            SelfTest.Check(s2.Humanity.Id == s.Id && s2.HomeColony != null && s2.HomeColony.Civ == s2.Humanity, "a game led from a splinter loads");
+            s2.Warp(1);
+        }),
     };
 }

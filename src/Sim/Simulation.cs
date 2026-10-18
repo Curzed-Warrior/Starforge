@@ -507,7 +507,7 @@ public partial class Simulation
             Log(HomeColony, "Type III. Humanity now commands the light of a hundred billion suns. Seen from Andromeda, a whole quarter of the Milky Way has gone dark.", "era", null);
             Milestone(HomeColony, "Type III", $"Year {Year:0}. Humanity now commands the light of a hundred billion suns. Seen from Andromeda, a quarter of the Milky Way has gone dark.", "galaxy");
         }
-        if (!Humanity.Used.Contains("typeii") && HomeColony.Capture >= 0.9)
+        if (!Humanity.Used.Contains("typeii") && HomeColony.Home && HomeColony.Capture >= 0.9)
         {
             Humanity.Used.Add("typeii");
             Milestone(HomeColony, "Type II", $"Year {Year:0}. The Sun is wrapped. Every photon it makes now works for humanity before it is allowed to leave.", "star");

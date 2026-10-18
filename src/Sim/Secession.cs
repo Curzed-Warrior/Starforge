@@ -78,6 +78,34 @@ public partial class Simulation
                                   : $"{where} rise as {s.Name}. {Narrative2.Called(parent, true)} will not let them go.", "loss", null);
             DeclareWar(parent, s, "independence");
         }
+        if (parent.Main)
+        {
+            var old = parent;
+            Raise("Decision", $"Lead {s.Name}?", $"{where} have broken away from {Narrative2.Called(old)} as {s.Name}. You can stay with {Narrative2.Called(old)}, or lead the splinter instead.", bloc[0], "lead:" + s.Id,
+                new() { ($"Stay with {Narrative2.Called(old)}", () => { }), ($"Lead {s.Name}", () => { if (!s.Dead && !s.Main && s.Colonies.Count > 0) SwitchPlayer(s); }) });
+        }
         return s;
+    }
+
+    /// <summary>
+    /// The player takes over another civ (a splinter, usually). Their policy comes with them; the civ they leave is run
+    /// by its council from now on, and every proposal still waiting on the player is closed.
+    /// </summary>
+    public void SwitchPlayer(Civ to)
+    {
+        var from = Humanity;
+        if (to == null || to == from || to.Dead || to.Colonies.Count == 0) return;
+        var p = from.Policy;
+        to.Policy = new Policy
+        {
+            Manual = (bool[])p.Manual.Clone(), Weight = new(p.Weight), WorksShare = p.WorksShare, Mobilisation = p.Mobilisation, HullMix = p.HullMix,
+            PauseOn = new(p.PauseOn), Approved = new(to.Policy.Approved), Declined = new(to.Policy.Declined), AskAfter = new(to.Policy.AskAfter),
+        };
+        for (int i = 0; i < from.Policy.Manual.Length; i++) from.Policy.Manual[i] = false;      // the council runs the old civ now
+        foreach (var a in Alerts.Where(a => !a.Done)) { a.Done = true; a.Outcome = "Left behind"; }
+        from.Main = false; to.Main = true; Humanity = to;
+        HomeColony = CapitalOf(to);
+        Focus = HomeColony;
+        Log(HomeColony, $"You now lead {to.Name}.", "era", null);
     }
 }
