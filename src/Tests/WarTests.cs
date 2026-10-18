@@ -91,5 +91,22 @@ public static class WarTests
             sim.Warp(3);
             SelfTest.Check(f.Ships < 500, "a navy the economy cannot pay for is laid up");
         }),
+        ("armies_trained", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(20); var h = sim.Humanity;
+            SelfTest.Check(sim.ArmiesOf(h).Any(), "a peacetime garrison is raised");
+            SelfTest.Check(sim.ArmiesOf(h).All(a => !a.Rushed && Math.Abs(a.Quality - 1f) < 1e-4), "trained in peace, full quality");
+        }),
+        ("rushed_in_war", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity;
+            var foe = sim.Civs.First(c => c.Alien); h.AtWar.Add(foe.Id); foe.AtWar.Add(h.Id);
+            h.Materiel = 1e20; sim.Warp(3);
+            SelfTest.Check(sim.ArmiesOf(h).Any(a => a.Rushed && a.Quality < 1f), "wartime recruits are rushed and worse");
+        }),
+        ("dead_civ_skipped", () => {
+            var sim = SelfTest.NewSim(); var c = sim.Civs.First(x => x.Alien);
+            foreach (var col in c.Colonies.ToList()) sim.DestroyColony(col, "test");
+            sim.Warp(3);
+            SelfTest.Check(c.Dead && !sim.FleetsOf(c).Any() && !sim.ArmiesOf(c).Any(), "a dead civ keeps no forces and throws nothing");
+        }),
     };
 }

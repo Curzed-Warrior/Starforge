@@ -68,8 +68,15 @@ public partial class Simulation
         }
         return 1 - (1 - x) * (1 - 0.5 * c.Culture.Martial);
     }
-    public double WarGrowth(Civ c) => WarFactor(c, "growth");
-    public double WarResearch(Civ c) => WarFactor(c, "research");
+    /// <summary>Growth and research multipliers; read per colony every step, so cached until the share or culture moves.</summary>
+    public double WarGrowth(Civ c) { WarCache(c); return c.WarCacheG; }
+    public double WarResearch(Civ c) { WarCache(c); return c.WarCacheR; }
+    void WarCache(Civ c)
+    {
+        if (c.WarCacheKey == (c.MilShare, c.Culture.Martial)) return;
+        c.WarCacheKey = (c.MilShare, c.Culture.Martial);
+        c.WarCacheG = WarFactor(c, "growth"); c.WarCacheR = WarFactor(c, "research");
+    }
 
     // ---------- Materiel and shipyards ----------
     static int _battleship = -2;
@@ -140,6 +147,64 @@ public partial class Simulation
         if (c.Policy.IsManual(Area.Production) && c.Policy.HullMix >= 0) return Math.Min(c.Policy.HullMix, c.Hull);
         return c.Rnd(0f, 1f) < 0.6f ? c.Hull : Math.Max(0, c.Hull - 2);
     }
+}
+
+public partial class Simulation
+{
+    // ---------- Manpower and barracks ----------
+    /// <summary>
+    /// Yearly: work out who can still be called up, train armies towards the garrison the council wants (more as
+    /// mobilisation rises), and pay their upkeep. Recruits trained at war are rushed: ready sooner, worse in the field.
+    /// </summary>
+    void BarracksStep(Civ c, double dy)
+    {
+        double per = WarData.D("armies", "troopsPerArmy"), kg = WarData.D("armies", "kgPerArmy");
+        var armies = ArmiesOf(c).ToList();
+
+        // finished training joins the army
+        for (int i = c.Barracks.Count - 1; i >= 0; i--)
+        {
+            var t = c.Barracks[i];
+            t.Left -= dy;
+            if (t.Left > 1e-9) continue;
+            c.Barracks.RemoveAt(i);
+            var a = new Army { Id = NextArmyId++, Civ = c.Id, At = t.At, Troops = t.Troops, Rushed = t.Rushed, Xp = 0,
+                Quality = (float)WarData.D("armies", t.Rushed ? "rushedQuality" : "trainedQuality") };
+            Armies.Add(a); armies.Add(a);
+        }
+
+        // upkeep, or disband the newest
+        double upk = WarData.D("armies", "upkeepPerYear") * kg * dy;
+        foreach (var a in armies.OrderByDescending(a => a.Id).ToList())
+        {
+            if (c.Materiel >= upk * armies.Count) break;
+            Armies.Remove(a); armies.Remove(a);
+        }
+        c.Materiel = Math.Max(0, c.Materiel - upk * armies.Count);
+
+        double pop = c.Pop;
+        double underArms = armies.Sum(a => a.Troops) + c.Barracks.Sum(t => t.Troops);
+        c.Manpower = Math.Max(0, pop * LevelD(c.Mobilisation, "manpower") * (c.MandatoryService ? WarData.D("economy", "mandatoryManpower") : 1)
+                                 * (1 + 0.3 * c.Culture.Duty) - underArms);
+
+        double want = WarData.D("armies", "garrisonPerBillion") * pop * (c.Mobilisation >= 2 ? 4 : c.Mobilisation == 1 ? 2 : 1);
+        var at = c.Colonies.OrderByDescending(col => col.Pop).FirstOrDefault();
+        if (at == null) return;
+        bool war = c.AtWar.Count > 0;
+        while (armies.Count + c.Barracks.Count < want && c.Manpower >= per && c.Materiel >= kg)
+        {
+            c.Manpower -= per; c.Materiel -= kg;
+            c.Barracks.Add(new Training { Troops = per, Left = WarData.D("armies", war ? "rushedYears" : "trainYears"), Rushed = war, At = at.Star.Id });
+        }
+    }
+}
+
+/// <summary>Recruits in the barracks: how many, how long until they are an army, and whether they are being rushed.</summary>
+public class Training
+{
+    public double Troops, Left;
+    public bool Rushed;
+    public int At;
 }
 
 /// <summary>A hull on a building slip: how far along it is, and how much materiel has gone into it.</summary>
