@@ -17,7 +17,8 @@ public partial class Simulation
     /// </summary>
     void RevoltStep(Civ civ, double dy)
     {
-        var revolting = civ.Colonies.Where(c => !c.Home && c.Unrest >= 4).OrderByDescending(c => c.Grievance).ToList();
+        var cap = CapitalOf(civ);
+        var revolting = civ.Colonies.Where(c => c != cap && !c.Home && c.OccupiedBy < 0 && c.Unrest >= 4).OrderByDescending(c => c.Grievance).ToList();
         if (revolting.Count == 0 || _r.NextDouble() >= SD("revolt", "chancePerYear") * dy) return;
         var first = revolting[0];
         float range = (float)(F("supplyRangeGu") * civ.M.Range);
@@ -40,7 +41,9 @@ public partial class Simulation
     /// </summary>
     public Civ Separate(Civ parent, List<Colony> bloc, string drive, bool peaceful, string name = null, bool civilWar = false)
     {
-        bloc = bloc.Where(c => c.Civ == parent && !c.Home).Distinct().ToList();
+        // never the capital (a splinter's is its first system), and never a system an enemy occupies
+        var capital = CapitalOf(parent);
+        bloc = bloc.Where(c => c.Civ == parent && c != capital && !c.Home && c.OccupiedBy < 0).Distinct().ToList();
         if (bloc.Count >= parent.Colonies.Count) bloc = bloc.Take(parent.Colonies.Count - 1).ToList();
         if (bloc.Count == 0) return null;
         double share = Math.Min(0.5, bloc.Sum(c => c.Pop) / Math.Max(parent.Pop, 1e-9));

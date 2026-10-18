@@ -235,22 +235,25 @@ public partial class Simulation
     /// </summary>
     void IndependencePeace(War w, bool both)
     {
+        var (aWins, terms) = IndependenceTerms(w, w.Score, w.ExhA, w.ExhB, both);
+        if (terms.Count > 0) Offer(w, aWins, terms);
+    }
+
+    /// <summary>The terms a war of independence would end on at this score and exhaustion (none: fight on).</summary>
+    public (bool AWins, List<Term> Terms) IndependenceTerms(War w, double score, double exhA, double exhB, bool both)
+    {
         var union = Civs[w.A[0]]; var rebels = Civs[w.B[0]];
-        if (w.Score > 0)
+        if (score > 0)
         {
-            double give = WarModel.Concede(rebels, w.Reason, -w.Score, w.ExhB);
+            double give = WarModel.Concede(rebels, w.Reason, -score, exhB);
             bool holds = Colonies.Any(c => c.Civ == rebels && c.OccupiedBy >= 0 && w.A.Contains(c.OccupiedBy));
             string t = give >= WarModel.TermById("reunion").Price ? "reunion"
                      : holds && give >= WarModel.TermById("partition").Price ? "partition"
-                     : give >= WarModel.TermById("autonomy").Price ? "autonomy" : null;
-            if (t != null) Offer(w, true, new() { WarModel.TermById(t) });
-            else if (both) Offer(w, true, new() { WarModel.TermById("ceasefire") });
+                     : give >= WarModel.TermById("autonomy").Price ? "autonomy" : both ? "ceasefire" : null;
+            return (true, t == null ? new() : new() { WarModel.TermById(t) });
         }
-        else
-        {
-            double give = WarModel.Concede(union, w.Reason, w.Score, w.ExhA);
-            if (give >= WarModel.TermById("independence").Price || w.ExhA >= F("bothExhausted")) Offer(w, false, new() { WarModel.TermById("independence") });
-        }
+        double g = WarModel.Concede(union, w.Reason, score, exhA);
+        return (false, g >= WarModel.TermById("independence").Price || exhA >= F("bothExhausted") ? new() { WarModel.TermById("independence") } : new());
     }
 
     /// <summary>Make one civ the other's subject, unless that would close a loop: a subject that beats its overlord is simply free.</summary>

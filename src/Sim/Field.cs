@@ -64,6 +64,7 @@ public partial class Simulation
         c.Civ = to;
         c.Star.Owner = to.Id;
         from.LastLoss = Year;
+        if (c == HomeColony && from.Colonies.Count > 0) HomeColony = CapitalOf(from);     // the player's seat moves to what they still hold
         if (from.Colonies.Count == 0) Extinct(from);
     }
 

@@ -228,7 +228,7 @@ public partial class Simulation
     {
         var home = civ.Colonies.FirstOrDefault();
         if (home == null) return;
-        if (civ.OvermindUntil > Year) return;
+        if (civ.OvermindUntil > Year || civ.Junta(Year)) return;      // a junta rules by decree
         if (civ.M.Hive)
         {
             if (!civ.Used.Contains("hive")) { civ.Used.Add("hive"); Log(home, "Election day passes without an election. There is only agreement now.", "omen", null); }
@@ -563,6 +563,9 @@ public partial class Simulation
         civ.Dead = true;
         DisbandForces(civ);
         foreach (var o in Civs) { o.AtWar.Remove(civ.Id); }
+        // a player whose polity is gone goes on leading the largest human polity left
+        if (civ.Main && Civs.Where(c => c.Human && !c.Dead && c.Colonies.Count > 0).OrderByDescending(c => c.Colonies.Count).FirstOrDefault() is { } heir)
+            SwitchPlayer(heir);
         Log(Humanity.Colonies.FirstOrDefault(), $"{Narrative2.Called(civ, true)} {(civ.Main ? "are" : "are")} gone. The chronicle keeps their name.", "loss", null);
     }
 

@@ -69,11 +69,25 @@ public static class StrifeTests
             SelfTest.Check(w != null && w.Reason == "independence" && w.A[0] == h.Id, "the union fights to keep them");
         }),
         ("capital_never_leaves", () => {
-            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
-            foreach (var c in h.Colonies) { c.Grievance = 99; c.Unrest = 4; }
-            sim.Warp(3);
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; int humans0 = sim.Civs.Count(c => c.Human);
+            for (int i = 0; i < 30; i++)
+            {
+                h.M.Hive = false;
+                foreach (var c in h.Colonies) { c.Grievance = 99; c.Unrest = 4; }
+                sim.Warp(1);
+            }
+            SelfTest.Check(sim.Civs.Count(c => c.Human) > humans0, "systems in revolt did rise");
             SelfTest.Check(h.Colonies.Any(c => c.Home) && !h.Dead, "the capital stays with the union");
             SelfTest.Check(sim.Civs.All(c => c.Colonies.Count(x => x.Home) <= 1), "never two capitals");
+        }),
+        ("splinter_capital_stays", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var s = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(4).ToList(), h.Drive, peaceful: true);
+            var cap = s.Colonies[0];
+            sim.SwitchPlayer(s);
+            var t = sim.Separate(s, s.Colonies.ToList(), s.Drive, peaceful: true);
+            SelfTest.Check(cap.Civ == s && t != null && !t.Colonies.Contains(cap), "a splinter's capital never leaves it either");
+            SelfTest.Check(sim.HomeColony.Civ == sim.Humanity, "the player's home system is their own");
         }),
         ("civil_war_terms", () => {
             var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
@@ -124,11 +138,25 @@ public static class StrifeTests
             SelfTest.Check(h.JuntaUntil > sim.Year && h.Leader.Name == name, "a victorious, ambitious admiral takes the council");
         }),
         ("no_double_junta", () => {
-            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; h.JuntaUntil = sim.Year + 10; string lead = h.Leader.Name;
-            var o = sim.Civs.First(c => c.Alien); var w = sim.DeclareWar(h, o); w.ExhA = 80;
-            foreach (var f in sim.FleetsOf(h)) { f.Admiral.Wins = 9; f.Admiral.Loyalty = 0; }
-            sim.Warp(3);
-            SelfTest.Check(h.Leader.Name == lead, "a junta is not overthrown by its own admirals");
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; h.JuntaUntil = sim.Year + 60; string lead = h.Leader.Name;
+            var o = sim.Civs.First(c => c.Alien); var w = sim.DeclareWar(h, o);
+            for (int i = 0; i < 40; i++)
+            {
+                w.ExhA = 80;
+                foreach (var f in sim.FleetsOf(h)) { f.Admiral.Wins = 9; f.Admiral.Loyalty = 0; }
+                sim.Warp(1);
+                if (!w.Open) break;
+            }
+            SelfTest.Check(h.Leader.Name == lead || h.Leader.Since < 2064, "a junta is not overthrown by its own admirals");
+            SelfTest.Check(sim.StrifeStats.GetValueOrDefault("coups") == 0, "no coup inside a junta");
+        }),
+        ("junta_holds_no_election", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; h.JuntaUntil = sim.Year + 30;
+            string lead = h.Leader.Name, d0 = h.Drive, other = Defs.Drives.Keys.First(k => k != d0);
+            foreach (var k in h.Inf.Keys.ToList()) h.Inf[k] = k == other ? 0.9f : 0.05f;
+            h.NextElection = sim.Year;
+            sim.Warp(2);
+            SelfTest.Check(h.Drive == d0 && h.Leader.Name == lead, "a junta rules by decree: no elections");
         }),
         ("revolution", () => {
             var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; string d0 = h.Drive;
@@ -236,6 +264,30 @@ public static class StrifeTests
             double got = sim.FleetsOf(s).Sum(f => f.Ships);
             SelfTest.Check(ships0 > 0 && got > 0 && Math.Abs(got + sim.FleetsOf(h).Sum(f => f.Ships) - ships0) < 1e-6 * ships0, "the crews from the bloc's worlds take their ships with them");
             SelfTest.Check(sim.FleetsOf(s).All(f => f.At == bloc[0].Star.Id && f.Admiral != null), "and gather at the rising's first system under their own admiral");
+        }),
+        ("player_rehomed_on_extinction", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var s = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: false);
+            sim.SwitchPlayer(s);
+            sim.EndWarWith(sim.WarBetween(h, s), true, new() { WarModel.TermById("reunion") });
+            SelfTest.Check(s.Dead && sim.Humanity == h && h.Main && !s.Main && sim.HomeColony.Civ == h, "a player whose polity is gone leads the human polity that remains");
+        }),
+        ("occupied_never_rises", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien && !c.Dead);
+            var cs = h.Colonies.Where(c => !c.Home).Take(2).ToList(); cs[0].OccupiedBy = o.Id;
+            var s = sim.Separate(h, cs, h.Drive, peaceful: true);
+            SelfTest.Check(cs[0].Civ == h && cs[0].OccupiedBy == o.Id && cs[1].Civ == s, "a system under occupation cannot rise; the occupier keeps it");
+        }),
+        ("independence_terms_side_aware", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var s = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: false);
+            var w = sim.WarBetween(h, s);
+            string T((bool aWins, List<Term> t) r) => (r.aWins ? "A:" : "B:") + string.Join("+", r.t.Select(x => x.Id));
+            SelfTest.Check(T(sim.IndependenceTerms(w, 90, 0, 100, false)) == "A:reunion", "a crushed rebellion returns to the union");
+            SelfTest.Check(T(sim.IndependenceTerms(w, 30, 0, 50, false)) == "A:autonomy", "a beaten rebellion gets autonomy");
+            sim.Colonies.First(c => c.Civ == s).OccupiedBy = h.Id;
+            SelfTest.Check(T(sim.IndependenceTerms(w, 40, 0, 40, false)) == "A:partition", "holding rebel systems, the union partitions");
+            SelfTest.Check(T(sim.IndependenceTerms(w, -40, 100, 0, false)) == "B:independence", "the rebels winning are free");
         }),
     };
 }
