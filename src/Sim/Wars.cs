@@ -17,7 +17,7 @@ public class War
     public double Start;
     public float Score, ExhA, ExhB;
     public int Battles, WonA, WonB;
-    public double LostKgA, LostKgB, NavyKgA0, NavyKgB0;
+    public double LostKgA, LostKgB, NavyKgA0, NavyKgB0, YearKgA, YearKgB, LastLog = -1e9;
     public bool Ceasefire;
     public string Ending;
     public bool Open => Ending == null;

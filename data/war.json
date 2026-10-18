@@ -94,7 +94,7 @@
     "logBattleShare": 0.1
   },
   "battle": {
-    "rounds": 6, "roundCap": 0.3, "moraleLossPerLossShare": 1.5, "moraleBreak": 0.3,
+    "rounds": 6, "roundKill": 0.1, "roundCap": 0.3, "moraleLossPerLossShare": 1.5, "moraleBreak": 0.3,
     "counters": { "kinetic": "armor", "energy": "shield", "missile": "pd", "craft": "pd" },
     "secondWeapon": 0.33, "unarmed": 0.55, "exoticPass": 0.5, "xpPerBattle": 0.1,
     "traits": {

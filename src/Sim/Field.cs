@@ -84,11 +84,58 @@ public partial class Simulation
             if (home) f.Morale = (float)Math.Min(1, f.Morale + regen * dy);
         }
 
+        FieldBattles();
+
         if (Year >= _nextOrders)
         {
             _nextOrders = Year + F("orderEvery");
             foreach (var civ in Civs) if (!civ.Dead && civ.Colonies.Count > 0) CouncilOrders(civ);
         }
+    }
+
+    /// <summary>Wherever fleets of two sides at war share a star, they fight (one battle per star per step).</summary>
+    void FieldBattles()
+    {
+        foreach (var g in Fleets.Where(f => !f.Moving && f.Ships > 0).GroupBy(f => f.At).ToList())
+        {
+            var ids = g.Select(f => f.Civ).Distinct().ToList();
+            if (ids.Count < 2) continue;
+            int x = -1, y = -1;
+            for (int i = 0; i < ids.Count && x < 0; i++)
+                for (int j = i + 1; j < ids.Count; j++)
+                    if (Civs[ids[i]].AtWar.Contains(ids[j])) { x = ids[i]; y = ids[j]; break; }
+            if (x < 0) continue;
+            var cx = Civs[x]; var cy = Civs[y];
+            var w = WarBetween(cx, cy);
+            if (w == null) continue;
+            if (w.B.Contains(x)) (cx, cy) = (cy, cx);                 // cx on side A
+            var sa = new BattleSide { Civ = cx, Fleets = g.Where(f => f.Civ == cx.Id).ToList() };
+            var sb = new BattleSide { Civ = cy, Fleets = g.Where(f => f.Civ == cy.Id).ToList() };
+            Fight(w, g.Key, sa, sb);
+        }
+    }
+
+    /// <summary>Resolve a battle at a star and book it to its war: score, losses, the chronicle and the cinematic hook.</summary>
+    BattleResult Fight(War w, int star, BattleSide sa, BattleSide sb)
+    {
+        double navyA = NavyStrength(sa.Civ), navyB = NavyStrength(sb.Civ);
+        var r = Battles.Resolve(this, sa, sb);
+        w.Battles++;
+        if (r.AWins) w.WonA++; else w.WonB++;
+        w.LostKgA += r.KgLostA; w.LostKgB += r.KgLostB; w.YearKgA += r.KgLostA; w.YearKgB += r.KgLostB;
+        var here = ColonyAt(star);
+        var target = here ?? sb.Civ.Colonies.OrderBy(c => c.Star.Pos.DistanceSquaredTo(Gal.Stars[star].Pos)).FirstOrDefault();
+        var source = sa.Civ.Colonies.OrderBy(c => c.Star.Pos.DistanceSquaredTo(Gal.Stars[star].Pos)).FirstOrDefault();
+        if (source != null && target != null) BattleFought?.Invoke(source, target, sa.Civ);
+        var (win, lose) = r.AWins ? (sa.Civ, sb.Civ) : (sb.Civ, sa.Civ);
+        double lostKg = r.AWins ? r.KgLostB : r.KgLostA, navy = r.AWins ? navyB : navyA;
+        if ((win.Main || lose.Main) && Year - w.LastLog >= 1 && lostKg >= F("logBattleShare") * Math.Max(navy, 1))
+        {
+            w.LastLog = Year;
+            double hulls = r.AWins ? r.LostB : r.LostA;
+            Log(target ?? HomeColony, $"Battle at {Gal.Stars[star].Name}: {Narrative2.Called(win, true)} beat {Narrative2.Called(lose)}, who lose {hulls:#,0} ships.", win.Main ? "era" : "loss", null);
+        }
+        return r;
     }
 
     static double TraitD(string trait, string key, double dflt) =>
