@@ -153,5 +153,16 @@ public static class SpecOpsTests
             sim.SwitchPlayer(s);
             SelfTest.Check(t.Civ == h.Id && !sim.TeamsOf(s).Any() && sim.Alerts.Where(a => a.Key?.StartsWith("intel:") == true).All(a => a.Done), "teams stay with the old civ");
         }),
+        ("specops_saved", () => {
+            var (sim, h, o, t) = Ready(); var c = o.Colonies.First(x => !x.Home);
+            sim.Dispatch(t, c, "incite"); t.Xp = 0.3f; h.Academy.Add(new Training { Troops = 1, Left = 2, Rushed = true, At = h.Colonies[0].Star.Id });
+            c.PreparedBy = h.Id; c.PreparedUntil = 2500; c.YardDownUntil = 2490; c.DepositsDownUntil = 2480; c.IncitedUntil = 2470;
+            SaveGame.Save(sim, 20610, "user://selftest_specops.json");
+            var (s2, _) = SaveGame.Load("user://selftest_specops.json");
+            var t2 = s2.Teams.First(x => x.Id == t.Id); var c2 = s2.Civs[o.Id].Colonies.First(x => x.Star.Id == c.Star.Id);
+            SelfTest.Check(t2.Mission == "incite" && t2.Target == c.Star.Id && t2.Xp == 0.3f && t2.To == t.To && s2.Humanity.Academy.Count == h.Academy.Count
+                && s2.NextTeamId == sim.NextTeamId, "teams and the academy round-trip");
+            SelfTest.Check(c2.PreparedBy == h.Id && c2.PreparedUntil == 2500 && c2.YardDownUntil == 2490 && c2.DepositsDownUntil == 2480 && c2.IncitedUntil == 2470, "their work round-trips");
+        }),
     };
 }

@@ -122,6 +122,13 @@ public partial class EmpireScreen : PanelContainer
         int Count(int s) => civ.Colonies.Count(c => c.Unrest == s);
         string unrest = $"\nUnrest: {Count(1)} systems discontent · {Count(2)} on strike · {Count(3)} in insurgency · {Count(4)} in revolt"
                         + (civ.Junta(Sim.Year) ? $" · junta until {civ.JuntaUntil:0}" : "");
+        var teams = Sim.TeamsOf(civ).ToList();
+        string specops = Sim.TeamCap(civ) == 0 && teams.Count == 0 && civ.Academy.Count == 0 ? ""
+            : $"\nSpecial forces: {teams.Count} teams ({teams.Count(t => !t.Rushed)} fully trained, {teams.Count(t => t.Rushed)} rushed) · {civ.Academy.Count} in training · "
+              + $"{teams.Count(t => t.Mission != "guard")} on missions · counter-intelligence {Sim.CounterIntel(civ):0.0}";
+        string legend = $"\n[color=#{dim}]Placeholder cubes: [color=#{Ui.Hex(WarData.Colour("factory"))}]factories[/color] · [color=#{Ui.Hex(WarData.Colour("shipyard"))}]shipyards[/color] · "
+            + $"[color=#{Ui.Hex(WarData.Colour("barracks"))}]barracks[/color] · [color=#{Ui.Hex(WarData.Colour("transport"))}]armies[/color] · "
+            + $"[color=#{Ui.Hex(WarData.Colour("specops"))}]special forces[/color] · [color=#{Ui.Hex(WarData.Colour("hull"))}]hulls[/color][/color]";
         string auto = string.Join("  ·  ", Enum.GetValues<Area>().Select(a => civ.Policy.IsManual(a) ? $"[color=#{Ui.Hex(Ui.Warm)}]{a}: you[/color]" : $"{a}: council"));
         _overview.Text = $"[font_size=26][color=#{Ui.Hex(civ.Color)}][b]{civ.Name.ToUpper()}[/b][/color][/font_size]\n" +
             $"[color=#{Ui.Hex(Ui.Warm)}]{gov.Name}[/color] · {civ.Faction(civ.Drive)} {(gov == Government.Assembly ? "hold the council" : "ascendant")} · {civ.Drive} · {civ.Ethic}\n" +
@@ -132,7 +139,7 @@ public partial class EmpireScreen : PanelContainer
             $"Who decides: {auto}\n" +
             $"War culture: {Cultures.Describe(civ.Culture)}\n" +
             $"{Simulation.Level(civ.Mobilisation).GetProperty("name").GetString()} · {civ.MilShare * 100:0}% of industry to the war (efficiency {civ.Efficiency * 100:0}%) · " +
-            $"materiel {Hud.Sci(civ.Materiel)} kg · navy {Sim.FleetsOf(civ).Sum(f => f.Ships):0} hulls in {Sim.FleetsOf(civ).Count()} fleets · {Sim.ArmiesOf(civ).Count()} armies" + unrest + belief + wars + met;
+            $"materiel {Hud.Sci(civ.Materiel)} kg · navy {Sim.FleetsOf(civ).Sum(f => f.Ships):0} hulls in {Sim.FleetsOf(civ).Count()} fleets · {Sim.ArmiesOf(civ).Count()} armies" + specops + unrest + legend + belief + wars + met;
         var keys = Defs.Drives.Keys.ToArray();
         _legend.Text = string.Join(" · ", keys.Select(k => $"{civ.Faction(k)} {civ.Inf.GetValueOrDefault(k) * 100:0}%"));
         for (int i = 0; i < 3; i++) _factionBars[i].CustomMinimumSize = new Vector2(Math.Max(2, civ.Inf.GetValueOrDefault(keys[i]) * 890f), 6);

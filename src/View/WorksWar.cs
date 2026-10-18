@@ -39,7 +39,7 @@ void fragment() { ALBEDO = mix(COLOR.rgb, v_empire, v_face); EMISSION = ALBEDO *
         var empire = civ.Color;
         int k = 0;
         // each kind gets its own stretch of the ring, so a glance tells them apart
-        Transform3D Put(int slot, int of, float lane, float km, Color col, float spin = 0)
+        Transform3D Put(int slot, int of, float lane, float km, Color col, float spin = 0, Color? tint = null)
         {
             if (k >= WarPropMax) return default;
             float a = lane + slot * (0.9f / Math.Max(of, 6)) + _clock * 0.002f;
@@ -50,7 +50,8 @@ void fragment() { ALBEDO = mix(COLOR.rgb, v_empire, v_face); EMISSION = ALBEDO *
             var t = new Transform3D(new Basis(Vector3.Up, spin).Scaled(Vector3.One * size * sq), at);
             mm.SetInstanceTransform(k, t);
             mm.SetInstanceColor(k, col);
-            mm.SetInstanceCustomData(k, new Color(empire.R, empire.G, empire.B, 1));
+            var e = tint ?? empire;
+            mm.SetInstanceCustomData(k, new Color(e.R, e.G, e.B, 1));
             k++;
             return t;
         }
@@ -79,6 +80,12 @@ void fragment() { ALBEDO = mix(COLOR.rgb, v_empire, v_face); EMISSION = ALBEDO *
         var sqs = sim.Fleets.Where(f => f.At == here).SelectMany(f => f.Squadrons).Take(24).ToList();
         for (int i = 0; i < sqs.Count; i++)
             Put(i, sqs.Count, 3.4f, Ships.Size(sqs[i].Hull) * 4f / StarSystem.Km, WarData.Colour("hull"), 0.4f);
+
+        // special forces, purple: courses at the capital, and the player's own teams wherever they are (others' are secret)
+        int courses = c.Home ? civ.Academy.Count : 0;
+        var me = sim.Humanity;
+        var teams = sim.Teams.Where(t => t.Civ == me.Id && t.To < 0 && t.At == here).ToList();
+        for (int i = 0; i < courses + teams.Count; i++) Put(i, courses + teams.Count, 5.6f, 1.5f, WarData.Colour("specops"), 0, i < courses ? null : me.Color);
 
         var armies = sim.Armies.Where(a => a.At == here).ToList();
         for (int i = 0; i < armies.Count; i++) Put(i, armies.Count, 4.6f, 1.5f, WarData.Colour("transport"));
