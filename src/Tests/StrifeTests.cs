@@ -114,5 +114,32 @@ public static class StrifeTests
             home.Hubs.Remove(moon); home.Hubs.Remove(titan); home.ElevatorP = home.RingP = -1; sim.Humanity.Faith = 0; sim.Humanity.M.Hive = false;
             SelfTest.Check(sim.WorldTarget(home, titan) > sim.WorldTarget(home, moon), "Titan feels further from Earth than the Moon");
         }),
+        ("admiral_coup", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien);
+            var w = sim.DeclareWar(h, o); w.ExhA = 80;
+            var f = sim.FleetsOf(h).First(); f.Admiral.Wins = 5; f.Admiral.Loyalty = 0.2f; f.Admiral.Trait = "Ambitious";
+            string name = f.Admiral.Name;
+            for (int i = 0; i < 60 && h.JuntaUntil <= sim.Year; i++) { w.ExhA = 80; sim.Warp(1); }
+            SelfTest.Check(h.JuntaUntil > sim.Year && h.Leader.Name == name, "a victorious, ambitious admiral takes the council");
+        }),
+        ("no_double_junta", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; h.JuntaUntil = sim.Year + 10; string lead = h.Leader.Name;
+            var o = sim.Civs.First(c => c.Alien); var w = sim.DeclareWar(h, o); w.ExhA = 80;
+            foreach (var f in sim.FleetsOf(h)) { f.Admiral.Wins = 9; f.Admiral.Loyalty = 0; }
+            sim.Warp(3);
+            SelfTest.Check(h.Leader.Name == lead, "a junta is not overthrown by its own admirals");
+        }),
+        ("revolution", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; string d0 = h.Drive;
+            foreach (var c in h.Colonies.Where(c => !c.Home)) { c.Grievance = 70; c.Unrest = 3; c.Movement = "x"; }
+            // kept in insurgency every year, so only a revolution can end it (the yearly pull alone would calm them)
+            for (int i = 0; i < 40 && h.Drive == d0 && sim.StrifeStats.GetValueOrDefault("revolutions") == 0; i++)
+            {
+                h.M.Hive = false;
+                foreach (var c in h.Colonies.Where(c => !c.Home)) { c.Grievance = 70; c.Unrest = 3; c.Movement ??= "x"; }
+                sim.Warp(1);
+            }
+            SelfTest.Check(h.Drive != d0 || sim.StrifeStats.GetValueOrDefault("revolutions") > 0, "a people pushed too far overturns its council");
+        }),
     };
 }

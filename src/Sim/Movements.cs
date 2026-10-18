@@ -68,7 +68,7 @@ public partial class Simulation
     public Answer CouncilAnswer(Colony c)
     {
         var civ = c.Civ;
-        if (civ.Ethic == "Ruthless") return Answer.Crackdown;
+        if (civ.Ethic == "Ruthless" || civ.Junta(Year)) return Answer.Crackdown;
         if (civ.Ethic == "Reverent") return CanInvest(civ) ? Answer.Invest : Answer.SelfRule;
         return c.CauseKey switch
         {

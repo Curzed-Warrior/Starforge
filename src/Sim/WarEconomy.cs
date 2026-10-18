@@ -32,6 +32,7 @@ public partial class Simulation
             if (c.Emergency || home != null && c.Colonies.Any(x => x.OccupiedBy >= 0 && x.Star.Pos.DistanceSquaredTo(home.Star.Pos) <= near * near)) lvl = 3;
         }
         else lvl = c.Relations.Any(r => r.Value < -40 && r.Key < Civs.Count && !Civs[r.Key].Dead) ? 1 : 0;
+        if (c.Junta(Year)) lvl = Math.Min(3, lvl + 1);           // a junta puts the economy on a war footing
         return Math.Min(lvl, Comfort(c) + 1);
     }
 

@@ -59,7 +59,7 @@ public partial class Simulation
         var g = Government.Of(civ);
         double f = g == Government.Synthetic ? SD("gov", "Synthetic Commonwealth")
             : (g == Government.Directorate ? SD("gov", "Directorate") : 1) * (1 - civ.Digital * (1 - SD("gov", "digital")));
-        return f;
+        return civ.Junta(Year) ? f * SD("gov", "junta") : f;
     }
 
     /// <summary>The worst exhaustion of any open war this civ is in (0..100).</summary>
@@ -135,6 +135,10 @@ public partial class Simulation
             foreach (var c in civ.Colonies) { c.Grievance = 0; c.Unrest = 0; c.Movement = null; }
             return;
         }
+        // the council's fate is judged on the year as it began: who was in arms, how tired the people were
+        JuntaStep(civ);
+        Coup(civ, dy);
+        Revolution(civ, dy);
         double mean = MeanIndustry(civ), exh = WarExhaustionOf(civ), pull = Math.Min(1, SD("pull") * dy);
         foreach (var c in civ.Colonies.ToList())
         {
