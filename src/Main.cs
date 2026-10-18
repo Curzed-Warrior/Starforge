@@ -734,11 +734,15 @@ public partial class Main : Node3D
                 case Key.C: _hud.ToggleChronicle(); break;
                 case Key.E when !_rig.Free: _hud.ToggleEmpire(EmpireScreen.TabOverview); break;
                 case Key.I: _hud.ToggleEmpire(EmpireScreen.TabInbox); break;
-                // Paradox-style: F1-F4 open the empire screen's tabs, Ctrl+F or / finds a system
+                // Paradox-style: F1-F4, F6-F8 and F10 open the empire screen's tabs, Ctrl+F or / finds a system
                 case Key.F1: _hud.ToggleEmpire(EmpireScreen.TabOverview); break;
                 case Key.F2: _hud.ToggleEmpire(EmpireScreen.TabPolicies); break;
                 case Key.F3: _hud.ToggleEmpire(EmpireScreen.TabSystems); break;
                 case Key.F4: _hud.ToggleEmpire(EmpireScreen.TabInbox); break;
+                case Key.F6: _hud.ToggleEmpire(EmpireScreen.TabWars); break;
+                case Key.F7: _hud.ToggleEmpire(EmpireScreen.TabMilitary); break;
+                case Key.F8: _hud.ToggleEmpire(EmpireScreen.TabEconomy); break;
+                case Key.F10: _hud.ToggleEmpire(EmpireScreen.TabInterior); break;
                 case Key.Slash: _hud.ToggleFind(); break;
                 case Key.F when k.CtrlPressed: _hud.ToggleFind(); break;
                 case Key.T: _hud.ToggleTech(); break;
@@ -959,8 +963,8 @@ public partial class Main : Node3D
         if (_frame == 5 && OS.GetCmdlineUserArgs().Contains("--visitor")) { Sim.HomeColony.VisitorT = Sim.Year - 5; Sim.HomeColony.VisitorStage = 1; }
         if (_frame == 30 && OS.GetCmdlineUserArgs().Contains("--visitor")) OnLabelClicked("visitor");
         if (_frame == 10 && OS.GetCmdlineUserArgs().Contains("--open=chron")) _hud.ToggleChronicle();
-        // tests: --open=empire|policies|systems|inbox opens the empire screen; --manual=all|Research,Colonisation,... takes areas into the player's hands
-        if (_frame == 10 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--open=")) is string op && Array.IndexOf(new[] { "empire", "policies", "systems", "inbox" }, op[7..]) is int tab and >= 0)
+        // tests: --open=empire|policies|systems|inbox|wars|military|economy|interior opens the empire screen; --manual=all|Research,Colonisation,... takes areas into the player's hands
+        if (_frame == 10 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--open=")) is string op && Array.IndexOf(new[] { "empire", "policies", "systems", "inbox", "wars", "military", "economy", "interior" }, op[7..]) is int tab and >= 0)
             _hud.ToggleEmpire(tab);
         if (_frame == 2 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--manual=")) is string mn)
             foreach (var ar in Enum.GetValues<Area>()) if (mn[9..] == "all" || mn[9..].Split(',').Contains(ar.ToString())) Sim.SetManual(Sim.Humanity, ar, true);

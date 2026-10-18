@@ -207,6 +207,7 @@ public partial class Hud : CanvasLayer
     public bool EmpireOpen => _empire.Visible;
     public void ToggleEmpire(int tab) { _empire.Toggle(tab); if (_empire.Visible) { _chron.Visible = false; } }
     public void CloseEmpire() => _empire.Visible = false;
+    public void ShowWar(int warId) { _empire.ShowWar(warId); _chron.Visible = false; }
 
     /// <summary>An alert arrives: pause if the player asked to be stopped for this kind of news.</summary>
     void OnAlert(Alert a)
