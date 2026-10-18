@@ -151,7 +151,7 @@ public partial class Colony
     }
 
     /// <summary>This system's own works budget, before any of it is shipped to other systems' works.</summary>
-    public double LocalWorks => IndustryKg * WorksShare;
+    public double LocalWorks => IndustryKg * (1 - Civ.MilShare) * WorksShare;
 
     /// <summary>How many great works can be under way at once: the administration (and the minds) to run them.</summary>
     public int BuildSlots => 1 + Math.Max(Era, 0) / 2 + Gov.Slots + (int)Math.Floor(Math.Log10(1 + Pop / 5)) + (M.Admin > 1.2f ? 1 : 0)

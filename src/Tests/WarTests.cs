@@ -51,5 +51,25 @@ public static class WarTests
             SelfTest.Check(f.Squadrons.Count == 2 && Math.Abs(f.Squadrons[0].Xp - 0.3f) < 1e-4 && f.Ships == 21, "same hull merges, xp averages");
             SelfTest.Check(Forces.Level(0.9f) == "Elite" && Forces.Level(0.1f) == "Green", "levels");
         }),
+        ("mobilisation_retools", () => {
+            var sim = SelfTest.NewSim(); var h = sim.Humanity;
+            sim.SetManual(h, Area.Production, true); h.Policy.Mobilisation = 2;          // war economy, 0.45
+            sim.Warp(1.5);
+            SelfTest.Check(h.MilShare > 0.15 && h.MilShare < 0.35, $"halfway after 1.5 of 3 years ({h.MilShare:0.00})");
+            SelfTest.Check(h.Efficiency < 0.8, "new lines start inefficient");
+            sim.Warp(6);
+            SelfTest.Check(Math.Abs(h.MilShare - 0.45) < 0.02 && h.Efficiency > 0.9, $"settled and efficient ({h.MilShare:0.00}, {h.Efficiency:0.00})");
+            SelfTest.Check(sim.WarGrowth(h) < 1 && sim.WarResearch(h) < 1, "the war costs growth and research");
+        }),
+        ("manual_override_strains", () => {
+            var sim = SelfTest.NewSim(); var h = sim.Humanity; h.Culture.Martial = -0.8f;   // pacifist: comfort level 1
+            sim.SetManual(h, Area.Production, true); h.Policy.Mobilisation = 3; sim.Warp(1);
+            SelfTest.Check(h.WarStrain > 5.0 * (1 + 0.4), "total war on a pacifist people costs more than the base strain");
+            SelfTest.Check(h.Mobilisation == 3, "the player's choice is not refused");
+        }),
+        ("council_mobilises_at_peace", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2);
+            SelfTest.Check(sim.CouncilMobilisation(sim.Humanity) == 0 && sim.Humanity.MilShare < 0.05, "peacetime by default");
+        }),
     };
 }

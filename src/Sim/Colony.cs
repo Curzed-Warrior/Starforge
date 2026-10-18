@@ -126,7 +126,7 @@ public partial class Colony
         return M.HubCost * (l == 0 ? 0.4 * PFrac * Math.Pow(1.6, Math.Max(0, HubCount - 1)) : 0.6 * PFrac * Math.Pow(1.8, l));
     }
     public double FoundryCost => 0.5 * PFrac * Math.Pow(1.7, Foundries - 1);
-    public double RpRate => (0.8 + 1.5 * Math.Log10(1 + Power / P0)) * M.Rp * (1 + 0.15 * Math.Log10(Math.Max(1, Pop / 0.04))) * (Home ? 1.0 : 0.5 / (1 + Civ.Colonies.Count / 25.0)) * MegaResearch;
+    public double RpRate => (0.8 + 1.5 * Math.Log10(1 + Power / P0)) * M.Rp * (1 + 0.15 * Math.Log10(Math.Max(1, Pop / 0.04))) * (Home ? 1.0 : 0.5 / (1 + Civ.Colonies.Count / 25.0)) * MegaResearch * Sim.WarResearch(Civ);
 
     /// <summary>Advance by dy years in sub-steps (finer when watched).</summary>
     double _buildAcc;
@@ -163,6 +163,7 @@ public partial class Colony
             if (M.StarLift) Stock += Tempo * 0.3 * P * M.Mine * LiftShare * Boost * dy;
             double build = Math.Min(Stock, Tempo * 0.08 * P * Foundries * M.Foundry * Boost * dy);
             if (Civ.Emergency) build *= 0.1;          // the swarm waits: everything goes to the defences
+            build *= 1 - Civ.MilShare;                 // the war industry's share
             if (M.Swarm)
             {
                 // a swarm is raised collector by collector: however rich the system, it adds at most a few
@@ -195,7 +196,7 @@ public partial class Colony
         }
         double habs = 40 * Math.Pow(Capture, 0.7) * (M.Habitat ? 1.5 : 0.3);
         PopCap = (0.05 + homes + habs + MegaHousing) * M.PopCap;
-        Pop = Math.Clamp(Pop + Pop * 0.03 * M.Growth * (1 - Pop / Math.Max(PopCap, 0.01)) * Math.Min(dyTotal, 5), 0.001, 1e6);
+        Pop = Math.Clamp(Pop + Pop * 0.03 * M.Growth * Sim.WarGrowth(Civ) * (1 - Pop / Math.Max(PopCap, 0.01)) * Math.Min(dyTotal, 5), 0.001, 1e6);
         PeakPop = Math.Max(PeakPop, Pop);
         if (ElevatorP >= 0 && ElevatorP < 1) { ElevatorP = Math.Min(1, ElevatorP + (float)(dyTotal / 22)); if (ElevatorP >= 1) Sim.Log(this, Narrative.ElevatorDone(this), "era", Seat); }
         if (RingP >= 0 && RingP < 1) { RingP = Math.Min(1, RingP + (float)(dyTotal / 45)); if (RingP >= 1) Sim.Log(this, Narrative.RingDone(this), "era", Seat); }

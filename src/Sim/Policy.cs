@@ -5,7 +5,7 @@ using System.Linq;
 namespace Starforge.Sim;
 
 /// <summary>The areas of government a player can hand to the council or take into their own hands.</summary>
-public enum Area { Economy, Research, Construction, Colonisation, Military, Diplomacy }
+public enum Area { Economy, Research, Construction, Colonisation, Military, Diplomacy, Production }
 
 /// <summary>
 /// How a civilisation is run. Every area is either left to the council (automatic, leaning on these priorities) or held
@@ -27,6 +27,9 @@ public class Policy
     /// <summary>Economy in manual: the share of industry spent on great works (otherwise the government decides).</summary>
     public float WorksShare = 0.25f;
 
+    /// <summary>Production in manual: the mobilisation level the player has chosen (0 peace .. 3 total war).</summary>
+    public int Mobilisation;
+
     /// <summary>Construction in manual: great works the player has approved, and ones turned down (never proposed again).</summary>
     public HashSet<string> Approved = new(), Declined = new();
 
@@ -47,6 +50,7 @@ public class Policy
         Area.Colonisation => "Where seed ships go. Manual: each launch waits for your approval.",
         Area.Military => "When to go to war. Manual: the council asks before declaring war.",
         Area.Diplomacy => "When to make peace. Manual: peace offers come to you.",
+        Area.Production => "How much of the economy goes to war. Manual: you set the mobilisation level and mandatory service.",
         _ => ""
     };
 }

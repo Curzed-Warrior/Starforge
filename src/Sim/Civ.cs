@@ -96,6 +96,12 @@ public class Civ
     public Culture Culture;
     /// <summary>Every citizen serves: more manpower, felt as a burden by a people of low Duty.</summary>
     public bool MandatoryService;
+    /// <summary>War economy (WarEconomy.cs): the mobilisation level in force (0..3), the share of industry turned to war,
+    /// how well the war lines run, stocks of materiel and trained manpower, and the strain of it on the people.</summary>
+    public int Mobilisation;
+    public double MilShare = 0.04, Efficiency = 1, Materiel, Manpower, WarStrain;
+    /// <summary>Where the military share stood when the level last changed, and when.</summary>
+    public double MilFrom = 0.04, MilSince;
     /// <summary>How many believe the unseen voice is real (0..1), and how many fear it.</summary>
     public float Faith, Dread;
     public int FaithStage;     // how hungrily this polity spreads: old empires are slow, young ones restless
