@@ -111,5 +111,39 @@ public static class FieldTests
             var col = o.Colonies.First(); var armies = new List<Army> { new() { Civ = h.Id, Troops = 1e-9, Quality = 0.6f } };
             SelfTest.Check(!sim.Land(col, h, armies) && col.OccupiedBy < 0, "a token force is thrown back");
         }),
+        ("terms_cede_claims", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien && c.Colonies.Count > 2);
+            var w = sim.DeclareWar(h, o, "border_claim"); var claim = o.Colonies.First(c => w.Claims.Contains(c.Star.Id));
+            sim.EndWarWith(w, true, new() { WarModel.TermById("cede_claims") });
+            SelfTest.Check(claim.Civ == h && w.Ending == "surrender" && !h.AtWar.Contains(o.Id), "the claims change hands");
+        }),
+        ("ceasefire_keeps_occupation", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien && c.Colonies.Count > 1);
+            var w = sim.DeclareWar(h, o); var col = o.Colonies.Last(); col.OccupiedBy = h.Id;
+            sim.EndWarWith(w, true, new() { WarModel.TermById("ceasefire") });
+            SelfTest.Check(w.Ending == "ceasefire" && col.OccupiedBy == h.Id && col.Civ == o, "the front freezes where it is");
+        }),
+        ("exhaustion_ends_wars", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien);
+            var w = sim.DeclareWar(h, o, "border_claim"); w.ExhA = 95; w.ExhB = 95; w.Score = 0; w.Start -= 5;
+            sim.Warp(3);
+            SelfTest.Check(w.Ending != null, $"two exhausted sides stop ({w.Ending})");
+        }),
+        ("manual_peace_asks", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien);
+            sim.SetManual(h, Area.Diplomacy, true);
+            var w = sim.DeclareWar(o, h, "border_claim"); w.Start -= 5;
+            foreach (var c in h.Colonies) c.OccupiedBy = o.Id;
+            w.ExhB = 99; w.ExhA = 10;
+            sim.Warp(3);
+            SelfTest.Check(w.Ending == null && sim.Alerts.Any(a => a.Cat == "Decision" && !a.Done && a.Title.Contains("terms")), "the player is asked");
+        }),
+        ("war_side_dies", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien && c.Colonies.Count > 1);
+            var w = sim.DeclareWar(h, o); o.Colonies.Last().OccupiedBy = h.Id;
+            foreach (var c in o.Colonies.Where(c => c.OccupiedBy < 0).ToList()) sim.DestroyColony(c, "test");
+            sim.Warp(1);
+            SelfTest.Check(w.Ending != null && !sim.FleetsOf(o).Any() && sim.Colonies.All(c => c.OccupiedBy < 0 || !sim.Civs[c.OccupiedBy].Dead), "a dead side's war ends cleanly");
+        }),
     };
 }

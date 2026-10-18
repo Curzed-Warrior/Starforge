@@ -17,7 +17,7 @@ public class War
     public double Start;
     public float Score, ExhA, ExhB;
     public int Battles, WonA, WonB;
-    public double LostKgA, LostKgB, NavyKgA0, NavyKgB0, YearKgA, YearKgB, LastLog = -1e9;
+    public double LostKgA, LostKgB, NavyKgA0, NavyKgB0, YearKgA, YearKgB, LastLog = -1e9, LastYear = -1e9;
     public bool Ceasefire;
     public string Ending;
     public bool Open => Ending == null;
@@ -119,7 +119,14 @@ public partial class Simulation
         foreach (var w in Wars.Where(w => w.Open).ToList())
         {
             var a = Civs[w.A[0]]; var b = Civs[w.B[0]];
-            if (a.Dead || b.Dead || !a.AtWar.Contains(b.Id)) Close(w, "status quo");
+            if (a.Dead || b.Dead)
+            {
+                // a side is gone: the survivors keep what they hold of it, and nobody occupies for the dead
+                var dead = a.Dead ? a : b;
+                foreach (var c in Colonies) if (c.OccupiedBy == dead.Id) c.OccupiedBy = -1;
+                Close(w, "collapse");
+            }
+            else if (!a.AtWar.Contains(b.Id)) Close(w, "status quo");
         }
         foreach (var c in Civs)
         {
@@ -149,12 +156,130 @@ public partial class Simulation
             }
     }
 
+    /// <summary>
+    /// Yearly per war: the score (systems held, claims, battles), each side's exhaustion (time, losses, occupation,
+    /// eased by resolve), and whether it can end. A side with nothing left unoccupied collapses; otherwise the loser
+    /// concedes what its stakes, score and weariness allow, and the terms are bought with that.
+    /// </summary>
+    void WarYear()
+    {
+        foreach (var w in Wars.Where(w => w.Open && Year >= w.Start + 1 && Year >= w.LastYear + 1).ToList())
+        {
+            w.LastYear = Year;
+            var a = Civs[w.A[0]]; var b = Civs[w.B[0]];
+            int occB = 0, occA = 0, claims = 0, ownA = 0, ownB = 0, lostA = 0, lostB = 0;
+            foreach (var c in Colonies)
+            {
+                bool inA = w.A.Contains(c.Civ.Id), inB = w.B.Contains(c.Civ.Id);
+                if (!inA && !inB) continue;
+                if (inA) ownA++; else ownB++;
+                if (c.OccupiedBy < 0) continue;
+                if (inB && w.A.Contains(c.OccupiedBy)) { occB++; lostB++; if (w.Claims.Contains(c.Star.Id)) claims++; }
+                if (inA && w.B.Contains(c.OccupiedBy)) { occA++; lostA++; }
+            }
+            w.Score = (float)Math.Clamp(F("scorePerOccupied") * (occB - occA) + F("scorePerClaimHeld") * claims + F("scorePerBattle") * (w.WonA - w.WonB), -100, 100);
+            float Exh(Civ lead, double yearKg, double navy0, int lost, int own) => (float)(
+                F("exhaustionPerYear") * (1 - 0.5 * lead.Culture.Resolve) * (1 + 0.2 * lead.WarStrain)
+                + F("exhaustionPerLossShare") * yearKg / Math.Max(navy0, 1)
+                + F("exhaustionPerOccupiedShare") * lost / Math.Max(own, 1));
+            w.ExhA = Math.Clamp(w.ExhA + Exh(a, w.YearKgA, w.NavyKgA0, lostA, ownA), 0, 100);
+            w.ExhB = Math.Clamp(w.ExhB + Exh(b, w.YearKgB, w.NavyKgB0, lostB, ownB), 0, 100);
+            w.YearKgA = w.YearKgB = 0;
+            PeaceCheck(w, a, b);
+        }
+    }
+
+    void PeaceCheck(War w, Civ a, Civ b)
+    {
+        var collapse = new List<Term> { new("collapse", "Collapse", 0, true) };
+        bool Gone(Civ c) => c.Colonies.All(x => x.OccupiedBy >= 0);
+        if (Gone(b)) { Offer(w, true, collapse); return; }
+        if (Gone(a)) { Offer(w, false, collapse); return; }
+        if (Year - w.Start < F("minWarYears")) return;
+        double be = F("bothExhausted");
+        bool both = w.ExhA >= be && w.ExhB >= be;
+        if (w.Score > 0)
+        {
+            double give = WarModel.Concede(b, w.Reason, -w.Score, w.ExhB);
+            var terms = WarModel.ChooseTerms(w.Reason, give, both);
+            if (terms.Count > 0) Offer(w, true, terms);
+        }
+        else
+        {
+            double give = WarModel.Concede(a, w.Reason, w.Score, w.ExhA);
+            if (double.IsPositiveInfinity(give)) Offer(w, false, collapse);
+            else if (give >= WarModel.TermById("reparations").Price) Offer(w, false, new() { WarModel.TermById("reparations") });
+            else if (w.ExhA >= be) Offer(w, false, new() { WarModel.TermById("status_quo") });
+        }
+    }
+
+    /// <summary>What the terms do to the loser (and give the winner). Unless the front is frozen by a ceasefire, every
+    /// system still occupied is handed back, and the occupying armies go home.</summary>
+    void ApplyTerms(War w, Civ winner, Civ loser, List<Term> terms)
+    {
+        var side = w.A.Contains(winner.Id) ? w.A : w.B;
+        var held = Colonies.Where(c => c.Civ == loser && c.OccupiedBy >= 0 && side.Contains(c.OccupiedBy)).ToList();
+        foreach (var t in terms)
+            switch (t.Id)
+            {
+                case "cede_claims": foreach (var c in loser.Colonies.Where(c => w.Claims.Contains(c.Star.Id)).ToList()) TransferColony(c, winner); break;
+                case "cede_occupied": case "partition": case "collapse":
+                    foreach (var c in held) if (c.Civ == loser) TransferColony(c, Civs[c.OccupiedBy]);
+                    if (t.Id == "collapse" && !loser.Dead) loser.Overlord = winner;
+                    break;
+                case "reunion": foreach (var c in loser.Colonies.ToList()) TransferColony(c, winner); break;
+                case "reparations": { double amt = loser.Materiel * F("reparationsShare"); loser.Materiel -= amt; winner.Materiel += amt; break; }
+                case "tribute": loser.TributeTo = winner.Id; loser.TributeUntil = Year + F("tributeYears"); break;
+                case "humiliation":
+                    loser.Relations[winner.Id] = loser.Relations.GetValueOrDefault(winner.Id) - 20; winner.Relations[loser.Id] = winner.Relations.GetValueOrDefault(loser.Id) - 20; break;
+                case "vassal": case "autonomy": loser.Overlord = winner; break;
+                case "release": foreach (var c in Civs) if (c.Overlord == loser) c.Overlord = null; break;
+                case "regime": loser.SetDrive(winner.Drive, loser.Ethic); loser.Leader = loser.NewLeader(winner.Drive, Year); break;
+                case "ceasefire": w.Ceasefire = true; break;
+            }
+        if (!w.Ceasefire) ReturnOccupied(w);
+        if (!winner.Dead) Cultures.Event(winner, "victory");
+        if (!loser.Dead) Cultures.Event(loser, "defeat");
+        foreach (var (lead, exh) in new[] { (Civs[w.A[0]], w.ExhA), (Civs[w.B[0]], w.ExhB) })
+            if (exh >= 100 && !lead.Dead) Cultures.Event(lead, "exhausted");
+    }
+
+    /// <summary>Hand back what either side still occupies of the other's, and send the occupying armies home.</summary>
+    void ReturnOccupied(War w)
+    {
+        foreach (var c in Colonies)
+        {
+            if (c.OccupiedBy < 0 || !(w.A.Contains(c.Civ.Id) && w.B.Contains(c.OccupiedBy) || w.B.Contains(c.Civ.Id) && w.A.Contains(c.OccupiedBy))) continue;
+            var occ = Civs[c.OccupiedBy];
+            var home = occ.Colonies.FirstOrDefault(x => x.Home) ?? occ.Colonies.FirstOrDefault();
+            foreach (var a in Armies) if (a.Civ == occ.Id && a.Fleet < 0 && a.At == c.Star.Id && home != null) a.At = home.Star.Id;
+            c.OccupiedBy = -1;
+        }
+    }
+
+    /// <summary>Put terms to the loser: applied at once, or (when the player holds Diplomacy and loses) asked as a decision.</summary>
+    void Offer(War w, bool aWins, List<Term> terms)
+    {
+        var loser = Civs[aWins ? w.B[0] : w.A[0]]; var winner = Civs[aWins ? w.A[0] : w.B[0]];
+        if (loser.Main && loser.Policy.IsManual(Area.Diplomacy) && loser.Colonies.Count > 0)
+        {
+            string key = "terms:" + w.Id;
+            if (Waiting(key) || Year < loser.Policy.AskAfter.GetValueOrDefault(key)) return;
+            string names = string.Join(", ", terms.Select(t => t.Name.ToLower()));
+            Raise("Decision", $"Accept the terms of {Narrative2.Called(winner)}?", $"{Narrative2.Called(winner, true)} will make peace for: {names}.", loser.Colonies[0], key,
+                new() { ("Accept", () => { if (w.Open) EndWarWith(w, aWins, terms); }), ("Fight on", () => loser.Policy.AskAfter[key] = Year + 5) });
+            return;
+        }
+        EndWarWith(w, aWins, terms);
+    }
+
     /// <summary>End a war on these terms (aWins: side A is the winner).</summary>
     public void EndWarWith(War w, bool aWins, List<Term> terms)
     {
         if (w == null || !w.Open) return;
         Close(w, terms.Count == 0 ? "status quo" : WarModel.Ending(terms, w.Reason));
         var a = Civs[w.A[0]]; var b = Civs[w.B[0]];
+        ApplyTerms(w, aWins ? a : b, aWins ? b : a, terms);
         var col = (a.Main ? a : b.Main ? b : a).Colonies.FirstOrDefault() ?? HomeColony;
         Log(col, $"Peace between {Narrative2.Called(a)} and {Narrative2.Called(b)}: {w.Ending}.", "era", null);
         if (a.Main || b.Main) Raise("Contact", $"Peace with {Narrative2.Called(a.Main ? b : a)}", $"The war between {Narrative2.Called(a)} and {Narrative2.Called(b)} is over: {w.Ending}.", col);

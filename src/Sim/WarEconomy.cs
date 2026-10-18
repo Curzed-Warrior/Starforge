@@ -105,7 +105,15 @@ public partial class Simulation
     {
         // stage 2: skip colonies under occupation
         // occupied and blockaded systems make nothing for their owner; a besieged station is repaired once the enemy leaves
-        c.Materiel += c.Colonies.Where(Free).Sum(col => col.IndustryKg) * c.MilShare * c.Efficiency * dy;
+        double made = c.Colonies.Where(Free).Sum(col => col.IndustryKg) * c.MilShare * c.Efficiency * dy;
+        // tribute to a victor, for as long as the peace says
+        if (c.TributeTo >= 0 && Year < c.TributeUntil && c.TributeTo < Civs.Count && !Civs[c.TributeTo].Dead)
+        {
+            double paid = made * WarData.D("field", "tributeShare");
+            made -= paid; Civs[c.TributeTo].Materiel += paid;
+        }
+        else c.TributeTo = -1;
+        c.Materiel += made;
         foreach (var col in c.Colonies)
             if (col.DefenceLoss > 0 && col.OccupiedBy < 0 && !Fleets.Any(f => !f.Moving && f.At == col.Star.Id && c.AtWar.Contains(f.Civ)))
                 col.DefenceLoss = (float)Math.Max(0, col.DefenceLoss - WarData.D("field", "defenceRegenPerYear") * dy);

@@ -86,6 +86,7 @@ public partial class Simulation
 
         FieldBattles();
         FieldSieges();
+        WarYear();
 
         if (Year >= _nextOrders)
         {
