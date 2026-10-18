@@ -152,5 +152,15 @@ public static class FieldTests
             SelfTest.Check(sim.Wars.Sum(w => w.Battles) >= sim.Wars.Count, $"battles in the wars ({sim.Wars.Sum(w => w.Battles)} in {sim.Wars.Count})");
             SelfTest.Check(ended.All(w => w.Ending != "none"), "every ended war has an ending");
         }),
+        ("field_state_saved", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien);
+            var w = sim.DeclareWar(h, o); var f = sim.FleetsOf(h).First(); sim.Order(f, o.Colonies[0].Star.Id, "attack");
+            o.Colonies.Last().OccupiedBy = h.Id; o.Colonies.Last().DefenceLoss = 0.5f; h.Truce[5] = 2500;
+            SaveGame.Save(sim, 20610, "user://selftest_field.json");
+            var (s2, _) = SaveGame.Load("user://selftest_field.json");
+            var f2 = s2.FleetsOf(s2.Humanity).First(x => x.Id == f.Id);
+            SelfTest.Check(s2.Wars.Count == sim.Wars.Count && s2.WarBetween(s2.Humanity, s2.Civs[o.Id]).Reason == w.Reason, "wars round-trip");
+            SelfTest.Check(f2.To == f.To && f2.Arrive == f.Arrive && s2.Civs[o.Id].Colonies.Last().OccupiedBy == h.Id && s2.Civs[o.Id].Colonies.Last().DefenceLoss == 0.5f && s2.Humanity.Truce[5] == 2500, "movement, occupation and truces round-trip");
+        }),
     };
 }
