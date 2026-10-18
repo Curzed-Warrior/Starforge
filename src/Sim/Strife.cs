@@ -137,11 +137,12 @@ public partial class Simulation
 
     /// <summary>
     /// Yearly per civ: every system's grievance moves toward its target, the ladder is climbed or descended, and a
-    /// system on strike stops shipping its industry (Colony.LocalWorksShipped). A hive feels nothing.
+    /// system on strike stops shipping its industry (Colony.LocalWorksShipped). A hive feels its people's grievances
+    /// at strife.gov.hive of the strength (at 0 it feels nothing, and nothing climbs the ladder).
     /// </summary>
     void StrifeStep(Civ civ, double dy)
     {
-        if (civ.M.Hive)
+        if (civ.M.Hive && SD("gov", "hive") <= 0)
         {
             foreach (var c in civ.Colonies) { c.Grievance = 0; c.Unrest = 0; c.Movement = null; }
             return;
