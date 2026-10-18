@@ -152,6 +152,7 @@ public partial class Simulation
                 c.Movement = null;
             }
         }
+        RevoltStep(civ, dy);
     }
 
 }

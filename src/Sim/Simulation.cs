@@ -244,7 +244,7 @@ public partial class Simulation
             var frontier = civ.Colonies.Where(c => !c.Home).OrderByDescending(c => c.Star.Pos.DistanceTo(home.Star.Pos)).Take(Math.Max(0, (int)(civ.Colonies.Count / (3 * civ.M.Admin)))).ToList();
             if (frontier.Count >= 2)
             {
-                var split = Splinter(civ, leaving, frontier);
+                var split = Separate(civ, frontier, leaving, peaceful: civ.Ethic != "Ruthless");
                 Log(home, $"Schism. {frontier.Count} colonies of the {civ.Faction(leaving)} declare themselves {split.Name}, and close their borders.", "loss", null);
                 if (civ.Main) Raise("Unrest", "Schism", $"{frontier.Count} colonies of the {civ.Faction(leaving)} break away as {split.Name}.", home);
                 return;

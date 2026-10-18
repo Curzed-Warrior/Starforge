@@ -54,5 +54,50 @@ public static class StrifeTests
             double before = sim.GrievanceTarget(c, out _); sim.Respond(c, Simulation.Answer.SelfRule);
             SelfTest.Check(sim.GrievanceTarget(c, out _) < before - 15 && c.LocalWorksShipped() == 0, "self-rule calms and keeps its industry home");
         }),
+        ("peaceful_separation", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.SetDrive(h.Drive, "Reverent");
+            var bloc = h.Colonies.Where(c => !c.Home).Take(2).ToList();
+            var s = sim.Separate(h, bloc, h.Drive, peaceful: true);
+            SelfTest.Check(!h.AtWar.Contains(s.Id) && bloc.All(c => c.Civ == s) && h.Truce[s.Id] > sim.Year, "let go in peace");
+        }),
+        ("secession_war", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var bloc = h.Colonies.Where(c => !c.Home).Take(3).ToList();
+            var s = sim.Separate(h, bloc, h.Drive, peaceful: false);
+            var w = sim.WarBetween(h, s);
+            SelfTest.Check(w != null && w.Reason == "independence" && w.A[0] == h.Id, "the union fights to keep them");
+        }),
+        ("capital_never_leaves", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            foreach (var c in h.Colonies) { c.Grievance = 99; c.Unrest = 4; }
+            sim.Warp(3);
+            SelfTest.Check(h.Colonies.Any(c => c.Home) && !h.Dead, "the capital stays with the union");
+            SelfTest.Check(sim.Civs.All(c => c.Colonies.Count(x => x.Home) <= 1), "never two capitals");
+        }),
+        ("civil_war_terms", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var s = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: false);
+            var w = sim.WarBetween(h, s);
+            sim.EndWarWith(w, true, new() { WarModel.TermById("autonomy") });
+            SelfTest.Check(s.Overlord == h && h.Overlord != s, "the union wins: autonomy within it");
+            var s2 = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: false);
+            var w2 = sim.WarBetween(h, s2);
+            sim.EndWarWith(w2, false, new() { WarModel.TermById("independence") });
+            SelfTest.Check(s2.Overlord == null && !s2.Dead && w2.Ending != null, "the rebels win: free");
+        }),
+        ("fleets_defect", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var bloc = h.Colonies.Where(c => !c.Home).Take(2).ToList(); var f = sim.FleetsOf(h).First();
+            f.At = bloc[0].Star.Id; f.To = -1; f.Admiral.Loyalty = 0.3f;
+            var s = sim.Separate(h, bloc, h.Drive, peaceful: false);
+            SelfTest.Check(f.Civ == s.Id, "a disloyal admiral takes the fleet over");
+        }),
+        ("no_overlord_cycle", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var s = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: false);
+            h.Overlord = s;
+            sim.EndWarWith(sim.WarBetween(h, s), true, new() { WarModel.TermById("autonomy") });
+            SelfTest.Check(!(s.Overlord == h && h.Overlord == s), "never each other's subject");
+        }),
     };
 }

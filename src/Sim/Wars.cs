@@ -211,6 +211,7 @@ public partial class Simulation
             Offer(w, w.Score >= 0, new() { WarModel.TermById(truce ? "ceasefire" : "status_quo") });
             return;
         }
+        if (w.Reason == "independence") { IndependencePeace(w, both); return; }
         if (w.Score > 0)
         {
             double give = WarModel.Concede(b, w.Reason, -w.Score, w.ExhB);
@@ -227,6 +228,38 @@ public partial class Simulation
         }
     }
 
+    /// <summary>
+    /// A war of independence is side-aware (side A the union, side B the rebels). The union winning offers the rebels
+    /// reunion if they give enough, partition when it holds some of their systems, autonomy otherwise; the rebels
+    /// winning simply end the war and stay free.
+    /// </summary>
+    void IndependencePeace(War w, bool both)
+    {
+        var union = Civs[w.A[0]]; var rebels = Civs[w.B[0]];
+        if (w.Score > 0)
+        {
+            double give = WarModel.Concede(rebels, w.Reason, -w.Score, w.ExhB);
+            bool holds = Colonies.Any(c => c.Civ == rebels && c.OccupiedBy >= 0 && w.A.Contains(c.OccupiedBy));
+            string t = give >= WarModel.TermById("reunion").Price ? "reunion"
+                     : holds && give >= WarModel.TermById("partition").Price ? "partition"
+                     : give >= WarModel.TermById("autonomy").Price ? "autonomy" : null;
+            if (t != null) Offer(w, true, new() { WarModel.TermById(t) });
+            else if (both) Offer(w, true, new() { WarModel.TermById("ceasefire") });
+        }
+        else
+        {
+            double give = WarModel.Concede(union, w.Reason, w.Score, w.ExhA);
+            if (give >= WarModel.TermById("independence").Price || w.ExhA >= F("bothExhausted")) Offer(w, false, new() { WarModel.TermById("independence") });
+        }
+    }
+
+    /// <summary>Make one civ the other's subject, unless that would close a loop: a subject that beats its overlord is simply free.</summary>
+    static void Subject(Civ loser, Civ winner)
+    {
+        if (winner.Overlord == loser) winner.Overlord = null;
+        else loser.Overlord = winner;
+    }
+
     /// <summary>What the terms do to the loser (and give the winner). Unless the front is frozen by a ceasefire, every
     /// system still occupied is handed back, and the occupying armies go home.</summary>
     void ApplyTerms(War w, Civ winner, Civ loser, List<Term> terms)
@@ -239,14 +272,14 @@ public partial class Simulation
                 case "cede_claims": foreach (var c in loser.Colonies.Where(c => w.Claims.Contains(c.Star.Id)).ToList()) TransferColony(c, winner); break;
                 case "cede_occupied": case "partition": case "collapse":
                     foreach (var c in held) if (c.Civ == loser && c.OccupiedBy >= 0 && !Civs[c.OccupiedBy].Dead) TransferColony(c, Civs[c.OccupiedBy]);
-                    if (t.Id == "collapse" && !loser.Dead) loser.Overlord = winner;
+                    if (t.Id == "collapse" && !loser.Dead) Subject(loser, winner);
                     break;
                 case "reunion": foreach (var c in loser.Colonies.ToList()) TransferColony(c, winner); break;
                 case "reparations": { double amt = loser.Materiel * F("reparationsShare"); loser.Materiel -= amt; winner.Materiel += amt; break; }
                 case "tribute": loser.TributeTo = winner.Id; loser.TributeUntil = Year + F("tributeYears"); break;
                 case "humiliation":
                     loser.Relations[winner.Id] = loser.Relations.GetValueOrDefault(winner.Id) - 20; winner.Relations[loser.Id] = winner.Relations.GetValueOrDefault(loser.Id) - 20; break;
-                case "vassal": case "autonomy": loser.Overlord = winner; break;
+                case "vassal": case "autonomy": Subject(loser, winner); break;
                 case "release": foreach (var c in Civs) if (c.Overlord == loser) c.Overlord = null; break;
                 case "regime": loser.SetDrive(winner.Drive, loser.Ethic); loser.Leader = loser.NewLeader(winner.Drive, Year); break;
                 case "ceasefire": w.Ceasefire = true; break;
