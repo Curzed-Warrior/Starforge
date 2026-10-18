@@ -69,7 +69,9 @@ public partial class Simulation
     void WorldMovement(Colony c, Body b)
     {
         var civ = c.Civ;
-        string name = MovementName(b);
+        string name = MovementName(b), key = $"interior:{c.Star.Id}:{b.Name}";
+        if (Year < civ.Policy.AskAfter.GetValueOrDefault(key)) return;           // answered within the last five years
+        civ.Policy.AskAfter[key] = Year + 5;
         StrifeCount("movements");
         if (civ.Main) Log(c, $"The {name} takes up arms on {b.Name}: it is tired of working for {c.Seat.Name}.", "loss", b);
         var a = civ.Ethic == "Ruthless" ? Answer.Crackdown : civ.Ethic == "Reverent" ? (CanInvest(civ) ? Answer.Invest : Answer.SelfRule) : Answer.SelfRule;

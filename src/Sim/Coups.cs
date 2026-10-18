@@ -18,7 +18,7 @@ public partial class Simulation
         if (civ.JuntaUntil <= 0 || civ.Junta(Year)) return;
         civ.JuntaUntil = 0;
         civ.Leader = civ.NewLeader(civ.Drive, Year);
-        Log(CapitalOf(civ), $"The junta in {Narrative2.Called(civ)} stands down. Speaker {civ.Leader.Name} is elected.", "era", null);
+        Log(CapitalOf(civ), $"The junta in {Narrative2.Called(civ)} stands down. Speaker {civ.Leader.Name} is elected.", civ.Main ? "era" : "loss", null);
     }
 
     /// <summary>
@@ -50,6 +50,7 @@ public partial class Simulation
     void Revolution(Civ civ, double dy)
     {
         if (civ.M.Hive || civ.OvermindUntil > Year || civ.Colonies.Count == 0) return;
+        if (Year < civ.ActAt.GetValueOrDefault("strife:revolution")) return;     // a new council is given time
         var risen = civ.Colonies.Where(c => c.Unrest >= 3).ToList();
         bool pushed = risen.Count >= CD("revolution", "insurgentShare") * civ.Colonies.Count || WarExhaustionOf(civ) >= 100;
         if (!pushed || _r.NextDouble() >= CD("revolution", "chancePerYear") * dy) return;
@@ -60,11 +61,12 @@ public partial class Simulation
         civ.Leader = civ.NewLeader(drive, Year);
         civ.JuntaUntil = 0;
         foreach (var c in civ.Colonies) c.Grievance /= 2;
+        civ.ActAt["strife:revolution"] = Year + CD("revolution", "cooldownYears");
         StrifeCount("revolutions");
         string text = drive == old
             ? $"Revolution in {Narrative2.Called(civ)}. The council falls; Speaker {civ.Leader.Name} of the {civ.Faction(drive)} promises to listen."
             : $"Revolution in {Narrative2.Called(civ)}. The {civ.Faction(old)} are thrown out, and the {civ.Faction(drive)} take the council under Speaker {civ.Leader.Name}.";
-        Log(CapitalOf(civ), text, "era", null);
+        Log(CapitalOf(civ), text, civ.Main ? "era" : "loss", null);         // a foreign revolution is news only to its enemies
         if (civ.Main) Raise("Unrest", "Revolution", text, CapitalOf(civ));
     }
 }

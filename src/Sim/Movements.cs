@@ -44,6 +44,7 @@ public partial class Simulation
     {
         var civ = c.Civ;
         string key = "interior:" + c.Star.Id;
+        if (Year < civ.Policy.AskAfter.GetValueOrDefault(key)) return;          // answered within the last five years
         if (civ.Main && civ.Policy.IsManual(Area.Interior))
         {
             if (Waiting(key)) return;
@@ -61,7 +62,6 @@ public partial class Simulation
     void AnswerAgain(Colony c)
     {
         if (c.Movement == null || c.Autonomy || Year < c.InvestedUntil) return;
-        if (Year < c.Civ.Policy.AskAfter.GetValueOrDefault("interior:" + c.Star.Id)) return;
         AnswerMovement(c);
     }
 

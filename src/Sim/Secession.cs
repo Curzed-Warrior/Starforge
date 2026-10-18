@@ -11,28 +11,25 @@ namespace Starforge.Sim;
 public partial class Simulation
 {
     /// <summary>
-    /// Yearly per civ: each system in open revolt may rise; a rising takes every system in revolt within supply range
-    /// of it. Never the capital, and the parent always keeps at least one system. At most one rising a year.
+    /// Yearly per civ: when systems are in open revolt, a rising may come (one roll for the civ, so a vast empire does
+    /// not shed a system every year); it starts in the most aggrieved system and takes every system in revolt within
+    /// supply range of it. Never the capital, and the parent always keeps at least one system.
     /// </summary>
     void RevoltStep(Civ civ, double dy)
     {
-        double chance = SD("revolt", "chancePerYear") * dy;
-        var revolting = civ.Colonies.Where(c => !c.Home && c.Unrest >= 4).ToList();
-        foreach (var first in revolting)
-        {
-            if (_r.NextDouble() >= chance) continue;
-            float range = (float)(F("supplyRangeGu") * civ.M.Range);
-            var bloc = revolting.Where(c => c.Star.Pos.DistanceSquaredTo(first.Star.Pos) <= range * range).ToList();
-            int systems = civ.Colonies.Count;
-            double pop = civ.Pop;
-            bool civilWar = bloc.Count >= SD("revolt", "civilWarShare") * systems || bloc.Sum(c => c.Pop) >= SD("revolt", "civilWarPopShare") * pop;
-            bool peaceful = !civilWar && bloc.Count <= SD("revolt", "letGoMax") && (civ.Ethic == "Reverent" || civ.Ethic == "Pragmatic" && civ.AtWar.Count == 0);
-            string drive = bloc.GroupBy(Leaning).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First().Key;
-            StrifeCount("revolts");
-            if (civilWar) StrifeCount("civilwars");
-            Separate(civ, bloc, drive, peaceful, civilWar: civilWar);
-            return;
-        }
+        var revolting = civ.Colonies.Where(c => !c.Home && c.Unrest >= 4).OrderByDescending(c => c.Grievance).ToList();
+        if (revolting.Count == 0 || _r.NextDouble() >= SD("revolt", "chancePerYear") * dy) return;
+        var first = revolting[0];
+        float range = (float)(F("supplyRangeGu") * civ.M.Range);
+        var bloc = revolting.Where(c => c.Star.Pos.DistanceSquaredTo(first.Star.Pos) <= range * range).ToList();
+        int systems = civ.Colonies.Count;
+        double pop = civ.Pop;
+        bool civilWar = bloc.Count >= SD("revolt", "civilWarShare") * systems || bloc.Sum(c => c.Pop) >= SD("revolt", "civilWarPopShare") * pop;
+        bool peaceful = !civilWar && bloc.Count <= SD("revolt", "letGoMax") && (civ.Ethic == "Reverent" || civ.Ethic == "Pragmatic" && civ.AtWar.Count == 0);
+        string drive = bloc.GroupBy(Leaning).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First().Key;
+        StrifeCount("revolts");
+        if (civilWar) StrifeCount("civilwars");
+        Separate(civ, bloc, drive, peaceful, civilWar: civilWar);
     }
 
     /// <summary>
@@ -46,6 +43,7 @@ public partial class Simulation
         bloc = bloc.Where(c => c.Civ == parent && !c.Home).Distinct().ToList();
         if (bloc.Count >= parent.Colonies.Count) bloc = bloc.Take(parent.Colonies.Count - 1).ToList();
         if (bloc.Count == 0) return null;
+        double share = Math.Min(0.5, bloc.Sum(c => c.Pop) / Math.Max(parent.Pop, 1e-9));
         var s = Splinter(parent, drive, bloc);
         if (name != null) s.Name = name;
         var stars = bloc.Select(c => c.Star.Id).ToHashSet();
@@ -57,6 +55,17 @@ public partial class Simulation
             if (parent.Main) Log(bloc[0], $"Admiral {f.Admiral.Name} takes the {f.Name} over to {s.Name}.", "loss", null);
         }
         foreach (var a in Armies) if (a.Civ == parent.Id && a.Fleet < 0 && a.To < 0 && stars.Contains(a.At)) a.Civ = s.Id;
+        // the crews from the bloc's worlds take their share of every squadron with them (at most half the navy), and a
+        // rising strikes first
+        var free = new Fleet { Id = NextFleetId++, Civ = s.Id, At = bloc[0].Star.Id, Name = "Free Fleet", Mission = "attack", Admiral = NewAdmiral(s) };
+        foreach (var f in Fleets.Where(f => f.Civ == parent.Id))
+            foreach (var sq in f.Squadrons)
+            {
+                double take = sq.Ships * share;
+                if (take <= 0) continue;
+                sq.Ships -= take; free.Add(sq.Hull, take, sq.Xp);
+            }
+        if (free.Squadrons.Count > 0) Fleets.Add(free);
         foreach (var c in bloc)
         {
             c.Grievance = 20; c.Unrest = 0; c.Cause = null; c.CauseKey = null; c.Movement = null; c.Autonomy = false; c.InvestedUntil = 0; c.OccupiedBy = -1;

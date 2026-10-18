@@ -72,6 +72,17 @@ public partial class Simulation
         return e;
     }
 
+    /// <summary>
+    /// How far from the capital a system feels, 0..1. With fold drives it is plain distance (25 galaxy units and more
+    /// is as far as it gets); without them it is the voyage: a lifetime's travel (strife.lifetimeYears) or more is as
+    /// far away as anywhere.
+    /// </summary>
+    public double DistanceFactor(Colony c, Colony capital)
+    {
+        if (Folds(c.Civ)) return Math.Min(c.Star.Pos.DistanceTo(capital.Star.Pos) / 25.0, 3) / 3;
+        return Math.Min(TravelYears(c.Civ, c.Star, capital.Star) / SD("lifetimeYears"), 1);
+    }
+
     static double MeanIndustry(Civ civ) => civ.Colonies.Count == 0 ? 0 : civ.Colonies.Average(x => x.IndustryKg);
 
     /// <summary>Each cause of grievance (strife.causes) as the chronicle and the interface say it.</summary>
@@ -103,13 +114,11 @@ public partial class Simulation
         {
             if (k <= 0) return;
             double v = SD("causes", key) * k;
-            if (_dbg != null) _dbg[key] = _dbg.GetValueOrDefault(key) + v;
             sum += v;
             if (v > best) { best = v; top = key; }
         }
         if (!c.Autonomy) Add("levy", Math.Clamp(civ.LevyOut.GetValueOrDefault(c), 0, 1));
-        if (capital != null && capital != c)
-            Add(Folds(civ) ? "distance" : "distanceSlow", Math.Min(c.Star.Pos.DistanceTo(capital.Star.Pos) / 25.0, 3) / 3);
+        if (capital != null && capital != c) Add(Folds(civ) ? "distance" : "distanceSlow", DistanceFactor(c, capital));
         if (c.PopCap > 0 && c.Pop > 0.92 * c.PopCap) Add("crowding", 1);
         if (civ.Emergency) Add("emergency", 1);
         Add("warStrain", civ.WarStrain);
@@ -123,7 +132,6 @@ public partial class Simulation
         double relief = SD("relief", "base") + SD("relief", "megaOrder") * c.MegaOrder + SD("relief", "faith") * civ.Faith
                         + (c.Autonomy ? SD("relief", "autonomy") : 0) + (Year < c.InvestedUntil ? SD("relief", "invested") : 0);
         causeKey = top;
-        if (_dbg != null) { _dbg["~relief"] = _dbg.GetValueOrDefault("~relief") + relief; _dbg["~gov"] = _dbg.GetValueOrDefault("~gov") + GovFactor(civ); }
         return Math.Clamp(sum * GovFactor(civ) - relief, 0, 100);
     }
 
@@ -161,18 +169,5 @@ public partial class Simulation
             }
         }
         RevoltStep(civ, dy);
-        if (_dbg != null && (civ.Main || civ.Colonies.Count >= 80) && Year >= _dbgAt.GetValueOrDefault(civ.Id))
-        {
-            _dbgAt[civ.Id] = Year + 50;
-            int n = Math.Max(1, civ.Colonies.Count(x => !x.Home));
-            var h = new int[5]; foreach (var x in civ.Colonies) if (!x.Home) h[x.Unrest]++;
-            Godot.GD.Print($"STRIFEDBG {Year:0} {civ.Name} n={n} gov={Government.Of(civ).Name} eth={civ.Ethic} stages={string.Join("/", h)} g={civ.Colonies.Where(x => !x.Home).Select(x => (double)x.Grievance).DefaultIfEmpty(0).Average():0.0} "
-                + string.Join(" ", _dbg.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value / n:0.0}"))
-                + " worlds=" + string.Join(",", civ.Colonies.Where(x => x.Home).SelectMany(x => x.WorldGrievance.Select(kv => $"{kv.Key.Name}:{kv.Value:0}:{WorldTarget(x, kv.Key):0}"))));
-        }
-        if (_dbg != null) _dbg.Clear();
     }
-    static Dictionary<string, double> _dbg = Godot.OS.HasEnvironment("SF_STRIFE") ? new() : null;
-    readonly Dictionary<int, double> _dbgAt = new();
-
 }

@@ -18,7 +18,8 @@ public static class StrifeTests
             var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
             var c = h.Colonies.First(x => !x.Home); h.LevyOut[c] = 1; c.Autonomy = false; h.M.Hive = false;
             double t0 = sim.GrievanceTarget(c, out _); h.LevyOut[c] = 0;
-            SelfTest.Check(t0 > sim.GrievanceTarget(c, out _) + 30 * sim.GovFactor(h), "shipping its industry away is resented");
+            // the full levy weight, felt through the government (less what clamping at 0 hides)
+            SelfTest.Check(t0 > sim.GrievanceTarget(c, out _) + 0.5 * WarData.D("strife", "causes", "levy") * sim.GovFactor(h), "shipping its industry away is resented");
         }),
         ("hive_feels_none", () => {
             var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.M.Hive = true;
@@ -184,6 +185,57 @@ public static class StrifeTests
             c.Grievance = 70; c.Unrest = 3; c.Movement = "x"; c.CauseKey = "levy";
             sim.Respond(c, Simulation.Answer.Crackdown);
             SelfTest.Check(sim.Year + 4 < h.Policy.AskAfter.GetValueOrDefault("interior:" + c.Star.Id), "a crushed movement is next answered years later");
+        }),
+        ("lifetime_away", () => {
+            var sim = SelfTest.NewSim(); var h = sim.Humanity; var home = h.Colonies[0];
+            var star = sim.Gal.Stars.Where(x => x.Owner < 0 && x.Pos.DistanceTo(home.Star.Pos) * Galaxy.LyPerUnit is > 8 and < 20).First();
+            var c = sim.Found(h, star, home, false); h.M.ShipSpeed = 0.1f; h.M.Fold = false;
+            SelfTest.Check(sim.DistanceFactor(c, home) > 0.9, "a colony a century away by sublight ship is a lifetime away");
+            h.M.Fold = true;
+            SelfTest.Check(sim.DistanceFactor(c, home) < 0.1, "with fold drives the same colony is close");
+        }),
+        ("reformed_movement_waits", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.SetDrive(h.Drive, "Ruthless");
+            var c = h.Colonies.First(x => !x.Home); c.Grievance = 70; c.Unrest = 3; c.Movement = "x";
+            sim.Respond(c, Simulation.Answer.Crackdown);
+            c.Grievance = 70; c.Movement = null; sim.Rise(c);
+            SelfTest.Check(c.Grievance == 70, "a movement that re-forms within five years of the last answer is not answered again yet");
+        }),
+        ("revolution_not_yearly", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            int n = 0; double last = 0;
+            for (int i = 0; i < 40; i++)
+            {
+                h.M.Hive = false;
+                foreach (var c in h.Colonies.Where(c => !c.Home)) { c.Grievance = 70; c.Unrest = 3; c.Movement ??= "x"; }
+                sim.Warp(1);
+                double at = h.ActAt.GetValueOrDefault("strife:revolution");
+                if (at != last) { n++; last = at; }
+            }
+            SelfTest.Check(n >= 1 && n <= 40 / WarData.D("strife", "revolution", "cooldownYears") + 1, "a new council is given time before the next revolution");
+        }),
+        ("risings_scale_with_civs_not_systems", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400);
+            var big = sim.Civs.Where(c => c.Alien && !c.Dead).OrderByDescending(c => c.Colonies.Count).First();
+            int risings = 0;
+            for (int i = 0; i < 10; i++)
+            {
+                big.M.Hive = false;
+                foreach (var c in big.Colonies.Where(c => !c.Home)) { c.Grievance = 99; c.Unrest = 4; }
+                int before = sim.Civs.Count; sim.Warp(1); if (sim.Civs.Count > before && sim.Civs.Skip(before).Any(c => c.Species == big.Species)) risings++;
+            }
+            // one roll a year for the whole civ (chancePerYear), however many of its systems are in revolt
+            SelfTest.Check(risings <= 5, $"risings are a civ's event, not every system's ({risings} in 10 years, {big.Colonies.Count} systems)");
+        }),
+        ("rebels_take_their_share", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            double ships0 = sim.FleetsOf(h).Sum(f => f.Ships);
+            var bloc = h.Colonies.Where(c => !c.Home).OrderByDescending(c => c.Pop).Take(3).ToList();
+            double share = bloc.Sum(c => c.Pop) / h.Pop;
+            var s = sim.Separate(h, bloc, h.Drive, peaceful: false);
+            double got = sim.FleetsOf(s).Sum(f => f.Ships);
+            SelfTest.Check(ships0 > 0 && got > 0 && Math.Abs(got + sim.FleetsOf(h).Sum(f => f.Ships) - ships0) < 1e-6 * ships0, "the crews from the bloc's worlds take their ships with them");
+            SelfTest.Check(sim.FleetsOf(s).All(f => f.At == bloc[0].Star.Id && f.Admiral != null), "and gather at the rising's first system under their own admiral");
         }),
     };
 }
