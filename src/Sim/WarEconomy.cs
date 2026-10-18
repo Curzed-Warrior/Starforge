@@ -83,15 +83,12 @@ public partial class Simulation
     static int Battleship => _battleship != -2 ? _battleship : _battleship = Array.IndexOf(Defs.Hulls, "Battleship");
 
     /// <summary>Building slips: one at home, more per finished yard, and big yards once the civ builds capital ships.</summary>
-    public int Slips(Civ c)
+    public int Slips(Civ c) => c.Colonies.Sum(SlipsOf);
+    /// <summary>One colony's slips; the civ's Yard list holds them colony by colony, in colony order.</summary>
+    public int SlipsOf(Colony col)
     {
-        int n = 0;
-        bool capital = Battleship >= 0 && c.Hull >= Battleship;
-        foreach (var col in c.Colonies)
-        {
-            if (col.Home) n += (int)WarData.D("economy", "slipsHome");
-            if (col.Done("yard")) n += (int)WarData.D("economy", "slipsPerYard") + (capital ? (int)WarData.D("economy", "slipsMegaYard") : 0);
-        }
+        int n = col.Home ? (int)WarData.D("economy", "slipsHome") : 0;
+        if (col.Done("yard")) n += (int)WarData.D("economy", "slipsPerYard") + (Battleship >= 0 && col.Civ.Hull >= Battleship ? (int)WarData.D("economy", "slipsMegaYard") : 0);
         return n;
     }
 

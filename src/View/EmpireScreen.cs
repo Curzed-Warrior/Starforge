@@ -126,7 +126,10 @@ public partial class EmpireScreen : PanelContainer
             (civ.Emergency ? $"[color=#{Ui.Hex(Ui.Danger)}][b]STATE OF EMERGENCY[/b] · {civ.EmergencyCause}[/color]\n" : "") +
             $"{lead}\n\n" +
             $"Systems {civ.Colonies.Count} · population {civ.FmtPop()} · power {Hud.Sci(civ.Power)} W · Kardashev {Defs.Kardashev(civ.GalacticPower):0.000}\n" +
-            $"Who decides: {auto}" + belief + wars + met;
+            $"Who decides: {auto}\n" +
+            $"War culture: {Cultures.Describe(civ.Culture)}\n" +
+            $"{Simulation.Level(civ.Mobilisation).GetProperty("name").GetString()} · {civ.MilShare * 100:0}% of industry to the war (efficiency {civ.Efficiency * 100:0}%) · " +
+            $"materiel {Hud.Sci(civ.Materiel)} kg · navy {Sim.FleetsOf(civ).Sum(f => f.Ships):0} hulls in {Sim.FleetsOf(civ).Count()} fleets · {Sim.ArmiesOf(civ).Count()} armies" + belief + wars + met;
         var keys = Defs.Drives.Keys.ToArray();
         _legend.Text = string.Join(" · ", keys.Select(k => $"{civ.Faction(k)} {civ.Inf.GetValueOrDefault(k) * 100:0}%"));
         for (int i = 0; i < 3; i++) _factionBars[i].CustomMinimumSize = new Vector2(Math.Max(2, civ.Inf.GetValueOrDefault(keys[i]) * 890f), 6);
@@ -162,6 +165,25 @@ public partial class EmpireScreen : PanelContainer
         var gov = Government.Of(civ);
         Slider(_policies, "Industry to great works", pol.WorksShare, 0.05f, 0.9f, 0.01f, v => pol.WorksShare = v, v => $"{v * 100:0}%",
             pol.IsManual(Area.Economy) ? "The rest goes to the swarm, ships and homes." : $"Only used when you decide the economy. Now the {gov.Name.ToLower()} sets it ({gov.Works * 100:0}%, more once the swarm is finished).", !pol.IsManual(Area.Economy));
+
+        _policies.AddChild(Ui.Label("PRODUCTION", 14, Ui.Accent, true));
+        bool prod = pol.IsManual(Area.Production);
+        var mrow = new HBoxContainer();
+        mrow.AddChild(new Label { Text = "Mobilisation", CustomMinimumSize = new Vector2(200, 0) });
+        var mob = new OptionButton { CustomMinimumSize = new Vector2(240, 0), Disabled = !prod };
+        int levels = WarData.P("mobilisation").GetArrayLength();
+        for (int i = 0; i < levels; i++) mob.AddItem(Simulation.Level(i).GetProperty("name").GetString(), i);
+        mob.Selected = prod ? pol.Mobilisation : civ.Mobilisation;
+        mob.ItemSelected += i => { pol.Mobilisation = (int)i; };
+        mrow.AddChild(mob);
+        var mtip = Ui.Label(prod ? "Factories take three years to retool, and new lines start slow." : "Only used when you decide production. Now the council chooses.", 11, Ui.Dim);
+        mtip.CustomMinimumSize = new Vector2(360, 0); mtip.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        mrow.AddChild(mtip);
+        _policies.AddChild(mrow);
+        var service = new CheckBox { Text = "Mandatory service", ButtonPressed = civ.MandatoryService, Disabled = !prod,
+            TooltipText = "Every citizen serves: more soldiers, felt as a burden by a people that prizes its freedom." };
+        service.Toggled += on => civ.MandatoryService = on;
+        _policies.AddChild(service);
 
         _policies.AddChild(Ui.Label("GREAT WORKS PRIORITIES", 14, Ui.Accent, true));
         _policies.AddChild(Note("How much of the works budget each kind of great work gets, on top of what the ruling faction and the government want."));

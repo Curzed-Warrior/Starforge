@@ -67,6 +67,7 @@ public partial class Works : Node3D
         BuildSwarm();
         BuildTraffic();
         BuildStations();
+        BuildWarProps();
         BuildHabitats();
         BuildStreams();
         _great = new GreatWorks();
@@ -461,6 +462,7 @@ void fragment(){
         if (c == null) { HideAll(); return; }
         using (Prof.T("traffic")) UpdateTraffic(c, year, dt, cam);
         using (Prof.T("stations")) UpdateStations(c, year);
+        using (Prof.T("war")) UpdateWarProps(c, year);
         using (Prof.T("earth")) UpdateEarthWorks(c);
         using (Prof.T("habs")) UpdateHabitats(c, year);
         using (Prof.T("streams")) UpdateStreams(c, year, rin, rout);
@@ -473,6 +475,7 @@ void fragment(){
         foreach (var cm in _classMesh) cm.Multimesh.VisibleInstanceCount = 0;
         _shipGlow.Multimesh.VisibleInstanceCount = 0; _trails.Multimesh.VisibleInstanceCount = 0;
         _stations.Multimesh.VisibleInstanceCount = 0; _stationLights.Multimesh.VisibleInstanceCount = 0;
+        _warProps.Multimesh.VisibleInstanceCount = 0;
         foreach (var hk in _habKinds) hk.Multimesh.VisibleInstanceCount = 0;
         _habLights.Multimesh.VisibleInstanceCount = 0;
         _streams.Multimesh.VisibleInstanceCount = 0;
