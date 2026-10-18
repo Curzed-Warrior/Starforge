@@ -142,7 +142,9 @@ public static class SaveGame
         float rescale = d.Version < 2 ? StarSystem.AU / 70f : 1f;        // version 1 saved orbits at the old compressed scale (Earth's orbit = 70)
         var gal = new Galaxy(d.Seed);
         gal.PlaceSolAndNeighbours();
-        gal.GenerateStars(d.StarCount);
+        // StarCount includes the stars kindled since the galaxy was made: regenerate only the original ones (an extra
+        // generated star would shift where the Shard, the Vault and the Gates are placed), and the kindled are added back below
+        gal.GenerateStars(d.StarCount - (d.Stars?.Count(x => x.Kindled) ?? 0));
         var sim = Simulation.Blank(gal, d.Seed);
         sim.Year = d.Year; sim.AnsweredAt = d.AnsweredAt; sim.ArkYear = d.ArkYear; sim.TypeIIIAnnounced = d.TypeIII;
         // stars the voice changed: kindled ones are new, the rest are edits of generated stars
