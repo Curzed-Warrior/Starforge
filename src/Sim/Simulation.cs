@@ -480,7 +480,8 @@ public partial class Simulation
                 rel = Math.Clamp(rel, -100, 100);
                 a.Relations[b.Id] = rel; b.Relations[a.Id] = rel;
                 bool war = a.AtWar.Contains(b.Id);
-                if (!war && rel < -60 && border && !allied && !Laws.Contains("nowar") && _r.NextDouble() < 1.0 / Math.Max(1f, Math.Min(a.M.Stealth, b.M.Stealth)))
+                if (!war && rel < WarData.D("field", "declareRelation") && !allied && !Laws.Contains("nowar")
+                    && Year >= a.Truce.GetValueOrDefault(b.Id) && CanReach(a, b) && _r.NextDouble() < 1.0 / Math.Max(1f, Math.Min(a.M.Stealth, b.M.Stealth)))
                 {
                     // the harder conscience declares; if that is the player and the military is theirs, the council asks first
                     var declarer = a.Conscience <= b.Conscience ? a : b; var other = declarer == a ? b : a;
@@ -488,27 +489,15 @@ public partial class Simulation
                     {
                         string key = "war:" + other.Id;
                         if (!Waiting(key) && Year >= declarer.Policy.AskAfter.GetValueOrDefault(key))
-                            Raise("Decision", $"Declare war on {Narrative2.Called(other)}?", $"Relations with {Narrative2.Called(other)} have collapsed ({rel:0}). The council is ready to go to war over the border.", declarer.Colonies[0], key,
-                                new() { ("Declare war", () => { if (!declarer.AtWar.Contains(other.Id) && !other.Dead) StartWar(declarer, other); }),
+                        {
+                            string reason = ChooseReason(declarer, other);
+                            Raise("Decision", $"Declare war on {Narrative2.Called(other)}?", $"Relations with {Narrative2.Called(other)} have collapsed ({rel:0}). The council is ready to go to war, over {WarModel.ReasonById(reason).Name.ToLower()}.", declarer.Colonies[0], key,
+                                new() { ("Declare war", () => { if (!declarer.AtWar.Contains(other.Id) && !other.Dead) DeclareWar(declarer, other, reason); }),
                                         ("Hold", () => declarer.Policy.AskAfter[key] = Year + 20) });
+                        }
                     }
-                    else StartWar(declarer, other);
+                    else DeclareWar(declarer, other);
                 }
-                else if (war && rel > -20)
-                {
-                    // a weary enemy offers terms; if diplomacy is the player's, they answer
-                    var mine = a.Main ? a : b.Main ? b : null; var them = mine == a ? b : a;
-                    if (mine != null && mine.Policy.IsManual(Area.Diplomacy))
-                    {
-                        string key = "peace:" + them.Id;
-                        if (!Waiting(key) && Year >= mine.Policy.AskAfter.GetValueOrDefault(key))
-                            Raise("Decision", $"{Narrative2.Called(them, true)} offer peace", $"The war with {Narrative2.Called(them)} has burned down (relations {rel:0}). They offer to stop where the lines are.", mine.Colonies[0], key,
-                                new() { ("Make peace", () => { if (mine.AtWar.Contains(them.Id)) EndWar(mine, them); }),
-                                        ("Fight on", () => { mine.Policy.AskAfter[key] = Year + 15; mine.Relations[them.Id] = them.Relations[mine.Id] = Math.Min(rel, -45); }) });
-                    }
-                    else EndWar(a, b);
-                }
-                else if (war && border) Battle(a, b, nv);
             }
         DarkStars();
         // Type III watch
@@ -554,21 +543,9 @@ public partial class Simulation
         else Raise("Milestone", "Dark stars", text, HomeColony);
     }
 
-    public void StartWar(Civ a, Civ b)
-    {
-        a.AtWar.Add(b.Id); b.AtWar.Add(a.Id);
-        var col = (a.Main ? a : b.Main ? b : a).Colonies[0];
-        Log(col, $"War between {Narrative2.Called(a)} and {Narrative2.Called(b)}.", "loss", null);
-        if (a.Main || b.Main) Raise("War", $"War with {Narrative2.Called(a.Main ? b : a)}", $"{Narrative2.Called(a, true)} and {Narrative2.Called(b)} are at war.", col);
-    }
+    public void StartWar(Civ a, Civ b) => DeclareWar(a, b);
 
-    public void EndWar(Civ a, Civ b)
-    {
-        a.AtWar.Remove(b.Id); b.AtWar.Remove(a.Id);
-        var col = (a.Main ? a : b).Colonies.FirstOrDefault();
-        Log(col, $"Peace between {Narrative2.Called(a)} and {Narrative2.Called(b)}. Nobody remembers who asked first.", "era", null);
-        if (a.Main || b.Main) Raise("Contact", $"Peace with {Narrative2.Called(a.Main ? b : a)}", $"The war between {Narrative2.Called(a)} and {Narrative2.Called(b)} is over.", col);
-    }
+    public void EndWar(Civ a, Civ b) { if (WarBetween(a, b) is { } w) EndWarWith(w, true, new() { WarModel.TermById("status_quo") }); }
 
     public void DestroyColony(Colony c, string text)
     {
@@ -635,6 +612,7 @@ public partial class Simulation
             if (i < Colonies.Count && Colonies[i] != c) i--;
         }
         Year += dy;
+        FieldStep(dy);
         if (sw != null) t0 = sw.ElapsedTicks;
         foreach (var civ in Civs.ToList())
         {

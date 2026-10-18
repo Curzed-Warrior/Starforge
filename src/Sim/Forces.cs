@@ -29,6 +29,10 @@ public class Fleet
     public List<Squadron> Squadrons = new();
     public Admiral Admiral;
     public float Morale = 1, Supply = 1;
+    /// <summary>Movement (Field.cs): the star it is flying to (-1 when in port), when it left and arrives, and where its orders send it.</summary>
+    public int To = -1, Target = -1;
+    public double Depart, Arrive;
+    public bool Moving => To >= 0;
     public double Ships => Squadrons.Sum(s => s.Ships);
 
     /// <summary>New hulls join the squadron of their class; experience averages by ship count.</summary>
@@ -49,6 +53,11 @@ public class Army
     public double Troops;
     public float Quality, Xp;
     public bool Rushed;
+    /// <summary>The fleet carrying it, or -1 when it is on the ground.</summary>
+    public int Fleet = -1;
+    /// <summary>Shipping between own systems: where it is bound (-1 when on the ground) and when it lands.</summary>
+    public int To = -1;
+    public double Arrive;
 }
 
 public static class Forces

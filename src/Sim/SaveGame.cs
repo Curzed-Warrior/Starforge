@@ -25,6 +25,7 @@ public static class SaveGame
         // the war foundation (missing in older saves: culture from lore, peacetime economy)
         public float[] Culture; public bool? MandatoryService; public int Mobilisation; public double? MilShare, MilFrom, Efficiency;
         public double MilSince, Materiel, Manpower, WarStrain; public List<Slip> Yard; public List<Training> Barracks;
+        public Dictionary<int, double> Truce; public int TributeTo = -1; public double TributeUntil;
     }
     public class SlotDto { public string Id, Pinned; public double P; public List<string> Hand, LastHand; }
     public class StarDto { public int Id, Seed; public float X, Y, Z, Lum, Temp; public bool Dead, Kindled; public string Name, Cls, Special; }
@@ -44,6 +45,7 @@ public static class SaveGame
         public string RivalName, RivalPlanet, RivalStance; public double RivalPop, RivalT0; public int RivalShips;
         public string SplFaction; public double SplPop, SplAt, SplBack; public bool SplReturned, HasSplinter;
         public double? WorksOverride;
+        public int OccupiedBy = -1; public double BlockadedUntil; public float DefenceLoss;
     }
     public class ShipDto { public int Civ, Origin, Target, FromStar; public double Depart, Arrive; public string Name; }
     public class LogDto { public double Year; public int Civ, Star; public string System, Text, Kind; }
@@ -60,6 +62,7 @@ public static class SaveGame
         public Dictionary<int, List<string>> ForgedNames;
         public List<int[]> Lanes; public List<float[]> Quarantines; public List<string> Laws, Revealed; public double GateSealYear = 2600;
         public List<Fleet> Fleets; public List<Army> Armies; public int NextFleetId, NextArmyId;
+        public List<War> Wars; public int NextWarId;
     }
 
     static readonly JsonSerializerOptions Opt = new() { IncludeFields = true, WriteIndented = false, NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
@@ -85,9 +88,9 @@ public static class SaveGame
                 Federation = c.Federation, Age = c.Age, Policy = c.Policy,
                 Culture = new[] { c.Culture.Martial, c.Culture.Duty, c.Culture.Resolve }, MandatoryService = c.MandatoryService, Mobilisation = c.Mobilisation,
                 MilShare = c.MilShare, MilFrom = c.MilFrom, MilSince = c.MilSince, Efficiency = c.Efficiency, Materiel = c.Materiel, Manpower = c.Manpower,
-                WarStrain = c.WarStrain, Yard = c.Yard, Barracks = c.Barracks,
+                WarStrain = c.WarStrain, Yard = c.Yard, Barracks = c.Barracks, Truce = c.Truce, TributeTo = c.TributeTo, TributeUntil = c.TributeUntil,
             }).ToList(),
-            Fleets = sim.Fleets, Armies = sim.Armies, NextFleetId = sim.NextFleetId, NextArmyId = sim.NextArmyId,
+            Fleets = sim.Fleets, Armies = sim.Armies, NextFleetId = sim.NextFleetId, NextArmyId = sim.NextArmyId, Wars = sim.Wars, NextWarId = sim.NextWarId,
             Colonies = sim.Colonies.Select(c => new ColonyDto
             {
                 Civ = c.Civ.Id, Star = c.Star.Id, Home = c.Home, Complete = c.Complete, ProjectDone = c.ProjectDone, VisitorDone = c.VisitorDone,
@@ -103,7 +106,7 @@ public static class SaveGame
                 Frigates = c.FrigateNames.ToList(),
                 CrisisId = c.Crisis?.Id, CrisisTarget = c.Crisis?.Target?.Name, CrisisT0 = c.Crisis?.T0 ?? 0, CrisisAcc = c.Crisis?.Acc ?? 0,
                 RivalName = c.Rival?.Name, RivalPlanet = c.Rival?.Planet?.Name, RivalStance = c.Rival?.Stance, RivalPop = c.Rival?.Pop ?? 0, RivalT0 = c.Rival?.T0 ?? 0, RivalShips = c.Rival?.Ships ?? 0,
-                WorksOverride = c.WorksOverride,
+                WorksOverride = c.WorksOverride, OccupiedBy = c.OccupiedBy, BlockadedUntil = c.BlockadedUntil, DefenceLoss = c.DefenceLoss,
                 HasSplinter = c.Splinter.HasValue, SplFaction = c.Splinter?.Faction, SplPop = c.Splinter?.Pop ?? 0, SplAt = c.Splinter?.At ?? 0, SplBack = c.Splinter?.Back ?? 0, SplReturned = c.Splinter?.Returned ?? false,
             }).ToList(),
             Ships = sim.Ships.Select(s => new ShipDto { Civ = s.Civ.Id, Origin = s.Origin.Id, Target = s.Target.Id, FromStar = s.From?.Star.Id ?? -1, Depart = s.Depart, Arrive = s.Arrive, Name = s.Name }).ToList(),
@@ -195,6 +198,8 @@ public static class SaveGame
             c.MandatoryService = cd.MandatoryService ?? c.Culture.Duty > 0.5f;
             c.Mobilisation = cd.Mobilisation; c.MilShare = cd.MilShare ?? Simulation.Level(0).GetProperty("military").GetDouble();
             c.MilFrom = cd.MilFrom ?? c.MilShare; c.MilSince = cd.MilSince; c.Efficiency = cd.Efficiency ?? 1;
+            if (cd.Truce != null) foreach (var kv in cd.Truce) c.Truce[kv.Key] = kv.Value;
+            c.TributeTo = cd.TributeTo; c.TributeUntil = cd.TributeUntil;
             c.Materiel = cd.Materiel; c.Manpower = cd.Manpower; c.WarStrain = cd.WarStrain;
             if (cd.Yard != null) c.Yard.AddRange(cd.Yard);
             if (cd.Barracks != null) c.Barracks.AddRange(cd.Barracks);
@@ -248,7 +253,7 @@ public static class SaveGame
             c.LegacyBuilt = cd.Built == null;
             if (cd.CrisisId != null) c.Crisis = new Crisis { Id = cd.CrisisId, T0 = cd.CrisisT0, Acc = cd.CrisisAcc, Target = cd.CrisisTarget == null ? null : sys.Find(cd.CrisisTarget) };
             if (cd.RivalName != null) c.Rival = new Rival { Name = cd.RivalName, Pop = cd.RivalPop, Ships = cd.RivalShips, Planet = sys.Find(cd.RivalPlanet ?? ""), T0 = cd.RivalT0, Stance = cd.RivalStance };
-            c.WorksOverride = cd.WorksOverride;
+            c.WorksOverride = cd.WorksOverride; c.OccupiedBy = cd.OccupiedBy; c.BlockadedUntil = cd.BlockadedUntil; c.DefenceLoss = cd.DefenceLoss;
             if (cd.HasSplinter) c.Splinter = (cd.SplFaction, cd.SplPop, cd.SplAt, cd.SplBack, cd.SplReturned);
             star.Capture = (float)c.Capture;
             sim.Colonies.Add(c);
@@ -267,6 +272,8 @@ public static class SaveGame
         foreach (var c in sim.Civs) sim.RefreshFed(c);
         sim.Focus = sim.HomeColony;
         if (d.Fleets != null) sim.Fleets.AddRange(d.Fleets);
+        if (d.Wars != null) sim.Wars.AddRange(d.Wars);
+        sim.NextWarId = Math.Max(d.NextWarId, sim.Wars.Select(x => x.Id + 1).DefaultIfEmpty(1).Max());
         if (d.Armies != null) sim.Armies.AddRange(d.Armies);
         sim.NextFleetId = Math.Max(d.NextFleetId, sim.Fleets.Select(x => x.Id + 1).DefaultIfEmpty(1).Max());
         sim.NextArmyId = Math.Max(d.NextArmyId, sim.Armies.Select(x => x.Id + 1).DefaultIfEmpty(1).Max());

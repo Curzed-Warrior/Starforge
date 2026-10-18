@@ -82,6 +82,27 @@
     { "id": "purge",        "tier": "survival",  "name": "Purge of a species",    "terms": [] },
     { "id": "existential",  "tier": "survival",  "name": "An existential threat", "terms": [] }
   ],
+  "field": {
+    "declareRelation": -60, "maxWarTravelYears": 10, "claimsMax": 3, "allyRelation": 40, "truceYears": 20,
+    "orderEvery": 0.5, "supplyRangeGu": 3.0, "supplyLossPerYear": 0.3, "supplyGainPerYear": 0.6,
+    "moraleRegenPerYear": 0.4, "retreatShipsShare": 0.3, "embarkArmies": 12,
+    "defenceHullsBase": 4, "defenceHome": 3, "defenceRegenPerYear": 0.25,
+    "garrisonHome": 2.0, "militiaShare": 0.25, "landingMargin": 1.0, "stalemateScore": 5,
+    "scorePerOccupied": 8, "scorePerClaimHeld": 20, "scorePerBattle": 2,
+    "exhaustionPerYear": 3, "exhaustionPerLossShare": 40, "exhaustionPerOccupiedShare": 40,
+    "bothExhausted": 60, "settleExhaustion": 40, "minWarYears": 2, "reparationsShare": 0.2, "tributeShare": 0.1, "tributeYears": 50,
+    "logBattleShare": 0.1
+  },
+  "battle": {
+    "rounds": 6, "roundKill": 0.1, "roundCap": 0.3, "moraleLossPerLossShare": 1.5, "moraleBreak": 0.3,
+    "counters": { "kinetic": "armor", "energy": "shield", "missile": "pd", "craft": "pd" },
+    "secondWeapon": 0.33, "unarmed": 0.55, "exoticPass": 0.5, "xpPerBattle": 0.1,
+    "traits": {
+      "Aggressive": { "dmg": 1.15, "loss": 1.15 }, "Cautious": { "dmg": 0.95, "loss": 0.85, "break": 0.45 },
+      "Tactician": { "dmg": 1.1 }, "Logistician": { "supply": 0.5 }, "Raider": { "raid": 1.3 },
+      "Beloved": { "morale": 1.2 }, "Ambitious": {}, "Butcher": { "dmg": 1.1, "pop": 2.0 }
+    }
+  },
   "placeholders": {
     "factory": "#ff8c2e", "shipyard": "#3a7dff", "barracks": "#3fbf5a", "transport": "#7d8a36", "specops": "#9a4fe0", "hull": "#8c8c8c"
   }
