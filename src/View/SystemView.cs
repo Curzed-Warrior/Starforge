@@ -198,7 +198,7 @@ public partial class SystemView : Node3D
     public void Sync(Colony c, Simulation sim)
     {
         Colony = c;
-        Works.Sync(c);
+        Works.Sync(c, sim);
         StarDim = c == null ? 1f : (float)Math.Clamp(1 - c.Capture * 0.92, 0.06, 1);
         LaneOpen = c != null && c.EclipticOpen;
         foreach (var bv in Bodies)

@@ -145,7 +145,7 @@ public partial class EmpireScreen
         {
             var star = last.Star;
             var go = Ui.Button($"Last battle: {StarName(star)}, {last.Year:0}", "Fly there");
-            go.Pressed += () => { Visible = false; if (star >= 0 && star < Sim.Gal.Stars.Count) _main.TravelTo(Sim.Gal.Stars[star]); };
+            go.Pressed += () => { Visible = false; _main.GoToBattle(star); };
             brow.AddChild(go);
         }
         v.AddChild(brow);

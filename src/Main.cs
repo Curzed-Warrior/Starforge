@@ -11,7 +11,7 @@ namespace Starforge;
 /// <summary>
 /// Entry point. One continuous world: the viewed star sits at the origin, the galaxy is scaled by G around it.
 /// Command line (after "--"): --shot=abs.png [--shotframe=N] --focus=Earth|Sun|Galaxy --dist=D --yaw=Y --pitch=P
-/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name
+/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] stages a fight here
 /// </summary>
 public partial class Main : Node3D
 {
@@ -594,6 +594,39 @@ public partial class Main : Node3D
         _pendingMega = Simulation.WorkName(id); _pendingMegaT = 0;
     }
 
+    int _pendingBattle = -1; float _pendingBattleT;
+    /// <summary>Jump to a battle: to its system, then (once there and the fleets are drawn) onto the fight itself.</summary>
+    public void GoToBattle(int star)
+    {
+        if (star < 0 || star >= Sim.Gal.Stars.Count) return;
+        var s = Sim.Gal.Stars[star];
+        if (s != ViewStar) TravelTo(s);
+        _pendingBattle = star; _pendingBattleT = 0;
+    }
+
+    void FlyToPendingBattle(float dt)
+    {
+        if (_pendingBattle < 0 || _traveling) return;
+        _pendingBattleT += dt;
+        if (_pendingBattle != ViewStar.Id) { _pendingBattle = -1; return; }
+        if (SysView.Works.BattleHere(out var centre, out float r))
+        {
+            SelectedBody = null;
+            _rig.FlyTo(BattleTarget(centre), r * 3f, r * 0.2f);
+            var v = SysView.Works.BattleView;
+            _rig.YawT = Mathf.Atan2(v.X, v.Z); _rig.PitchT = -0.18f;
+            _pendingBattle = -1;
+        }
+        else if (_pendingBattleT > 1f) { _hud.Toast("The battle is over: the fleets have moved on."); _pendingBattle = -1; }
+    }
+
+    /// <summary>The battle's centre as it moves with its world, the last known one once it is over.</summary>
+    Func<D3> BattleTarget(D3 start)
+    {
+        var last = start; var works = SysView.Works;
+        return () => { if (IsInstanceValid(works) && works.BattleHere(out var c, out _)) last = c; return last; };
+    }
+
     void FlyToPendingMega(float dt)
     {
         if (_pendingMega == null) return;
@@ -604,6 +637,40 @@ public partial class Main : Node3D
         var hit = mega.FindIndex(a => a.Name == _pendingMega || _pendingMega == "Mega Shipyard" && a.Name.EndsWith("Shipyard"));
         if (hit >= 0) { OnLabelClicked("mega:" + mega[hit].Name); _pendingMega = null; }
         else if (_pendingMegaT > 3f) { _hud.Toast($"{_pendingMega} has nothing to see yet."); _pendingMega = null; }
+    }
+
+    void StageBattle()
+    {
+        var me = Sim.Humanity; int star = ViewStar.Id;
+        var aliens = Sim.Civs.Where(x => x.Alien && !x.Dead && x.Colonies.Count > 0 && x != me)
+            .OrderBy(x => x.Colonies.Min(c => c.Star.Pos.DistanceSquaredTo(ViewStar.Pos))).ToList();
+        var foe = aliens.FirstOrDefault(x => Sim.FleetsOf(x).Any(f => f.Ships > 0)) ?? aliens.FirstOrDefault();
+        if (foe == null) { GD.Print("--stagebattle: no alien empire"); return; }
+        Fleet Ready(Civ civ)
+        {
+            var f = Sim.FleetsOf(civ).FirstOrDefault(x => x.Name == Forces.FleetName(0)) ?? Sim.FleetsOf(civ).FirstOrDefault();
+            if (f == null) { f = new Fleet { Id = Sim.NextFleetId++, Civ = civ.Id, At = star, Name = Forces.FleetName(0) }; Sim.Fleets.Add(f); }
+            // a fleet with no ships gets a squadron of its best hull, so both sides have something to fight with; the
+            // player's early navy (shuttles) would be specks beside an old empire's, so it gets a mixed light squadron
+            if (f.Ships <= 0)
+            {
+                if (civ.Alien) f.Add(civ.Hull, 12, 0);
+                else foreach (var (name, n) in new[] { ("Corvette", 8), ("Frigate", 6), ("Destroyer", 4), ("Cruiser", 2) }) f.Add(Math.Max(Array.IndexOf(Defs.Hulls, name), 0), n, 0);
+            }
+            f.At = star; f.To = -1; f.Target = -1;
+            return f;
+        }
+        var mine = Ready(me); var theirs = Ready(foe);
+        // a limited war, so the Wars tab offers peace and ceasefire
+        var w = Sim.DeclareWar(me, foe, "border_claim") ?? Sim.WarBetween(me, foe);
+        if (w == null) { GD.Print($"--stagebattle: no war possible with {foe.Name}"); return; }
+        Sim.SetManual(me, Area.Fleets, true); Sim.SetManual(foe, Area.Fleets, true);
+        _nextBattleCine = Sim.Year + 40;            // no cinematic flying off to film it: the view stays on this battle
+        var r = Sim.TestFight(w, star);
+        // whoever lost stays to be seen
+        foreach (var f in new[] { mine, theirs }) if (Sim.Fleets.Contains(f)) { f.At = star; f.To = -1; f.Target = -1; }
+        SpeedIdx = 0;
+        GD.Print($"STAGEBATTLE {me.Name} vs {foe.Name} at {ViewStar.Name}: aWins={r.AWins} lostA={r.LostA:0.0} lostB={r.LostB:0.0} ships {mine.Ships:0}/{theirs.Ships:0} fam {Starforge.Sim.Battles.BestFamily(me)}/{Starforge.Sim.Battles.BestFamily(foe)}");
     }
 
     public void OnLabelClicked(object key)
@@ -930,6 +997,7 @@ public partial class Main : Node3D
         else if (_traceHitch) Prof.Flush();
         if (_traceHitch) { _gc0 = GC.CollectionCount(0); _gc1 = GC.CollectionCount(1); _gc2 = GC.CollectionCount(2); }
         FlyToPendingMega(dt);
+        FlyToPendingBattle(dt);
         // camera speed in light-years per second drives the streak effect
         var camGal = ViewStar.Pos + Frame.Sys(_rig.Cam.GlobalPosition).F / G;
         float lyps = dt > 0 ? camGal.DistanceTo(_lastCamGal) * Galaxy.LyPerUnit / dt : 0;
@@ -981,6 +1049,21 @@ public partial class Main : Node3D
                     if (i >= 2) { c.CauseKey ??= "poverty"; c.Cause ??= "it is poor beside the core's wealth"; Sim.Rise(c); }
                 }
             }
+        }
+        // test: --stagebattle puts Humanity's Home Fleet and the nearest alien fleet at the view star, at war, fights once and pauses
+        if (_frame == 5 && OS.GetCmdlineUserArgs().Contains("--stagebattle")) StageBattle();
+        // test: --focus=battle frames the battle here (once the fleets have been drawn)
+        if (_frame == 8 && OS.GetCmdlineUserArgs().Contains("--focus=battle"))
+        {
+            if (SysView.Works.BattleHere(out var bc, out float br))
+            {
+                SelectedBody = null;
+                _rig.Target = BattleTarget(bc); _rig.MinDist = br * 0.2f;
+                string Arg(string k) => Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith(k))?[k.Length..];
+                var v = SysView.Works.BattleView;
+                _rig.SetView(Arg("--yaw=") is string y ? F(y) : Mathf.Atan2(v.X, v.Z), Arg("--pitch=") is string pt ? F(pt) : -0.18f, Arg("--dist=") is string d ? F(d) : br * 3f);
+            }
+            else GD.Print("--focus=battle: no battle here");
         }
         // test: --scroll=N scrolls the open empire tab down N px
         if (_frame == 30 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--scroll=")) is string scr) _hud.ScrollEmpire(int.Parse(scr[9..]));

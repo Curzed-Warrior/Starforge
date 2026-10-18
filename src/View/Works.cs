@@ -68,6 +68,7 @@ public partial class Works : Node3D
         BuildTraffic();
         BuildStations();
         BuildWarProps();
+        BuildFleets();
         BuildHabitats();
         BuildStreams();
         _great = new GreatWorks();
@@ -423,7 +424,7 @@ void fragment(){
     };
 
     // ---------- per frame ----------
-    public void Sync(Colony c) => _c = c;
+    public void Sync(Colony c, Simulation sim) { _c = c; _sim = sim; }
 
     public static string Hide = "";
     public void Update(double year, float dt, Camera3D cam)
@@ -459,6 +460,8 @@ void fragment(){
         using (Prof.T("great")) _great.Update(c, dt, rout);
         using (Prof.T("closeup")) _close.Update(c, dt, cam);
         using (Prof.T("mega")) Mega.Apply();
+        // fleets gather at any star, settled or not
+        using (Prof.T("fleets")) UpdateFleets(c, year, dt);
         if (c == null) { HideAll(); return; }
         using (Prof.T("traffic")) UpdateTraffic(c, year, dt, cam);
         using (Prof.T("stations")) UpdateStations(c, year);
