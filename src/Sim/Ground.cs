@@ -44,7 +44,13 @@ public partial class Simulation
     public double InvasionStrength(IEnumerable<Army> armies, Civ civ) => armies.Sum(a => a.Troops * a.Quality * (1 + a.Xp)) * GroundPower(civ);
 
     /// <summary>The holder's armies on the ground there, and (for the owner) the militia its people raise.</summary>
-    public double GarrisonStrength(Colony c)
+    public double GarrisonStrength(Colony c, Civ against = null)
+    {
+        double prepared = against != null && c.PreparedBy == against.Id && c.PreparedUntil > Year ? WarData.D("specops", "missions", "prepare_invasion", "garrison") : 1;
+        return prepared * GarrisonBase(c);
+    }
+
+    double GarrisonBase(Colony c)
     {
         var holder = Holder(c);
         double s = InvasionStrength(Armies.Where(a => a.Civ == holder.Id && a.Fleet < 0 && a.At == c.Star.Id), holder);
@@ -59,7 +65,7 @@ public partial class Simulation
     /// </summary>
     public bool Land(Colony c, Civ invader, List<Army> armies)
     {
-        double inv = InvasionStrength(armies, invader), gar = GarrisonStrength(c);
+        double inv = InvasionStrength(armies, invader), gar = GarrisonStrength(c, invader);
         if (inv <= gar * F("landingMargin"))
         {
             foreach (var a in armies) a.Troops *= 0.5;
@@ -127,7 +133,7 @@ public partial class Simulation
             if (!HoldsOrbit(att, c)) continue;
             var aboard = Armies.Where(a => a.Civ == att.Id && a.Fleet >= 0 && g.Any(f => f.Id == a.Fleet)).ToList();
             // land only with the strength to win; otherwise keep the blockade and wait for more troops
-            if (aboard.Count > 0 && InvasionStrength(aboard, att) > GarrisonStrength(c) * F("landingMargin")) Land(c, att, aboard);
+            if (aboard.Count > 0 && InvasionStrength(aboard, att) > GarrisonStrength(c, att) * F("landingMargin")) Land(c, att, aboard);
             else if (c.OccupiedBy < 0) c.BlockadedUntil = Year + F("orderEvery");
         }
     }

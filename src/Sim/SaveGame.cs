@@ -28,6 +28,8 @@ public static class SaveGame
         public Dictionary<int, double> Truce; public int TributeTo = -1; public double TributeUntil;
         // infighting (zero in older saves)
         public double JuntaUntil;
+        // special forces (missing in older saves: no academy)
+        public List<Training> Academy;
     }
     public class SlotDto { public string Id, Pinned; public double P; public List<string> Hand, LastHand; }
     public class StarDto { public int Id, Seed; public float X, Y, Z, Lum, Temp; public bool Dead, Kindled; public string Name, Cls, Special; }
@@ -51,6 +53,8 @@ public static class SaveGame
         // infighting (zero in older saves); the home system's worlds by body name
         public float Grievance; public int Unrest; public string Cause, CauseKey, Movement; public bool Autonomy; public double InvestedUntil;
         public Dictionary<string, float> WorldGrievance; public Dictionary<string, int> WorldUnrest;
+        // special forces' work (zero in older saves)
+        public double YardDownUntil, DepositsDownUntil, IncitedUntil, PreparedUntil; public int PreparedBy = -1;
     }
     public class ShipDto { public int Civ, Origin, Target, FromStar; public double Depart, Arrive; public string Name; }
     public class LogDto { public double Year; public int Civ, Star; public string System, Text, Kind; }
@@ -67,6 +71,7 @@ public static class SaveGame
         public Dictionary<int, List<string>> ForgedNames;
         public List<int[]> Lanes; public List<float[]> Quarantines; public List<string> Laws, Revealed; public double GateSealYear = 2600;
         public List<Fleet> Fleets; public List<Army> Armies; public int NextFleetId, NextArmyId;
+        public List<Team> Teams; public int NextTeamId;
         public List<War> Wars; public int NextWarId;
     }
 
@@ -94,9 +99,9 @@ public static class SaveGame
                 Culture = new[] { c.Culture.Martial, c.Culture.Duty, c.Culture.Resolve }, MandatoryService = c.MandatoryService, Mobilisation = c.Mobilisation,
                 MilShare = c.MilShare, MilFrom = c.MilFrom, MilSince = c.MilSince, Efficiency = c.Efficiency, Materiel = c.Materiel, Manpower = c.Manpower,
                 WarStrain = c.WarStrain, Yard = c.Yard, Barracks = c.Barracks, Truce = c.Truce, TributeTo = c.TributeTo, TributeUntil = c.TributeUntil,
-                JuntaUntil = c.JuntaUntil,
+                JuntaUntil = c.JuntaUntil, Academy = c.Academy,
             }).ToList(),
-            Fleets = sim.Fleets, Armies = sim.Armies, NextFleetId = sim.NextFleetId, NextArmyId = sim.NextArmyId, Wars = sim.Wars, NextWarId = sim.NextWarId,
+            Fleets = sim.Fleets, Armies = sim.Armies, NextFleetId = sim.NextFleetId, NextArmyId = sim.NextArmyId, Teams = sim.Teams, NextTeamId = sim.NextTeamId, Wars = sim.Wars, NextWarId = sim.NextWarId,
             Colonies = sim.Colonies.Select(c => new ColonyDto
             {
                 Civ = c.Civ.Id, Star = c.Star.Id, Home = c.Home, Complete = c.Complete, ProjectDone = c.ProjectDone, VisitorDone = c.VisitorDone,
@@ -114,6 +119,7 @@ public static class SaveGame
                 RivalName = c.Rival?.Name, RivalPlanet = c.Rival?.Planet?.Name, RivalStance = c.Rival?.Stance, RivalPop = c.Rival?.Pop ?? 0, RivalT0 = c.Rival?.T0 ?? 0, RivalShips = c.Rival?.Ships ?? 0,
                 WorksOverride = c.WorksOverride, OccupiedBy = c.OccupiedBy, BlockadedUntil = c.BlockadedUntil, DefenceLoss = c.DefenceLoss,
                 Grievance = c.Grievance, Unrest = c.Unrest, Cause = c.Cause, CauseKey = c.CauseKey, Movement = c.Movement, Autonomy = c.Autonomy, InvestedUntil = c.InvestedUntil,
+                YardDownUntil = c.YardDownUntil, DepositsDownUntil = c.DepositsDownUntil, IncitedUntil = c.IncitedUntil, PreparedUntil = c.PreparedUntil, PreparedBy = c.PreparedBy,
                 WorldGrievance = c.WorldGrievance.Count == 0 ? null : c.WorldGrievance.ToDictionary(k => k.Key.Name, k => k.Value),
                 WorldUnrest = c.WorldUnrest.Count == 0 ? null : c.WorldUnrest.ToDictionary(k => k.Key.Name, k => k.Value),
                 HasSplinter = c.Splinter.HasValue, SplFaction = c.Splinter?.Faction, SplPop = c.Splinter?.Pop ?? 0, SplAt = c.Splinter?.At ?? 0, SplBack = c.Splinter?.Back ?? 0, SplReturned = c.Splinter?.Returned ?? false,
@@ -212,6 +218,7 @@ public static class SaveGame
             c.Materiel = cd.Materiel; c.Manpower = cd.Manpower; c.WarStrain = cd.WarStrain;
             if (cd.Yard != null) c.Yard.AddRange(cd.Yard);
             if (cd.Barracks != null) c.Barracks.AddRange(cd.Barracks);
+            if (cd.Academy != null) c.Academy.AddRange(cd.Academy);
             c.NextYearly = cd.NextYearly; c.LastYearly = cd.LastYearly > 0 ? cd.LastYearly : d.Year; c.VoiceRelation = cd.VoiceRelation; c.Federation = cd.Federation;
             c.ComputeMods();
             if (cd.Leader != null) c.Leader = new Leader { Name = cd.Leader.Name, Drive = cd.Leader.Drive, Since = cd.Leader.Since, Born = cd.Leader.Born, Eternal = cd.Leader.Eternal };
@@ -264,6 +271,7 @@ public static class SaveGame
             if (cd.RivalName != null) c.Rival = new Rival { Name = cd.RivalName, Pop = cd.RivalPop, Ships = cd.RivalShips, Planet = sys.Find(cd.RivalPlanet ?? ""), T0 = cd.RivalT0, Stance = cd.RivalStance };
             c.WorksOverride = cd.WorksOverride; c.OccupiedBy = cd.OccupiedBy; c.BlockadedUntil = cd.BlockadedUntil; c.DefenceLoss = cd.DefenceLoss;
             c.Grievance = cd.Grievance; c.Unrest = cd.Unrest; c.Cause = cd.Cause; c.CauseKey = cd.CauseKey; c.Movement = cd.Movement; c.Autonomy = cd.Autonomy; c.InvestedUntil = cd.InvestedUntil;
+            c.YardDownUntil = cd.YardDownUntil; c.DepositsDownUntil = cd.DepositsDownUntil; c.IncitedUntil = cd.IncitedUntil; c.PreparedUntil = cd.PreparedUntil; c.PreparedBy = cd.PreparedBy;
             foreach (var (n, v) in cd.WorldGrievance ?? new()) if (sys.Find(n) is { } b) c.WorldGrievance[b] = v;
             foreach (var (n, v) in cd.WorldUnrest ?? new()) if (sys.Find(n) is { } b) c.WorldUnrest[b] = v;
             if (cd.HasSplinter) c.Splinter = (cd.SplFaction, cd.SplPop, cd.SplAt, cd.SplBack, cd.SplReturned);
@@ -291,6 +299,8 @@ public static class SaveGame
         if (d.Armies != null) sim.Armies.AddRange(d.Armies);
         sim.NextFleetId = Math.Max(d.NextFleetId, sim.Fleets.Select(x => x.Id + 1).DefaultIfEmpty(1).Max());
         sim.NextArmyId = Math.Max(d.NextArmyId, sim.Armies.Select(x => x.Id + 1).DefaultIfEmpty(1).Max());
+        if (d.Teams != null) sim.Teams.AddRange(d.Teams);
+        sim.NextTeamId = Math.Max(d.NextTeamId, sim.Teams.Select(x => x.Id + 1).DefaultIfEmpty(1).Max());
         return (sim, d.Seed);
     }
 }

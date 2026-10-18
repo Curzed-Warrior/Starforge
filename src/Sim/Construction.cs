@@ -395,7 +395,7 @@ public partial class Colony
         if (Year - Civ.LevyYear >= 1)
         {
             Civ.Strategic.Clear();
-            foreach (var c in Civ.Colonies) foreach (var x in c.Res.Strategic) Civ.Strategic.Add(x);
+            foreach (var c in Civ.Colonies) if (c.DepositsDownUntil <= Year) foreach (var x in c.Res.Strategic) Civ.Strategic.Add(x);
             EvaluateEmergency(Civ, Year);
             PlanSites(Civ); PlanLevies(Civ, Year);
         }
