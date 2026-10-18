@@ -26,7 +26,10 @@ public partial class Simulation
         {
             double ours = NavyStrength(c);
             lvl = foes.Any(o => NavyStrength(o) >= 0.6 * ours) ? 2 : 1;
-            if (c.Emergency) lvl = 3;                         // stage 2 adds: a home or capital-adjacent system occupied
+            // total war when the home system, or a system near it, is occupied (or the council has declared an emergency)
+            var home = c.Colonies.FirstOrDefault(x => x.Home);
+            float near = (float)(WarData.D("field", "supplyRangeGu") * c.M.Range);
+            if (c.Emergency || home != null && c.Colonies.Any(x => x.OccupiedBy >= 0 && x.Star.Pos.DistanceSquaredTo(home.Star.Pos) <= near * near)) lvl = 3;
         }
         else lvl = c.Relations.Any(r => r.Value < -40 && r.Key < Civs.Count && !Civs[r.Key].Dead) ? 1 : 0;
         return Math.Min(lvl, Comfort(c) + 1);
@@ -101,7 +104,11 @@ public partial class Simulation
     void YardStep(Civ c, double dy)
     {
         // stage 2: skip colonies under occupation
-        c.Materiel += c.Colonies.Sum(col => col.IndustryKg) * c.MilShare * c.Efficiency * dy;
+        // occupied and blockaded systems make nothing for their owner; a besieged station is repaired once the enemy leaves
+        c.Materiel += c.Colonies.Where(Free).Sum(col => col.IndustryKg) * c.MilShare * c.Efficiency * dy;
+        foreach (var col in c.Colonies)
+            if (col.DefenceLoss > 0 && col.OccupiedBy < 0 && !Fleets.Any(f => !f.Moving && f.At == col.Star.Id && c.AtWar.Contains(f.Civ)))
+                col.DefenceLoss = (float)Math.Max(0, col.DefenceLoss - WarData.D("field", "defenceRegenPerYear") * dy);
 
         var fleets = FleetsOf(c).ToList();
         double upk = WarData.D("economy", "upkeepPerYear") * dy;
@@ -182,7 +189,7 @@ public partial class Simulation
         }
         c.Materiel = Math.Max(0, c.Materiel - bill);
 
-        double pop = c.Pop;
+        double pop = c.Colonies.Where(Free).Sum(col => col.Pop);
         double underArms = armies.Sum(a => a.Troops) + c.Barracks.Sum(t => t.Troops);
         c.Manpower = Math.Max(0, pop * LevelD(c.Mobilisation, "manpower") * (c.MandatoryService ? WarData.D("economy", "mandatoryManpower") : 1)
                                  * (1 + 0.3 * c.Culture.Duty) - underArms);
@@ -190,7 +197,7 @@ public partial class Simulation
         // the garrison wanted, in standard armies; past maxArmies the armies grow bigger instead of more numerous
         double want = WarData.D("armies", "garrisonPerBillion") * pop * (c.Mobilisation >= 2 ? 4 : c.Mobilisation == 1 ? 2 : 1);
         double size = per * Math.Max(1, Math.Ceiling(want / WarData.D("armies", "maxArmies")));
-        var at = c.Colonies.OrderByDescending(col => col.Pop).FirstOrDefault();
+        var at = c.Colonies.Where(Free).OrderByDescending(col => col.Pop).FirstOrDefault();
         if (at == null) return;
         bool war = c.AtWar.Count > 0;
         int max = (int)WarData.D("armies", "maxArmies");

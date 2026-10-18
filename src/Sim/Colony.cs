@@ -34,6 +34,9 @@ public partial class Colony
     public bool Home;
     /// <summary>War in the field: the civ occupying this system (-1 when free).</summary>
     public int OccupiedBy = -1;
+    /// <summary>Blockaded until this year (no output reaches the owner); the share of the station destroyed in a siege.</summary>
+    public double BlockadedUntil;
+    public float DefenceLoss;
     public double Founded;
     public double L;                       // star luminosity, watts
     public double PlanetPower;             // planet-bound or fleet power, watts

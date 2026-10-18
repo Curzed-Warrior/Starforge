@@ -93,5 +93,23 @@ public static class FieldTests
             var r = Battles.Resolve(sim, new BattleSide { Civ = a, Fleets = { fa } }, new BattleSide { Civ = b, Fleets = { fb } });
             SelfTest.Check(r.BRetreats && fb.Ships > 0, $"a shaken, cautious fleet pulls out before it is destroyed ({r}, {fb.Ships})");
         }),
+        ("landing_needs_orbit", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien);
+            var col = o.Colonies.First(); var armies = new List<Army> { new() { Civ = h.Id, Troops = 1e6, Quality = 1 } };
+            SelfTest.Check(!sim.HoldsOrbit(h, col), "no orbit without a fleet there");
+            SelfTest.Check(sim.Land(col, h, armies) && col.OccupiedBy == h.Id, "an overwhelming landing takes the world");
+        }),
+        ("occupation_cuts_materiel", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var o = sim.Civs.First(c => c.Alien && c.Colonies.Count > 1);
+            double before = o.Materiel; sim.Warp(1); double peace = o.Materiel - before;
+            foreach (var c in o.Colonies) c.OccupiedBy = sim.Humanity.Id;
+            before = o.Materiel; sim.Warp(1);
+            SelfTest.Check(o.Materiel - before < peace * 0.1 + 1, $"occupied systems make nothing for their owner ({peace:0.0e0} then {o.Materiel - before:0.0e0})");
+        }),
+        ("garrison_holds", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien);
+            var col = o.Colonies.First(); var armies = new List<Army> { new() { Civ = h.Id, Troops = 1e-9, Quality = 0.6f } };
+            SelfTest.Check(!sim.Land(col, h, armies) && col.OccupiedBy < 0, "a token force is thrown back");
+        }),
     };
 }
