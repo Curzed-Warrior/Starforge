@@ -61,26 +61,8 @@ public partial class Main : Node3D
     static readonly bool _traceHitch = OS.GetCmdlineUserArgs().Contains("--hitch");
     string _shot;
     int _shotFrame = 90, _frame;
-    float _warp; bool _trace; int _logLines;
+    float _warp; bool _trace;
 
-    /// <summary>One line of war statistics at the end of a traced warp (docs/superpowers/plans/2026-10-19-war-in-the-field.md, Task 8).</summary>
-    void PrintWarStats(double years)
-    {
-        var wars = Sim.Wars; var ended = wars.Where(w => w.Ending != null).ToList();
-        string endings = string.Join(",", new[] { "surrender", "compromise", "ceasefire", "status quo", "collapse" }.Select(e => $"{e}:{ended.Count(w => w.Ending == e)}"));
-        int fought = Sim.Civs.Count(c => wars.Any(w => w.Has(c.Id)));
-        GD.Print($"WARSTATS wars={wars.Count} ended={ended.Count} battles={wars.Sum(w => w.Battles)} perwar={(wars.Count > 0 ? wars.Average(w => w.Battles) : 0):0.0} " +
-                 $"nobattle={ended.Count(w => w.Battles == 0)} endings={endings} civsfought={fought}/{Sim.Civs.Count} chronicle={_logLines * 100 / Math.Max(years, 1):0}");
-    }
-    /// <summary>One line of strife statistics at the end of a traced warp (docs/superpowers/plans/2026-10-19-infighting.md, Task 7).</summary>
-    void PrintStrifeStats(double years)
-    {
-        int N(string k) => Sim.StrifeStats.GetValueOrDefault(k);
-        int humans = Sim.Civs.Count(c => c.Human && !c.Dead && c.Colonies.Count > 0);
-        GD.Print($"STRIFESTATS movements={N("movements")} revolts={N("revolts")} peaceful={N("peaceful")} civilwars={N("civilwars")} coups={N("coups")} " +
-                 $"revolutions={N("revolutions")} uprisings={N("uprisings")} firstSolUprising={(Sim.FirstSolUprising > 0 ? Sim.FirstSolUprising.ToString("0") : "none")} " +
-                 $"humanity={humans} fractured={(humans >= 2 ? "yes" : "no")} chronicle={_logLines * 100 / Math.Max(years, 1):0}");
-    }
     Godot.Environment _env;
     float _directorT;
     Vector2 _pressPos;
@@ -142,42 +124,23 @@ public partial class Main : Node3D
         }
         else
         {
-            _gal = new Galaxy(seed);
-            _gal.PlaceSolAndNeighbours();
-            _gal.GenerateStars(2600);
-            Sim = new Simulation(_gal, seed);
+            Sim = Runs.NewGame(seed);
+            _gal = Sim.Gal;
         }
         bool loaded = PendingLoad != null;
         PendingLoad = null;
         _seed = seed;
-        if (_trace) Sim.Logged += e => { _logLines++; GD.Print($"  {e.Year:0000.0} [{e.Kind}] {(e.Civ.Main ? "" : e.Civ.Name + ": ")}{e.System}: {e.Text}"); };
-        if (_trace) foreach (var c in Sim.Civs.Where(x => x.Alien)) GD.Print($"ALIEN {c.Name} home={c.Colonies[0].Star.Name} cols={c.Colonies.Count} seat={c.Colonies[0].Seat?.Name}");
+        Func<int> logLines = _trace ? Runs.TraceChronicle(Sim) : () => 0;
         if (_warp > 0)
         {
             double y0 = Sim.Year;
             try { Warp(_warp); }
             catch (Exception ex) { GD.PrintErr(ex.ToString()); if (_trace) { GetTree().Quit(1); return; } }
-            if (_trace) { PrintWarStats(Sim.Year - y0); PrintStrifeStats(Sim.Year - y0); }
+            if (_trace) { Runs.PrintWarStats(Sim, logLines(), Sim.Year - y0); Runs.PrintStrifeStats(Sim, logLines(), Sim.Year - y0); }
         }
         if (OS.GetCmdlineUserArgs().Contains("--savetest"))
         {
-            // exercise the voice's edits to the universe so they round-trip too
-            var sol = Sim.Gal.Sol; var nb = Sim.Gal.Stars[sol.Near[5]];
-            Sim.KindleStar(sol.Pos); Sim.ForgeWorld(Sim.SystemFor(nb), BodyKind.Ocean); Sim.OpenLane(sol, nb); Sim.Quarantine(Sim.Gal.Stars[sol.Near[9]], 5);
-            Sim.RewriteLaw("research2", true); Sim.SnuffStar(Sim.Gal.Stars[sol.Near[12]]); Sim.MoveStar(Sim.Gal.Stars[sol.Near[14]], sol.Pos + new Vector3(0.7f, 0, 0.2f));
-            Sim.GiftTech(Sim.Humanity, Defs.TechById("UMB-2")); Sim.SteerBan(Sim.Humanity, Defs.TechById("S9"), 50);
-            // and the player's policies
-            var pol = Sim.Humanity.Policy; pol.Manual[(int)Area.Research] = true; pol.Weight["War"] = 1.6f; pol.Declined.Add("ringworld"); pol.PauseOn.Remove("Contact"); pol.AskAfter["war:3"] = 2400;
-            Sim.HomeColony.WorksOverride = 0.4;
-            SaveGame.Save(Sim, seed, "user://t1.json");
-            var (s2, _) = SaveGame.Load("user://t1.json");
-            SaveGame.Save(s2, seed, "user://t2.json");
-            string a = FileAccess.GetFileAsString("user://t1.json"), b = FileAccess.GetFileAsString("user://t2.json");
-            GD.Print($"SAVETEST equal={a == b} len={a.Length} colonies={Sim.Colonies.Count}/{s2.Colonies.Count} ships={Sim.Ships.Count}/{s2.Ships.Count}");
-            if (a != b) { int i = 0; while (i < a.Length && i < b.Length && a[i] == b[i]) i++; GD.Print("diff at " + i + ": " + a.Substring(Math.Max(0, i - 120), Math.Min(240, a.Length - Math.Max(0, i - 120)))); GD.Print("vs: " + b.Substring(Math.Max(0, i - 120), Math.Min(240, b.Length - Math.Max(0, i - 120)))); }
-            // and the loaded universe must keep running
-            s2.Step(200);
-            GD.Print($"SAVETEST after 200y: year={s2.Year:0} humanity={s2.Humanity.Colonies.Count}");
+            Runs.SaveTest(Sim, seed);
             GetTree().Quit(); return;
         }
         if (_trace && _shot == null) { GetTree().Quit(); return; }
@@ -293,42 +256,8 @@ public partial class Main : Node3D
     void Warp(float years)
     {
         Warping = true;
-        // --techlog: the year each civ first reaches each tier of each branch, and when the spine milestones land
-        bool techlog = OS.GetCmdlineUserArgs().Contains("--techlog");
-        var firsts = new SortedDictionary<string, double>();
-        Action<Civ, Tech> rec = (civ, t) =>
-        {
-            string who = civ.Main ? "Humanity" : civ.Name;
-            string k = $"{who} {t.B} T{t.Tier:00}";
-            if (!firsts.ContainsKey(k)) firsts[k] = Sim.Year;
-            if (civ.Main && (t.Spine || t.Keystone || t.Gate != null || t.Path != null)) GD.Print($"TECH {Sim.Year:0000.0} {t.Id} {t.Name}");
-        };
-        if (techlog) Simulation.TechLog += rec;
-        double end = Sim.Year + years, next = Sim.Year;
-        while (Sim.Year < end)
-        {
-            Sim.Step(Math.Min(0.5, end - Sim.Year));
-            if (_trace && Sim.Year >= next)
-            {
-                next += 10;
-                var h = Sim.HomeColony; var hu = Sim.Humanity;
-                GD.Print($"D {Sim.Year:0000} P={hu.Power:0.00e0}W K={Defs.Kardashev(hu.Power):0.000} KG={Defs.Kardashev(hu.GalacticPower):0.000} pop={hu.Pop:0.0} cap={h.Capture:0.0e0} stock={h.Stock / h.PFrac:0.00}P fnd={h.Foundries} hubs={string.Join(",", h.Hubs.Select(kv => kv.Key.Name + kv.Value))} set={string.Join(",", h.Settled.Select(kv => kv.Key.Name))} techs={hu.Techs.Count} res={string.Join("/", hu.Slots.Values.Select(sl => sl.Id + ":" + sl.P.ToString("0")))} rp={h.RpRate:0.0} cols={hu.Colonies.Count} ships={Sim.Ships.Count} civs={string.Join(" ", Sim.Civs.Where(c => !c.Dead).Select(c => c.Name.Split(' ').Last() + ":" + c.Colonies.Count))}");
-            }
-        }
+        Runs.Warp(Sim, years, _trace, OS.GetCmdlineUserArgs().Contains("--techlog"));
         Warping = false;
-        if (techlog)
-        {
-            Simulation.TechLog -= rec;
-            foreach (var (k, y) in firsts) if (k.StartsWith("Humanity")) GD.Print($"FIRST {k} {y:0000}");
-            var hu = Sim.Humanity;
-            GD.Print($"TECHLOG year={Sim.Year:0} humanity techs={hu.Techs.Count} spine={hu.Techs.Count(id => Defs.TechById(id).Spine)} path={hu.Path} hull={Defs.Hulls[hu.Hull]} war={Sim.WarStrength(hu):0.0} pools=[{string.Join(",", hu.Pools.Select(kv => kv.Key + "=" + kv.Value.ToString("0.00")))}] meters=[{string.Join(",", hu.Meters.Where(kv => kv.Value > 0.5).Select(kv => kv.Key + "=" + kv.Value.ToString("0")))}] gates=[{string.Join(",", hu.Gates.Select(kv => kv.Key + ":" + kv.Value))}]");
-            GD.Print("BUILT " + string.Join(" ", Sim.HomeColony.Built.OrderBy(kv => kv.Value).Select(kv => $"{kv.Key}={kv.Value:0.00}")));
-            var unknown = Defs.Techs.Where(t => !hu.Knows(t.Id)).ToList();
-            GD.Print($"UNKNOWN {unknown.Count}: avail={unknown.Count(t => Sim.Available(hu, t))} excl={unknown.Count(t => !Simulation.ExclusiveOk(hu, t))} gate={unknown.Count(t => t.Gate != null && hu.Gates.GetValueOrDefault(t.Gate) < 2)} prereq={unknown.Count(t => !hu.PrereqDone(t))} tier={unknown.Count(t => !Simulation.TierOk(hu, t))} cond={unknown.Count(t => !Sim.Gate(hu, t))} banned={hu.Banned.Count}");
-            GD.Print("AVAIL " + string.Join(" ", unknown.Where(t => Sim.Available(hu, t)).Select(t => t.Id)));
-            foreach (var c in Sim.Civs.Where(c => !c.Dead && c.Colonies.Count > 0))
-                GD.Print($"CIV {c.Name} age={c.Age} techs={c.Techs.Count} maxT={c.Techs.Max(id => Defs.TechById(id).Tier)} cols={c.Colonies.Count} war={Sim.WarStrength(c):0} apo={c.ApoScore} exalted={c.Exalted} fallen={c.Fallen} path={c.Path} acts={c.M.Acts.Count} gates={string.Join(",", c.Gates.Where(kv => kv.Value == 2).Select(kv => kv.Key))}");
-        }
     }
 
     void PlaceGalaxy()

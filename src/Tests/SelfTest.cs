@@ -16,18 +16,12 @@ public static class SelfTest
     public static void Check(bool ok, string what) { if (!ok) throw new Failed(what); }
 
     /// <summary>A fresh universe, built exactly as Main._Ready builds a new game.</summary>
-    public static Simulation NewSim(int seed = 20610)
-    {
-        var gal = new Galaxy(seed);
-        gal.PlaceSolAndNeighbours();
-        gal.GenerateStars(2600);
-        return new Simulation(gal, seed);
-    }
+    public static Simulation NewSim(int seed = 20610) => Runs.NewGame(seed);
 
     public static int Run(string filter)
     {
         int pass = 0, fail = 0;
-        foreach (var (name, body) in WarTests.All.Concat(FieldTests.All).Concat(StrifeTests.All).Where(t => string.IsNullOrEmpty(filter) || t.Name.Contains(filter)))
+        foreach (var (name, body) in WarTests.All.Concat(FieldTests.All).Concat(StrifeTests.All).Concat(AuditTests.All).Where(t => string.IsNullOrEmpty(filter) || t.Name.Contains(filter)))
         {
             try { body(); pass++; GD.Print($"SELFTEST PASS {name}"); }
             catch (Exception e) { fail++; GD.Print($"SELFTEST FAIL {name}: {(e is Failed ? e.Message : e.ToString())}"); }
