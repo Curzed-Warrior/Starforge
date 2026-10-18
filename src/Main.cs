@@ -612,9 +612,9 @@ public partial class Main : Node3D
         if (SysView.Works.BattleHere(out var centre, out float r))
         {
             SelectedBody = null;
-            _rig.FlyTo(BattleTarget(centre), r * 3f, r * 0.2f);
+            _rig.FlyTo(BattleTarget(centre), r * Works.BattleFrame, r * 0.2f);
             var v = SysView.Works.BattleView;
-            _rig.YawT = Mathf.Atan2(v.X, v.Z); _rig.PitchT = -0.18f;
+            _rig.YawT = Mathf.Atan2(v.X, v.Z); _rig.PitchT = Works.BattlePitch;
             _pendingBattle = -1;
         }
         else if (_pendingBattleT > 1f) { _hud.Toast("The battle is over: the fleets have moved on."); _pendingBattle = -1; }
@@ -1061,7 +1061,8 @@ public partial class Main : Node3D
                 _rig.Target = BattleTarget(bc); _rig.MinDist = br * 0.2f;
                 string Arg(string k) => Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith(k))?[k.Length..];
                 var v = SysView.Works.BattleView;
-                _rig.SetView(Arg("--yaw=") is string y ? F(y) : Mathf.Atan2(v.X, v.Z), Arg("--pitch=") is string pt ? F(pt) : -0.18f, Arg("--dist=") is string d ? F(d) : br * 3f);
+                _rig.SetView(Arg("--yaw=") is string y ? F(y) : Mathf.Atan2(v.X, v.Z), Arg("--pitch=") is string pt ? F(pt) : Works.BattlePitch, Arg("--dist=") is string d ? F(d) : br * Works.BattleFrame);
+                GD.Print($"FOCUSBATTLE yaw={_rig.Yaw:0.00} (the player's side; +3.14 for the far side) radius={br}");
             }
             else GD.Print("--focus=battle: no battle here");
         }

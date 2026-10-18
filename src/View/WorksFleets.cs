@@ -20,6 +20,15 @@ public partial class Works
     sealed class HullPool { public MultiMeshInstance3D Mi; public float[] Buf; public int N, Stride; }
     readonly Dictionary<int, HullPool> _hullPools = new();
     const int TransportKey = -1;
+    /// <summary>The gap between two battle lines, in lengths of the biggest hull there: close enough that from where the
+    /// camera frames the fight the big hulls read as ships, not specks.</summary>
+    const float GapHulls = 12f;
+    /// <summary>The battle camera's pitch: high enough that the two lines don't collapse into one.</summary>
+    public const float BattlePitch = -0.6f;
+    /// <summary>How far the battle camera sits from the centre, in battle radii: just outside the lines, so the nearer
+    /// line's hulls are large and the far one is still in frame.</summary>
+    public const float BattleFrame = 0.95f;
+    int _beamLimit = BeamMax;
 
     /// <summary>A hull to draw this frame: where (true system position), which way, how big (half-length, drawn).</summary>
     struct HullAt { public int Key; public D3 At; public Vector3 Fwd; public float Half; }
@@ -33,6 +42,7 @@ public partial class Works
     readonly List<int> _civsHere = new();
     readonly List<Fleet> _fleetsHere = new();
     readonly List<(int From, int To, float W)> _spans = new();
+    readonly Dictionary<int, double> _troops = new();
 
     // effects
     const int BeamMax = 64, BurstMax = 32, SparkMax = 256;
@@ -165,6 +175,10 @@ void fragment(){
             }
 
         // a battle: the newest one fought here within the window, or two sides at war sharing the star
+        // armies aboard, by fleet, in one pass
+        _troops.Clear();
+        foreach (var a in sim.Armies) if (a.Fleet >= 0) _troops[a.Fleet] = _troops.GetValueOrDefault(a.Fleet) + a.Troops;
+
         double show = WarData.D("interface", "battleShowYears");
         BattleRecord rec = null;
         foreach (var b in sim.BattlesAt(star, sim.Year - show)) rec = b;
@@ -205,8 +219,7 @@ void fragment(){
                     _entries.Add(new Entry { Civ = civId, Fleet = f.Id, Key = style * Ships.Classes + sq.Hull, N = n, LenKm = Ships.LengthKm(sq.Hull) });
                 }
                 // armies aboard: one transport per 50,000 troops (troops are counted in billions)
-                double troops = 0;
-                foreach (var a in sim.Armies) if (a.Fleet == f.Id) troops += a.Troops;
+                double troops = _troops.GetValueOrDefault(f.Id);
                 int nt = Ships.DrawCount(troops / 5e-5, left);
                 if (nt > 0) { left -= nt; any = true; _entries.Add(new Entry { Civ = civId, Fleet = f.Id, Key = TransportKey, N = nt, LenKm = TransportLenKm() }); }
             }
@@ -237,16 +250,16 @@ void fragment(){
             Drawn(centre, out _, out var tv);
             float dcam = Frame.Cam.DistanceTo(tv);
             float bigHalf = Half(maxLen, dcam);
-            float gap = 40f * 2f * bigHalf;
-            Formation(ca, centre - axis * (gap * 0.5f), axis, dcam, false, 0);
-            Formation(cb, centre + axis * (gap * 0.5f), -axis, dcam, false, 1);
-            // the battle's reach is half the gap at true scale: drawn sizes grow with the camera's distance, so they
-            // can't set the range the camera flies to
+            float gap = GapHulls * 2f * bigHalf;
+            float depthA = Formation(ca, centre - axis * (gap * 0.5f), axis, dcam, false, 0);
+            float depthB = Formation(cb, centre + axis * (gap * 0.5f), -axis, dcam, false, 1);
+            // the battle's reach (half the gap and the deeper line behind it) at true scale: drawn sizes grow with the
+            // camera's distance, so they can't set the range the camera flies to
             float trueHalf = maxLen * StarSystem.Km * 0.5f;
             _battleOn = true; _battleC = centre;
-            _battleR = gap * 0.5f * trueHalf / Math.Max(bigHalf, 1e-12f);
+            _battleR = (gap * 0.5f + Math.Max(depthA, depthB)) * trueHalf / Math.Max(bigHalf, 1e-12f);
             var mineSide = cb == sim.Humanity.Id ? axis : -axis;
-            BattleView = mineSide.Rotated(Vector3.Up, 0.35f);
+            BattleView = mineSide.Rotated(Vector3.Up, 1.3f);
             bool aLoses = rec != null ? !rec.AWins : Strength(sim, ca) < Strength(sim, cb);
             float shareA = rec != null && rec.LostA + rec.LostB > 0 ? (float)(rec.LostA / (rec.LostA + rec.LostB)) : aLoses ? 0.75f : 0.25f;
             string famA = rec?.FamA ?? Starforge.Sim.Battles.BestFamily(sim.Civs[ca]);
@@ -254,6 +267,7 @@ void fragment(){
             if (_famOverride?.Length == 2) { famA = _famOverride[0]; famB = _famOverride[1]; }
             Fire(0, famA, sim.Civs[ca].Color, axis);
             Fire(1, famB, sim.Civs[cb].Color, -axis);
+            _beamLimit = BeamMax;
             Explosions(shareA);
         }
         foreach (int civId in _civsHere)
@@ -348,7 +362,9 @@ void fragment(){
     {
         var p = Pool(key);
         if (p.N * p.Stride >= p.Buf.Length) return false;
-        var d = Drawn(at, out float sq, out _);
+        var d = Drawn(at, out float sq, out var tv);
+        // a hull right in front of the lens would fill the screen as a smear: leave it out
+        if (half > Frame.Cam.DistanceTo(tv) * 0.08f) return false;
         var b = Basis.LookingAt(-fwd, Mathf.Abs(fwd.Y) > 0.98f ? Vector3.Right : Vector3.Up).Scaled(Vector3.One * (half * sq));
         int o = p.N * p.Stride;
         Put(p.Buf, o, b, d);
@@ -366,19 +382,27 @@ void fragment(){
 
     // ---------- effects ----------
     /// <summary>A beam or tracer quad from a to b (true positions), as wide on screen at any range.</summary>
-    void Beam(D3 a, D3 b, Color col, float alpha, bool tail, float minW)
+    void Beam(D3 a, D3 b, Color col, float alpha, bool tail, float minW, float widthK = 0.002f)
     {
-        if (_nBeam >= BeamMax || alpha <= 0.01f) return;
+        if (_nBeam >= _beamLimit || alpha <= 0.01f) return;
         var da = Drawn(a, out float sq, out var ta);
-        var db = Drawn(b, out _, out _);
+        var db = Drawn(b, out _, out var tb);
         var dir = db - da; float len = dir.Length();
         if (len < 1e-9f) return;
         dir /= len;
-        var toCam = (Frame.Cam - ta).Normalized();
+        // the camera's nearest approach to the beam: a beam passing by the lens would sweep across the screen, so it fades
+        var seg = tb - ta; float sl = Math.Max(seg.Length(), 1e-12f);
+        float u = Mathf.Clamp((Frame.Cam - ta).Dot(seg) / (sl * sl), 0, 1);
+        var near = ta + seg * u;
+        float dClose = Frame.Cam.DistanceTo(near);
+        alpha *= Mathf.SmoothStep(sl * 0.08f, sl * 0.3f, dClose);
+        if (alpha <= 0.01f) return;
+        var toCam = (Frame.Cam - near).Normalized();
         var sideV = dir.Cross(toCam);
         if (sideV.LengthSquared() < 1e-6f) sideV = dir.Cross(Vector3.Up);
         sideV = sideV.Normalized();
-        float w = Math.Max(Frame.Cam.DistanceTo(ta) * 0.002f, minW) * sq;
+        // never under about 1.6 px wide: a thinner quad breaks up into dots on screen
+        float w = Math.Max(dClose * Math.Max(widthK, 0.0018f), Math.Min(minW, dClose * 0.01f)) * sq;
         int o = _nBeam++ * 20;
         Put(_beamBuf, o, new Basis(sideV * w, dir * len, sideV.Cross(dir)), da + dir * len * 0.5f);
         _beamBuf[o + 12] = col.R; _beamBuf[o + 13] = col.G; _beamBuf[o + 14] = col.B; _beamBuf[o + 15] = alpha;
@@ -404,6 +428,8 @@ void fragment(){
         var mine = _sideHulls[side]; var theirs = _sideHulls[1 - side];
         if (mine.Count == 0 || theirs.Count == 0) return;
         int slots = Math.Clamp(mine.Count, 4, BeamMax / 2);
+        // each side gets half the beam pool, so one family's many pieces can't starve the other side
+        _beamLimit = Math.Min(BeamMax, _nBeam + BeamMax / 2);
         var bright = col.Lerp(Colors.White, 0.35f);
         for (int i = 0; i < slots; i++)
         {
@@ -420,16 +446,17 @@ void fragment(){
             {
                 case "energy":
                     // lances of light, on for a moment, side colour
-                    if (ph < 0.4f) { float a = Mathf.Sin(Mathf.Pi * ph / 0.4f); Beam(from, to, bright, a * 1.5f, false, sh.Half * 0.15f); Spark(to, tg.Half * 0.5f, bright, a * 0.8f); }
+                    if (ph < 0.4f) { float a = Mathf.Sin(Mathf.Pi * ph / 0.4f); Beam(from, to, bright, a * 0.55f, false, sh.Half * 0.06f); Spark(to, tg.Half * 0.5f, bright, a * 0.8f); }
                     break;
                 case "kinetic":
                 {
                     // tracer streaks crossing the gap, a muzzle flash as they leave and a spark where they land
                     var head = from.Lerp(to, ph);
                     float len = dist * 0.12f;
-                    Beam(head - path / dist * Math.Min(len, dist * ph + 1e-6f), head, new Color(1f, 0.82f, 0.45f), 0.9f, true, sh.Half * 0.08f);
-                    if (ph < 0.1f) Spark(from, sh.Half * 0.35f, new Color(1f, 0.8f, 0.5f), 1f - ph * 10f);
-                    if (ph > 0.9f) Spark(to, tg.Half * 0.4f, new Color(1f, 0.7f, 0.4f), (ph - 0.9f) * 10f);
+                    // thin and faint: the hulls, not the rounds, are the picture
+                    Beam(head - path / dist * Math.Min(len, dist * ph + 1e-6f), head, new Color(1f, 0.85f, 0.6f), 0.18f, true, sh.Half * 0.03f);
+                    if (ph < 0.1f) Spark(from, sh.Half * 0.25f, new Color(1f, 0.8f, 0.5f), (1f - ph * 10f) * 0.6f);
+                    if (ph > 0.9f) Spark(to, tg.Half * 0.3f, new Color(1f, 0.7f, 0.4f), (ph - 0.9f) * 6f);
                     break;
                 }
                 case "missile":
@@ -437,13 +464,14 @@ void fragment(){
                     // missiles arc across; point defence picks a third of them off on the way in
                     bool shot = Hash(i, cyc, 9) % 3 == 0;
                     float end = shot ? 0.72f : 1f;
-                    for (int m = 0; m < 3; m++)
+                    if (ph <= end)
                     {
-                        float p = ph - m * 0.04f;
-                        if (p < 0 || p > end) continue;
-                        float arc = Mathf.Sin(Mathf.Pi * p);
-                        var lift = Vector3.Up.Cross(fwd).Normalized() * ((m - 1) * 0.06f * dist * arc) + Vector3.Up * (arc * dist * 0.12f);
-                        Spark(from.Lerp(to, p) + lift, sh.Half * 0.25f, new Color(1f, 0.95f, 0.85f), 1f, 0.9f);
+                        // a bright head on a short exhaust trail, along its arc
+                        D3 At(float p) => from.Lerp(to, p) + Vector3.Up * (Mathf.Sin(Mathf.Pi * p) * dist * 0.12f);
+                        var head = At(ph);
+                        var back = At(Math.Max(ph - 0.06f, 0f));
+                        Beam(back, head, new Color(1f, 0.75f, 0.45f), 0.8f, true, sh.Half * 0.05f, 0.0025f);
+                        Spark(head, sh.Half * 0.18f, new Color(1f, 0.97f, 0.9f), 1f, 0.6f);
                     }
                     if (shot && ph > end && ph < end + 0.08f) Spark(from.Lerp(to, end) + Vector3.Up * (Mathf.Sin(Mathf.Pi * end) * dist * 0.12f), tg.Half * 0.6f, new Color(1f, 1f, 0.9f), 1f - (ph - end) / 0.08f);
                     if (!shot && ph > 0.96f) Spark(to, tg.Half * 0.8f, new Color(1f, 0.6f, 0.3f), (ph - 0.96f) * 25f);
@@ -451,15 +479,23 @@ void fragment(){
                 }
                 case "craft":
                 {
-                    // swarms of strike craft: out across the gap, a pass over the enemy, and back
-                    if (i % 2 == 1) break;
+                    // a few tight swarms of strike craft fly out together to the enemy line and back, each craft a
+                    // point of light on a tiny trail
+                    if (i >= 5) break;
                     float e = 0.5f - 0.5f * Mathf.Cos(Mathf.Tau * ph);
-                    var c0 = from.Lerp(to, e * 0.95f);
-                    for (int k = 0; k < 7; k++)
+                    float sgn = Mathf.Sin(Mathf.Tau * ph) >= 0 ? 1f : -1f;
+                    var c0 = from.Lerp(to, e * 0.9f);
+                    var pd = path / dist * sgn;
+                    var lat = pd.Cross(Vector3.Up).Normalized();
+                    float spread = dist * 0.012f + sh.Half * 0.5f;
+                    for (int k = 0; k < 6; k++)
                     {
-                        float a = _fxT * 1.7f + k * Mathf.Tau / 7f + i;
-                        var off = new Vector3(Mathf.Cos(a), Mathf.Sin(a * 1.3f) * 0.5f, Mathf.Sin(a)) * (dist * 0.025f + sh.Half);
-                        Spark(c0 + off, sh.Half * 0.15f, bright, 1f, 0.7f);
+                        // a loose arrowhead, jostling a little
+                        int rank = (k + 1) / 2; float sideK = k == 0 ? 0 : k % 2 == 0 ? 1 : -1;
+                        var off = lat * (sideK * rank * spread) - pd * (rank * spread * 0.8f) + Vector3.Up * (Mathf.Sin(_fxT * 3f + k * 2.1f + i) * spread * 0.3f);
+                        var at = c0 + off;
+                        Beam(at - pd * (spread * 1.6f), at, bright, 0.5f, true, sh.Half * 0.02f);
+                        Spark(at, sh.Half * 0.1f, bright, 1f, 0.5f);
                     }
                     break;
                 }
@@ -468,12 +504,15 @@ void fragment(){
                     // exotic: violet arcs, crooked and flickering
                     if (ph > 0.55f) break;
                     int fl = (int)(_fxT * 9f) + i;
-                    var n = path.Cross(Vector3.Up).Normalized();
-                    var mid = from.Lerp(to, 0.5) + n * (((Hash(i, fl, 4) % 1000) / 1000f - 0.5f) * dist * 0.12f) + Vector3.Up * (((Hash(i, fl, 5) % 1000) / 1000f - 0.5f) * dist * 0.08f);
+                    // the kink stays small and across the line of fire, so the arc runs from shooter to target
+                    var n = path.Cross(Vector3.Up);
+                    if (n.LengthSquared() < 1e-6f * dist * dist) n = path.Cross(Vector3.Right);
+                    n = n.Normalized();
+                    var mid = from.Lerp(to, 0.4 + 0.2 * ((Hash(i, fl, 5) % 1000) / 1000.0)) + n * (((Hash(i, fl, 4) % 1000) / 1000f - 0.5f) * dist * 0.06f);
                     var violet = new Color(0.75f, 0.35f, 1f);
                     float a2 = Mathf.Sin(Mathf.Pi * ph / 0.55f);
-                    Beam(from, mid, violet, a2, false, sh.Half * 0.12f);
-                    Beam(mid, to, violet, a2, false, sh.Half * 0.12f);
+                    Beam(from, mid, violet, a2 * 0.5f, false, sh.Half * 0.05f);
+                    Beam(mid, to, violet, a2 * 0.5f, false, sh.Half * 0.05f);
                     Spark(to, tg.Half * 0.6f, violet, a2);
                     break;
                 }
@@ -494,11 +533,14 @@ void fragment(){
             if (hs.Count == 0 || k >= Math.Max(1, hs.Count / 2)) continue;
             float t = _fxT / 2.2f + i * 0.618034f;
             int cyc = (int)Mathf.Floor(t); float ph = Frac(t);
-            if (ph > 0.5f) continue;
-            float q = ph / 0.5f;
+            if (ph > 0.35f) continue;
+            float q = ph / 0.35f;
             var h = _hulls[hs[(int)(Hash(i, cyc, 11) % (uint)hs.Count)]];
-            var col = new Color(1f, 0.9f, 0.7f).Lerp(new Color(1f, 0.4f, 0.15f), q);
-            Glow(_burstBuf, ref _nBurst, BurstMax, h.At + h.Fwd * (h.Half * 0.3f), h.Half * (0.35f + 1.2f * q), col, Mathf.Pow(1f - q, 1.5f) * 1.3f, 0.7f);
+            var at = h.At + h.Fwd * (h.Half * 0.3f);
+            // a white flash, then a fireball that swells and cools fast
+            if (q < 0.3f) Spark(at, h.Half * (0.9f + q), new Color(1f, 0.98f, 0.9f), 2.6f * (1f - q / 0.3f), 1.2f);
+            var col = new Color(1f, 0.85f, 0.55f).Lerp(new Color(1f, 0.35f, 0.1f), q);
+            Glow(_burstBuf, ref _nBurst, BurstMax, at, h.Half * (0.6f + 2.4f * Mathf.Sqrt(q)), col, Mathf.Pow(1f - q, 2f) * 2.4f, 1.2f);
         }
     }
 }
