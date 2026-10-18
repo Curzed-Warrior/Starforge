@@ -7,7 +7,8 @@ using Starforge.Sim;
 namespace Starforge.View;
 
 /// <summary>
-/// Galaxy-scale view of the simulation: colony markers, ships crossing between stars, and the territory
+/// Galaxy-scale view of the simulation: colony markers, ships crossing between stars, the war layers (fleets and
+/// their courses, armies aboard, fronts, occupied and blockaded systems, recent battles), and the territory
 /// textures that tint empires and darken every star wrapped in a swarm.
 /// </summary>
 public partial class GalaxyOverlay : Node3D
@@ -16,8 +17,8 @@ public partial class GalaxyOverlay : Node3D
     Simulation _sim;
     MultiMeshInstance3D _markers, _shipHeads;
     ShaderMaterial _markerMat;
-    MeshInstance3D _lines;
-    ImmediateMesh _im;
+    MeshInstance3D _lines, _warLines;
+    ImmediateMesh _im, _warIm;
     ShaderMaterial _lineMat;
     public ImageTexture OwnTex, CapTex;
     Image _own, _cap;
@@ -63,6 +64,10 @@ void fragment(){ ALBEDO = v_col.rgb * v_col.a * alpha; }"
         };
         _lines = new MeshInstance3D { Mesh = _im, MaterialOverride = _lineMat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, ExtraCullMargin = 16384 };
         AddChild(_lines);
+        // the war layers' lines (fleet courses, fronts): rebuilt with the markers, not every frame
+        _warIm = new ImmediateMesh();
+        _warLines = new MeshInstance3D { Mesh = _warIm, MaterialOverride = _lineMat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, ExtraCullMargin = 16384 };
+        AddChild(_warLines);
 
         _own = Image.CreateEmpty(TexSize, TexSize, false, Image.Format.Rgba8);
         _cap = Image.CreateEmpty(TexSize, TexSize, false, Image.Format.Rgba8);
@@ -190,10 +195,129 @@ void fragment(){
             buf[o + 16] = size; buf[o + 17] = 1f; buf[o + 18] = 1f; buf[o + 19] = 0;
             k++;
         }
+        _warIm.ClearSurfaces();
+        if (!Works.Hide.Contains("warmap")) k = WarLayers(k);
         mm.Buffer = buf;
         mm.VisibleInstanceCount = k;
     }
     static readonly Color Gold = new(1f, 0.82f, 0.38f);
+
+    /// <summary>One marker into the buffer: position, colour, alpha, size in px, style, main-civ flag, style-specific w.</summary>
+    void Put(int k, Vector3 wp, Color col, float alpha, float size, float style, float main, float w)
+    {
+        var buf = _markerBuf;
+        int o = k * 20;
+        buf[o] = 1; buf[o + 1] = 0; buf[o + 2] = 0; buf[o + 3] = wp.X;
+        buf[o + 4] = 0; buf[o + 5] = 1; buf[o + 6] = 0; buf[o + 7] = wp.Y;
+        buf[o + 8] = 0; buf[o + 9] = 0; buf[o + 10] = 1; buf[o + 11] = wp.Z;
+        buf[o + 12] = col.R; buf[o + 13] = col.G; buf[o + 14] = col.B; buf[o + 15] = alpha;
+        buf[o + 16] = size; buf[o + 17] = style; buf[o + 18] = main; buf[o + 19] = w;
+    }
+
+    const float CeasefireDash = 4f;
+    readonly Dictionary<int, Fleet> _fleetById = new();
+    readonly HashSet<int> _carrying = new();
+
+    /// <summary>
+    /// The war layers, rebuilt with the markers (0.3 s): occupied and blockaded systems, battles younger than
+    /// interface.battleMapYears, fleets with their courses, armies aboard moving fleets, and the fronts of every open war
+    /// (the player's bright, others faint) and of every standing ceasefire (dim and dashed).
+    /// Markers go on after the colony markers from index k; lines go into their own mesh. Returns the new marker count.
+    /// </summary>
+    int WarLayers(int k)
+    {
+        double year = _sim.Year;
+        foreach (var c in _sim.Colonies)
+        {
+            if (k >= MaxMarkers) return k;
+            bool occupied = c.OccupiedBy >= 0, blockaded = c.BlockadedUntil > year;
+            if (!occupied && !blockaded) continue;
+            var wp = _main.StarWorld(c.Star);
+            if (occupied) Put(k++, wp, _sim.Civs[c.OccupiedBy].Color, 0.95f, 15f, 5f, 0f, 0f);
+            if (blockaded && k < MaxMarkers) Put(k++, wp, Ui.Danger, 0.9f, occupied ? 21f : 15f, 6f, 0f, 0f);
+        }
+        double showYears = WarData.D("interface", "battleMapYears");
+        for (int i = _sim.Battles.Count - 1; i >= 0 && k < MaxMarkers; i--)
+        {
+            var b = _sim.Battles[i];
+            double age = year - b.Year;
+            if (age > showYears) break;
+            if (age < 0) continue;
+            Put(k++, _main.StarWorld(_sim.Gal.Stars[b.Star]), new Color(1f, 0.85f, 0.6f), 1f, 26f, 7f, 0f, (float)(1 - age / showYears));
+        }
+
+        _fleetById.Clear();
+        _carrying.Clear();
+        foreach (var f in _sim.Fleets) _fleetById[f.Id] = f;
+        foreach (var a in _sim.Armies)
+            if (a.Fleet >= 0 && _fleetById.TryGetValue(a.Fleet, out var af) && af.Moving) _carrying.Add(af.Id);
+
+        bool any = false;
+        foreach (var f in _sim.Fleets)
+        {
+            if (k >= MaxMarkers) break;
+            double ships = 0;
+            foreach (var sq in f.Squadrons) ships += sq.Ships;
+            if (ships <= 0) continue;
+            var col = _sim.Civs[f.Civ].Color;
+            var p = _main.GalWorld(_sim.FleetPos(f));
+            float size = Mathf.Clamp(6f + 1.6f * (float)Math.Log10(Math.Max(ships, 1)), 6f, 17f);
+            Put(k, p, col, 1f, size, 3f, 0f, 0f);
+            int o = k++ * 20;
+            _markerBuf[o] = 0;                                         // basis x column = course (the shader turns the chevron along it)
+            if (!f.Moving) continue;
+            var to = _main.StarWorld(_sim.Gal.Stars[f.To]);
+            var course = (to - p).Normalized();
+            _markerBuf[o] = course.X; _markerBuf[o + 4] = course.Y; _markerBuf[o + 8] = course.Z;
+            if (_carrying.Contains(f.Id) && k < MaxMarkers) Put(k++, p, col.Lerp(Colors.White, 0.4f), 1f, 7f, 4f, 0f, 0f);
+            if (!any) { _warIm.SurfaceBegin(Mesh.PrimitiveType.Lines); any = true; }
+            _warIm.SurfaceSetColor(new Color(col.R, col.G, col.B, 0.55f)); _warIm.SurfaceAddVertex(p);
+            _warIm.SurfaceSetColor(new Color(col.R, col.G, col.B, 0.0f)); _warIm.SurfaceAddVertex(to);
+        }
+
+        int me = _sim.Humanity.Id;
+        // open wars, and ceasefires (a closed war whose front stays frozen) unless a later war between the two leads replaced it
+        for (int wi = 0; wi < _sim.Wars.Count; wi++)
+        {
+            var w = _sim.Wars[wi];
+            if (!w.Open && !w.Ceasefire) continue;
+            if (!w.Open && Superseded(wi)) continue;
+            var fronts = _sim.Fronts(w);
+            if (fronts.Count == 0) continue;
+            if (!any) { _warIm.SurfaceBegin(Mesh.PrimitiveType.Lines); any = true; }
+            float alpha = w.Has(me) ? 0.8f : 0.25f;
+            if (w.Ceasefire) alpha *= 0.4f;
+            var col = new Color(Ui.Danger.R, Ui.Danger.G, Ui.Danger.B, alpha);
+            foreach (var (from, to) in fronts)
+            {
+                StarInfo sa = _sim.Gal.Stars[from], sb = _sim.Gal.Stars[to];
+                var a = _main.StarWorld(sa);
+                var b = _main.StarWorld(sb);
+                // a ceasefire's front: every other piece of about CeasefireDash galaxy units
+                int segs = w.Ceasefire ? Math.Max(3, (int)(sa.Pos.DistanceTo(sb.Pos) / CeasefireDash) | 1) : 1;
+                for (int i = 0; i < segs; i += w.Ceasefire ? 2 : 1)
+                {
+                    _warIm.SurfaceSetColor(col); _warIm.SurfaceAddVertex(a.Lerp(b, (float)i / segs));
+                    _warIm.SurfaceSetColor(col); _warIm.SurfaceAddVertex(a.Lerp(b, (float)(i + 1) / segs));
+                }
+            }
+        }
+        if (any) _warIm.SurfaceEnd();
+        return k;
+    }
+
+    /// <summary>A later war, open or frozen, between the same two leads as war wi.</summary>
+    bool Superseded(int wi)
+    {
+        var w = _sim.Wars[wi];
+        int a = w.A[0], b = w.B[0];
+        for (int i = wi + 1; i < _sim.Wars.Count; i++)
+        {
+            var x = _sim.Wars[i];
+            if ((x.Open || x.Ceasefire) && x.Has(a) && x.Has(b)) return true;
+        }
+        return false;
+    }
 
     void UpdateShips(float zoomGal)
     {
