@@ -44,13 +44,15 @@ public partial class EmpireScreen
         if (sig == _warsSig) return;
         _warsSig = sig;
         Clear(_wars);
+        _wars.AddChild(Gap());
         _wars.AddChild(Ui.Label("WARS", 14, Ui.Accent, true));
-        if (open.Count == 0) _wars.AddChild(Note($"{Narrative2.Called(me, true)} is at peace."));
+        if (open.Count == 0) _wars.AddChild(Ui.Label($"{Narrative2.Called(me, true)} is at peace.", 15, Ui.Text));
         foreach (var w in open) WarCard(w, me);
 
         var past = Sim.Wars.Where(w => !w.Open && Simulation.Side(w, me) >= 0).Reverse().Take(5).ToList();
         if (past.Count > 0)
         {
+            _wars.AddChild(Gap());
             _wars.AddChild(Ui.Label("PAST WARS", 14, Ui.Accent, true));
             foreach (var w in past) _wars.AddChild(EndingLine(w, me));
         }
@@ -115,11 +117,11 @@ public partial class EmpireScreen
         g.AddChild(ScoreBar(score, 320));
         g.AddChild(Ui.Label($"{score:+0;-0;0}", 13, score > 0 ? Good : score < 0 ? Ui.Danger : Ui.Text, true));
         g.AddChild(Caption("Our exhaustion"));
-        g.AddChild(Bar(exhOurs / 100f, Ui.Warm, 320));
-        g.AddChild(Ui.Label($"{exhOurs:0}", 13));
+        g.AddChild(Bar(exhOurs / 100f, Ui.Warm.Lightened(0.15f), 320));
+        g.AddChild(Ui.Label($"{exhOurs:0} / 100", 13));
         g.AddChild(Caption("Their exhaustion"));
-        g.AddChild(Bar(exhTheirs / 100f, Ui.Warm, 320));
-        g.AddChild(Ui.Label($"{exhTheirs:0}", 13));
+        g.AddChild(Bar(exhTheirs / 100f, Ui.Warm.Lightened(0.15f), 320));
+        g.AddChild(Ui.Label($"{exhTheirs:0} / 100", 13));
         v.AddChild(g);
 
         // battles: hulls lost from the records of this war (the records keep only recent battles)
@@ -153,10 +155,14 @@ public partial class EmpireScreen
         var frow = new HFlowContainer();
         frow.AddChild(Caption("Fronts"));
         if (fronts.Count == 0) frow.AddChild(Mid(Ui.Label("none yet", 13, Ui.Dim)));
+        // a pair fought from both ends (each side stages at the other's target) shows once, as a two-way front
         foreach (var (from, to) in fronts)
         {
+            bool both = fronts.Contains((to, from));
+            if (both && from > to) continue;
             int target = to;
-            var b = Ui.Button($"{StarName(from)} → {StarName(to)}", "Fly to the target");
+            var b = Ui.Button(both ? $"{StarName(from)} ⇄ {StarName(to)}" : $"{StarName(from)} → {StarName(to)}",
+                both ? "Both sides stage at one end and strike at the other. Fly there" : "Staging system → target. Fly to the target");
             b.Pressed += () => { Visible = false; _main.TravelTo(Sim.Gal.Stars[target]); };
             frow.AddChild(b);
         }
@@ -264,9 +270,24 @@ public partial class EmpireScreen
     static Control ScoreBar(float score, float width)
     {
         float half = width / 2, v = Math.Clamp(score / 100f, -1, 1) * half;
-        var track = new ColorRect { Color = new Color(1, 1, 1, 0.08f), CustomMinimumSize = new Vector2(width, 10), SizeFlagsVertical = SizeFlags.ShrinkCenter, MouseFilter = MouseFilterEnum.Ignore };
+        if (score != 0 && Math.Abs(v) < 4) v = Math.Sign(score) * 4;   // a small score still shows
+        var box = new VBoxContainer { SizeFlagsVertical = SizeFlags.ShrinkCenter };
+        box.AddThemeConstantOverride("separation", 1);
+        var track = Bar(0, Ui.Text, width);
         track.AddChild(new ColorRect { Color = v >= 0 ? Good : Ui.Danger, Position = new Vector2(v >= 0 ? half : half + v, 0), Size = new Vector2(Math.Abs(v), 10), MouseFilter = MouseFilterEnum.Ignore });
-        track.AddChild(new ColorRect { Color = Ui.Dim, Position = new Vector2(half - 1, -2), Size = new Vector2(2, 14), MouseFilter = MouseFilterEnum.Ignore });
-        return track;
+        track.AddChild(new ColorRect { Color = Ui.Text, Position = new Vector2(half - 1, -3), Size = new Vector2(2, 16), MouseFilter = MouseFilterEnum.Ignore });
+        if (score != 0) track.AddChild(new ColorRect { Color = Colors.White, Position = new Vector2(half + v - (v > 0 ? 2 : 0), -3), Size = new Vector2(2, 16), MouseFilter = MouseFilterEnum.Ignore });
+        box.AddChild(track);
+        var scale = new HBoxContainer { CustomMinimumSize = new Vector2(width, 0) };
+        scale.AddChild(Ui.Label("−100 losing", 11, Ui.Dim));
+        scale.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
+        scale.AddChild(Ui.Label("even", 11, Ui.Dim));
+        scale.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
+        scale.AddChild(Ui.Label("winning +100", 11, Ui.Dim));
+        box.AddChild(scale);
+        return box;
     }
+
+    /// <summary>Space above a section heading.</summary>
+    static Control Gap() => new Control { CustomMinimumSize = new Vector2(0, 8), MouseFilter = MouseFilterEnum.Ignore };
 }

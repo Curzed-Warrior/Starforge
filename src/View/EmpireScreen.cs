@@ -397,10 +397,13 @@ public partial class EmpireScreen : PanelContainer
     // ---------- helpers ----------
     static void Clear(Node n) { foreach (var c in n.GetChildren()) { n.RemoveChild(c); c.QueueFree(); } }
 
-    /// <summary>A horizontal bar filled to v01 (0..1) over a faint track.</summary>
+    /// <summary>A horizontal bar filled to v01 (0..1) over an outlined track.</summary>
     static Control Bar(float v01, Color col, float width = 160)
     {
-        var track = new ColorRect { Color = new Color(1, 1, 1, 0.08f), CustomMinimumSize = new Vector2(width, 10), SizeFlagsVertical = SizeFlags.ShrinkCenter, MouseFilter = MouseFilterEnum.Ignore };
+        var track = new Panel { CustomMinimumSize = new Vector2(width, 10), SizeFlagsVertical = SizeFlags.ShrinkCenter, MouseFilter = MouseFilterEnum.Ignore };
+        var box = new StyleBoxFlat { BgColor = new Color(1, 1, 1, 0.1f), BorderColor = new Color(1, 1, 1, 0.3f) };
+        box.SetBorderWidthAll(1);
+        track.AddThemeStyleboxOverride("panel", box);
         track.AddChild(new ColorRect { Color = col, Size = new Vector2(width * Math.Clamp(v01, 0, 1), 10), MouseFilter = MouseFilterEnum.Ignore });
         return track;
     }

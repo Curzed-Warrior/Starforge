@@ -28,7 +28,7 @@ public static class Ui
             t.SetStylebox(n, "Button", b);
         t.SetColor("font_color", "Button", Text);
         t.SetColor("font_hover_color", "Button", Colors.White);
-        t.SetColor("font_disabled_color", "Button", new Color(0.4f, 0.45f, 0.5f));
+        t.SetColor("font_disabled_color", "Button", new Color(0.6f, 0.65f, 0.7f));
         t.SetColor("font_color", "Label", Text);
         t.SetFontSize("font_size", "Button", 14);
         t.SetColor("default_color", "RichTextLabel", Text);
