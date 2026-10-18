@@ -25,5 +25,24 @@ public static class AuditTests
             }
             SelfTest.Check(s2.Gal.Stars.Skip(before.Count).All(s => s.Kindled), "the kindled stars come back as kindled");
         }),
+        ("corrupt_save_falls_back", () => {
+            // a save cut off mid-write loads its backup (the save before it) instead of failing
+            var sim = SelfTest.NewSim(); sim.Warp(5);
+            SaveGame.Save(sim, 20610, "user://selftest_atomic.json");
+            sim.Warp(5);
+            SaveGame.Save(sim, 20610, "user://selftest_atomic.json");
+            var full = Godot.ProjectSettings.GlobalizePath("user://selftest_atomic.json");
+            var text = System.IO.File.ReadAllText(full);
+            System.IO.File.WriteAllText(full, text[..(text.Length / 2)]);
+            var (s2, _) = SaveGame.Load("user://selftest_atomic.json");
+            SelfTest.Check(Math.Abs(s2.Year - (sim.Year - 5)) < 0.01, $"loaded the backup (year {s2.Year:0.0})");
+            SelfTest.Check(!System.IO.File.Exists(full + ".tmp"), "no temporary file is left behind");
+        }),
+        ("history_export", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(60);
+            string md = HistoryExport.Markdown(sim, 20610);
+            SelfTest.Check(md.StartsWith("# A history of humanity") && md.Contains("## The 21st century") && md.Contains("| Systems |"), "a titled book, by century, with a closing table");
+            SelfTest.Check(sim.Chronicle.Count == 0 || md.Contains(sim.Chronicle[^1].Text.Trim()), "the latest entry is in it");
+        }),
     };
 }

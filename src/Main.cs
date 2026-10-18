@@ -117,12 +117,14 @@ public partial class Main : Node3D
             else if (a.StartsWith("--seq=")) { var p2 = a[6..].Split(','); _seqN = int.Parse(p2[0]); _seqEvery = int.Parse(p2[1]); _seqDir = p2.Length > 2 ? p2[2] : null; }
         }
 
+        string loadFailed = null;
         if (PendingLoad != null && FileAccess.FileExists(PendingLoad))
         {
-            (Sim, seed) = SaveGame.Load(PendingLoad);
-            _gal = Sim.Gal;
+            // a save neither it nor its backup can read starts a new game rather than a broken scene
+            try { (Sim, seed) = SaveGame.Load(PendingLoad); _gal = Sim.Gal; }
+            catch (Exception ex) { GD.PrintErr(ex.ToString()); loadFailed = "That save could not be read. A new game has begun."; PendingLoad = null; }
         }
-        else
+        if (Sim == null)
         {
             Sim = Runs.NewGame(seed);
             _gal = Sim.Gal;
@@ -171,6 +173,7 @@ public partial class Main : Node3D
         _hud = new Hud();
         AddChild(_hud);
         _hud.Setup(this);
+        if (loadFailed != null) _hud.Toast(loadFailed);
         Sim.Logged += OnLogged;
         _cine = new Cinematics { Name = "Cinematics" };
         AddChild(_cine);
@@ -248,6 +251,47 @@ public partial class Main : Node3D
     }
 
     public void SaveNow() { SaveGame.Save(Sim, _seed, SavePath); _hud.Toast("Saved"); }
+
+    /// <summary>
+    /// The simulation threw: stop time, write what happened (seed, year, stack) and an emergency save beside it, so
+    /// the game can go on from the last autosave and the bug can be reproduced headless from the seed or the save.
+    /// </summary>
+    void SimCrashed(Exception ex)
+    {
+        SpeedIdx = 0;
+        string stamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+        string log = $"user://crash_{stamp}.txt", save = $"user://crash_{stamp}.json";
+        GD.PrintErr(ex.ToString());
+        string saved = "no";
+        try { SaveGame.Save(Sim, _seed, save); saved = save; } catch (Exception e2) { GD.PrintErr("emergency save failed: " + e2.Message); }
+        try { System.IO.File.WriteAllText(ProjectSettings.GlobalizePath(log), $"Starforge simulation error\nseed {_seed}\nyear {Sim.Year:0.00}\nemergency save {saved}\n\n{ex}\n"); } catch { }
+        _hud?.Toast($"The simulation hit an error in {Sim.Year:0} and was paused. Report: {ProjectSettings.GlobalizePath(log)}");
+    }
+
+    /// <summary>F12: the frame as it is; Shift+F12: the same without the interface. Saved to user://screenshots.</summary>
+    async void Screenshot(bool clean)
+    {
+        bool hud = _hud.Visible;
+        if (clean && hud) { _hud.Visible = false; await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw); }
+        var img = GetViewport().GetTexture().GetImage();
+        if (clean && hud) _hud.Visible = true;
+        string dir = ProjectSettings.GlobalizePath("user://screenshots");
+        System.IO.Directory.CreateDirectory(dir);
+        string where = SelectedBody?.Name ?? ViewStar?.Name ?? "galaxy";
+        string path = System.IO.Path.Combine(dir, $"starforge_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}_{Sim.Year:0000}_{where.Replace(' ', '_')}.png");
+        img.SavePng(path);
+        _hud.Toast("Screenshot saved: " + path);
+    }
+
+    /// <summary>F6: the chronicle written out as a history book (Markdown) in user://histories.</summary>
+    void ExportHistory()
+    {
+        string dir = ProjectSettings.GlobalizePath("user://histories");
+        System.IO.Directory.CreateDirectory(dir);
+        string path = System.IO.Path.Combine(dir, $"history_seed{_seed}_{Sim.Year:0000}.md");
+        System.IO.File.WriteAllText(path, HistoryExport.Markdown(Sim, _seed));
+        _hud.Toast("History written: " + path);
+    }
 
     public void MenuClosed() { if (SpeedIdx == 0) SpeedIdx = _speedBeforeMenu; }
 
@@ -663,6 +707,8 @@ public partial class Main : Node3D
                 case Key.F: Autoplay = !Autoplay; break;
                 case Key.B: _overlay.ShowBorders = !_overlay.ShowBorders; break;
                 case Key.F5: SaveNow(); break;
+                case Key.F6: ExportHistory(); break;
+                case Key.F12: Screenshot(k.ShiftPressed); break;
                 case Key.F9: if (FileAccess.FileExists(SavePath)) { PendingLoad = SavePath; GetTree().ReloadCurrentScene(); } break;
                 case Key.Escape:
                     if (_hud.MenuOpen) _hud.HideMenu();
@@ -804,7 +850,8 @@ public partial class Main : Node3D
         while (done < want && sw.ElapsedMilliseconds < 12)
         {
             double step = Math.Min(want - done, 1.0);
-            Sim.Step(step);
+            try { Sim.Step(step); }
+            catch (Exception ex) { SimCrashed(ex); break; }
             done += step;
         }
         long tSim = sw.ElapsedTicks;

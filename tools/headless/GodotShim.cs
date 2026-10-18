@@ -150,6 +150,11 @@ public static class GD
     public static float Randf() => _r.NextSingle();
 }
 
+public static class ProjectSettings
+{
+    public static string GlobalizePath(string p) => FileAccess.Globalize(p);
+}
+
 public static class OS
 {
     /// <summary>Set by the headless runner: the arguments after "--", as Godot would pass them.</summary>
