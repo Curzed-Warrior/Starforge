@@ -54,6 +54,8 @@ public class Fleet
 public class Team
 {
     public int Id, Civ, At, Target = -1, To = -1;
+    /// <summary>The civ that held the target when the team was sent: if anyone else holds it by the time it acts, the mission is off.</summary>
+    public int TargetCiv = -1;
     public string Name, Mission = "guard";
     public float Quality, Xp;
     public bool Rushed;

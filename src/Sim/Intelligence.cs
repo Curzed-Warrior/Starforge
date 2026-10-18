@@ -29,7 +29,6 @@ public partial class Simulation
         var ci = new Dictionary<int, double>();
         foreach (var o in Known(c))
         {
-            bool war = c.AtWar.Contains(o.Id), rival = c.Relations.GetValueOrDefault(o.Id) < 0;
             var near = o.Colonies.Concat(c.Colonies.Where(x => x.OccupiedBy == o.Id))
                 .OrderByDescending(x => aims.Contains(x.Star.Id)).ThenBy(x => x.Star.Pos.DistanceSquaredTo(home.Star.Pos)).Take(TargetsPerCiv);
             foreach (var col in near)
@@ -37,6 +36,7 @@ public partial class Simulation
                 var def = Holder(col);
                 if (def == c || def.Dead || !c.Met.Contains(def.Id) || TravelYears(c, home.Star, col.Star) > reach) continue;
                 if (!ci.TryGetValue(def.Id, out double d)) ci[def.Id] = d = CounterIntel(def);
+                bool war = c.AtWar.Contains(def.Id), rival = c.Relations.GetValueOrDefault(def.Id) < 0;
                 foreach (var m in Missions)
                 {
                     double v = MissionValue(c, col, m, war, rival);

@@ -166,5 +166,34 @@ public static class SpecOpsTests
                 && s2.NextTeamId == sim.NextTeamId, "teams and the academy round-trip");
             SelfTest.Check(c2.PreparedBy == h.Id && c2.PreparedUntil == 2500 && c2.YardDownUntil == 2490 && c2.DepositsDownUntil == 2480 && c2.IncitedUntil == 2470, "their work round-trips");
         }),
+        ("third_party_cede_aborts", () => {
+            // two splinters next door, so the target is within reach whoever holds it
+            var (sim, h, _, t) = Ready(); h.M.Hive = false;
+            var a = sim.Separate(h, h.Colonies.Where(x => !x.Home).Take(2).ToList(), h.Drive, peaceful: true);
+            var b = sim.Separate(h, h.Colonies.Where(x => !x.Home).Take(2).ToList(), h.Drive, peaceful: true);
+            a.M.Hive = b.M.Hive = false;
+            foreach (var x in new[] { a, b }) { h.Met.Add(x.Id); x.Met.Add(h.Id); }
+            var c = a.Colonies.First(); a.Relations[h.Id] = h.Relations[a.Id] = -50;
+            SelfTest.Check(sim.CanTarget(h, c, "incite"), "the first holder is a fair target");
+            sim.Dispatch(t, c, "incite"); t.To = -1; t.At = c.Star.Id; t.Due = sim.Year;     // already on site
+            sim.TransferColony(c, b);
+            SelfTest.Check(sim.CanTarget(h, c, "incite"), "the new holder would be a target too");
+            sim.Warp(1);
+            SelfTest.Check(t.Mission == "guard" && c.IncitedUntil <= sim.Year, "a world that changed hands is not hit for its new owner");
+        }),
+        ("peace_ends_war_missions", () => {
+            var (sim, h, o, t) = Ready(); var c = o.Colonies.First(x => sim.SlipsOf(x) > 0);
+            var f = sim.FleetsOf(o).First(); f.At = c.Star.Id; f.To = -1;
+            h.AtWar.Remove(o.Id); o.AtWar.Remove(h.Id);
+            SelfTest.Check(!sim.Fits(h, c, o, "sabotage_yard") && !sim.Fits(h, c, o, "assassinate"), "no yard sabotage or killing in peace");
+            h.AtWar.Add(o.Id); o.AtWar.Add(h.Id);
+            SelfTest.Check(sim.Fits(h, c, o, "sabotage_yard") && sim.Fits(h, c, o, "assassinate"), "at war, both");
+        }),
+        ("no_self_sabotage", () => {
+            var (sim, h, o, t) = Ready(); sim.DeclareWar(h, o);
+            var mine = h.Colonies.First(x => !x.Home && sim.SlipsOf(x) > 0 || x.Res.Strategic.Count > 0 && !x.Home); mine.OccupiedBy = o.Id;
+            SelfTest.Check(!sim.Fits(h, mine, o, "sabotage_yard") && !sim.Fits(h, mine, o, "sabotage_deposit"), "a council does not wreck its own occupied world");
+            SelfTest.Check(sim.Fits(h, mine, o, "prepare_invasion"), "but it prepares its liberation");
+        }),
     };
 }

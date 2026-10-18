@@ -57,7 +57,7 @@ public partial class Simulation
 
         // a team on its way to a target that has changed hands, gone or become pointless is recalled
         foreach (var t in TeamsOf(c).Where(t => t.To >= 0 && t.Mission != "guard").ToList())
-            if (!CanTarget(c, ColonyAtAny(t.Target), t.Mission)) { SpecCount("aborted"); t.To = -1; Dispatch(t, null, "guard"); }
+            if (!StillOn(t, ColonyAtAny(t.Target))) { SpecCount("aborted"); t.To = -1; Dispatch(t, null, "guard"); }
 
         // a team home for a year is ready for its next mission
         foreach (var t in TeamsOf(c).Where(t => t.Mission == "guard" && t.To < 0 && Year >= t.Arrive + 1).ToList()) OfferTeam(c, t);
@@ -98,20 +98,24 @@ public partial class Simulation
     }
 
     /// <summary>CanTarget past the reach and ownership checks: the act is known and there is something to work on.</summary>
-    bool Fits(Civ att, Colony c, Civ holder, string mission)
+    internal bool Fits(Civ att, Colony c, Civ holder, string mission)
     {
         if (!att.M.Acts.Contains(MissionAct(mission))) return false;
         return mission switch
         {
-            "sabotage_yard" => WorkingSlips(c) > 0,
-            "sabotage_deposit" => c.Res.Strategic.Count > 0 && c.DepositsDownUntil <= Year,
-            "assassinate" => AdmiralAt(c) != null,
+            // acts of war only at war; and never against a world that is not its holder's own (an occupied colony is wrecked for its owner)
+            "sabotage_yard" => att.AtWar.Contains(holder.Id) && c.Civ == holder && WorkingSlips(c) > 0,
+            "sabotage_deposit" => c.Civ == holder && c.Res.Strategic.Count > 0 && c.DepositsDownUntil <= Year,
+            "assassinate" => att.AtWar.Contains(holder.Id) && AdmiralAt(c) != null,
             "incite" => c.Civ == holder && !holder.M.Hive,
             "steal_tech" => holder.Techs.Any(id => Available(att, Defs.TechById(id))),
             "prepare_invasion" => att.AtWar.Contains(holder.Id),
             _ => false,
         };
     }
+
+    /// <summary>Is a sent team's mission still on: the same civ holds the target, and the mission can still be done there?</summary>
+    bool StillOn(Team t, Colony c) => c != null && Holder(c).Id == t.TargetCiv && CanTarget(Civs[t.Civ], c, t.Mission);
 
     /// <summary>Send a team: to a colony on a mission, or ("guard") home, where it adds to counter-intelligence.</summary>
     public void Dispatch(Team t, Colony target, string mission)
@@ -122,6 +126,7 @@ public partial class Simulation
         if (dest == null) return;
         t.Mission = guard ? "guard" : mission;
         t.Target = guard ? -1 : target.Star.Id;
+        t.TargetCiv = guard ? -1 : Holder(target).Id;
         t.Due = 0;
         if (t.At == dest.Id) { t.To = -1; t.Arrive = Year; if (!guard) t.Due = Year + S("onSiteYears"); return; }
         t.To = dest.Id; t.Arrive = Year + TravelYears(civ, Gal.Stars[t.At], dest);
@@ -159,7 +164,7 @@ public partial class Simulation
             var c = ColonyAtAny(t.Target);
             var att = Civs[t.Civ];
             string mission = t.Mission;
-            if (!CanTarget(att, c, mission)) { SpecCount("aborted"); Dispatch(t, null, "guard"); continue; }
+            if (!StillOn(t, c)) { SpecCount("aborted"); Dispatch(t, null, "guard"); continue; }
             var def = Holder(c);
             SpecCount("missions"); SpecCount("m:" + mission); SpecCount(t.Rushed ? "triedRushed" : "triedTrained");
             if (_r.NextDouble() < CaptureChance(t, def, mission)) { Captured(t, def, c); continue; }
