@@ -108,5 +108,29 @@ public static class WarTests
             sim.Warp(3);
             SelfTest.Check(c.Dead && !sim.FleetsOf(c).Any() && !sim.ArmiesOf(c).Any(), "a dead civ keeps no forces and throws nothing");
         }),
+        ("ending_limited_compromise", () => {
+            var sim = SelfTest.NewSim(); var h = sim.Humanity; h.Culture.Resolve = 0;
+            double give = WarModel.Concede(h, "border_claim", loserScore: -40, exhaustion: 50);
+            SelfTest.Check(Math.Abs(give - 70) < 1e-6, "limited stakes concede score + 0.6 x exhaustion");
+            var t = WarModel.ChooseTerms("border_claim", give, bothExhausted: false);
+            SelfTest.Check(t.Any(x => x.Id == "cede_claims") && WarModel.Ending(t, "border_claim") == "surrender", "the claims change hands");
+        }),
+        ("ending_survival_no_terms", () => {
+            var sim = SelfTest.NewSim(); var h = sim.Humanity;
+            SelfTest.Check(WarModel.Concede(h, "extermination", -90, 95) == 0, "no terms before collapse");
+            SelfTest.Check(double.IsPositiveInfinity(WarModel.Concede(h, "extermination", -90, 100)), "collapse at full exhaustion");
+            SelfTest.Check(WarModel.Ending(WarModel.ChooseTerms("extermination", 0, true), "extermination") == "none", "fight on");
+        }),
+        ("ending_ceasefire", () => {
+            var t = WarModel.ChooseTerms("independence", 5, bothExhausted: true);
+            SelfTest.Check(t.Count == 1 && t[0].Id == "ceasefire", "two exhausted sides freeze the front");
+            SelfTest.Check(WarModel.ChooseTerms("ideology", 999, false).All(x => WarModel.ReasonById("ideology").Terms.Contains(x.Id)), "only the reason's terms");
+        }),
+        ("resolve_holds_out", () => {
+            var sim = SelfTest.NewSim(); var h = sim.Humanity;
+            h.Culture.Resolve = 1; double hard = WarModel.Concede(h, "border_claim", -40, 50);
+            h.Culture.Resolve = -1; double soft = WarModel.Concede(h, "border_claim", -40, 50);
+            SelfTest.Check(hard < soft, "an unbreakable people concedes less");
+        }),
     };
 }
