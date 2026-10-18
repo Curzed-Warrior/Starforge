@@ -49,7 +49,7 @@ public partial class Simulation
         var holder = Holder(c);
         double s = InvasionStrength(Armies.Where(a => a.Civ == holder.Id && a.Fleet < 0 && a.At == c.Star.Id), holder);
         if (c.OccupiedBy < 0)
-            s += c.Pop * WarData.D("armies", "garrisonPerBillion") * WarData.D("armies", "troopsPerArmy") * GroundPower(holder) * (c.Home ? F("garrisonHome") : 1);
+            s += c.Pop * WarData.D("armies", "garrisonPerBillion") * WarData.D("armies", "troopsPerArmy") * F("militiaShare") * GroundPower(holder) * (c.Home ? F("garrisonHome") : 1);
         return s;
     }
 
@@ -109,7 +109,8 @@ public partial class Simulation
             }
             if (!HoldsOrbit(att, c)) continue;
             var aboard = Armies.Where(a => a.Civ == att.Id && a.Fleet >= 0 && g.Any(f => f.Id == a.Fleet)).ToList();
-            if (aboard.Count > 0) Land(c, att, aboard);
+            // land only with the strength to win; otherwise keep the blockade and wait for more troops
+            if (aboard.Count > 0 && InvasionStrength(aboard, att) > GarrisonStrength(c) * F("landingMargin")) Land(c, att, aboard);
             else if (c.OccupiedBy < 0) c.BlockadedUntil = Year + F("orderEvery");
         }
     }

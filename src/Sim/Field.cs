@@ -16,6 +16,8 @@ public partial class Simulation
 
     /// <summary>The colony at a star this step, or null.</summary>
     public Colony ColonyAt(int starId) => _colonyAt.TryGetValue(starId, out var c) ? c : null;
+    /// <summary>ColonyAt, falling back to a search before the first field step has built the index.</summary>
+    Colony ColonyAtAny(int starId) => _colonyAt.Count > 0 ? ColonyAt(starId) : Colonies.FirstOrDefault(c => c.Star.Id == starId);
 
     /// <summary>Send a fleet somewhere with a mission (defend, attack, raid, blockade). A fleet in flight goes on from where it lands.</summary>
     public void Order(Fleet f, int starId, string mission)
@@ -74,7 +76,11 @@ public partial class Simulation
         // embarked armies ride with their fleet; a fleet that is gone takes them with it
         var fleetById = Fleets.ToDictionary(f => f.Id);
         Armies.RemoveAll(a => a.Fleet >= 0 && !fleetById.ContainsKey(a.Fleet));
-        foreach (var a in Armies) if (a.Fleet >= 0) a.At = fleetById[a.Fleet].At;
+        foreach (var a in Armies)
+        {
+            if (a.Fleet >= 0) a.At = fleetById[a.Fleet].At;
+            else if (a.To >= 0 && Year >= a.Arrive) { a.At = a.To; a.To = -1; }
+        }
 
         // supply and morale
         double range = F("supplyRangeGu"), loss = F("supplyLossPerYear"), gain = F("supplyGainPerYear"), regen = F("moraleRegenPerYear");
@@ -147,19 +153,28 @@ public partial class Simulation
         return r;
     }
 
-    /// <summary>Our unoccupied system nearest any enemy system: where fleets gather before a strike.</summary>
+    /// <summary>
+    /// Where fleets gather before a strike: the enemy system nearest our capital, then our free system nearest that
+    /// (two linear passes, not every pair: big empires have a thousand systems).
+    /// </summary>
     Colony Frontier(Civ civ, List<Civ> enemies)
     {
-        Colony best = null; float bd = float.MaxValue;
+        var home = civ.Colonies.FirstOrDefault(c => c.Home) ?? civ.Colonies.FirstOrDefault();
+        if (home == null) return null;
+        Colony near = null; float bd = float.MaxValue;
+        foreach (var e in enemies)
+            foreach (var x in e.Colonies)
+            {
+                float d = home.Star.Pos.DistanceSquaredTo(x.Star.Pos);
+                if (d < bd) { bd = d; near = x; }
+            }
+        if (near == null) return null;
+        Colony best = null; bd = float.MaxValue;
         foreach (var c in civ.Colonies)
         {
             if (c.OccupiedBy >= 0) continue;
-            foreach (var e in enemies)
-                foreach (var x in e.Colonies)
-                {
-                    float d = c.Star.Pos.DistanceSquaredTo(x.Star.Pos);
-                    if (d < bd) { bd = d; best = c; }
-                }
+            float d = c.Star.Pos.DistanceSquaredTo(near.Star.Pos);
+            if (d < bd) { bd = d; best = c; }
         }
         return best;
     }
@@ -182,7 +197,17 @@ public partial class Simulation
         var enemies = civ.AtWar.Where(id => id < Civs.Count && !Civs[id].Dead).Select(id => Civs[id]).ToList();
         var claims = Wars.Where(w => w.Open && w.A.Contains(civ.Id)).SelectMany(w => w.Claims).ToHashSet();
 
-        Colony frontier = null, watch = null; Civ rival = null;
+        Colony frontier = null, watch = null; Civ rival = null; HashSet<int> hostile = null;
+        // at war, armies beyond the capital's own garrison ship out to the frontier, where the attack fleets gather
+        if (enemies.Count > 0 && !manual && (frontier = Frontier(civ, enemies)) != null && frontier != home)
+        {
+            bool keepOne = true;
+            foreach (var a in Armies.Where(a => a.Civ == civ.Id && a.Fleet < 0 && a.To < 0 && a.At != frontier.Star.Id).ToList())
+            {
+                if (a.At == home.Star.Id && keepOne) { keepOne = false; continue; }
+                a.To = frontier.Star.Id; a.Arrive = Year + TravelYears(civ, Gal.Stars[a.At], frontier.Star);
+            }
+        }
         foreach (var f in mine)
         {
             if (f.Morale < breakAt) { if (f.Target != home.Star.Id) Order(f, home.Star.Id, "defend"); continue; }
@@ -212,7 +237,8 @@ public partial class Simulation
             if (f.Mission == "defend")
             {
                 // an own system with enemies in its sky or under occupation, nearest first; otherwise the capital
-                pick = civ.Colonies.Where(c => c.OccupiedBy >= 0 || Fleets.Any(e => !e.Moving && e.At == c.Star.Id && civ.AtWar.Contains(e.Civ)))
+                hostile ??= Fleets.Where(e => !e.Moving && civ.AtWar.Contains(e.Civ)).Select(e => e.At).ToHashSet();
+                pick = civ.Colonies.Where(c => c.OccupiedBy >= 0 || hostile.Contains(c.Star.Id))
                     .Where(InReach).OrderBy(c => c.Star.Pos.DistanceSquaredTo(from.Pos)).FirstOrDefault() ?? home;
                 if (f.Target != pick.Star.Id) Order(f, pick.Star.Id, "defend");
                 continue;
@@ -236,7 +262,7 @@ public partial class Simulation
             string mission = f.Mission == "raid" ? "blockade" : f.Mission;
             // an attack carries armies from wherever it sets out
             if (mission == "attack" && !f.Moving)
-                foreach (var a in Armies.Where(a => a.Civ == civ.Id && a.Fleet < 0 && a.At == f.At).Take((int)F("embarkArmies")).ToList())
+                foreach (var a in Armies.Where(a => a.Civ == civ.Id && a.Fleet < 0 && a.To < 0 && a.At == f.At).Take((int)F("embarkArmies")).ToList())
                     a.Fleet = f.Id;
             Order(f, pick.Star.Id, mission);
         }

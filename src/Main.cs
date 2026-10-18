@@ -61,7 +61,17 @@ public partial class Main : Node3D
     static readonly bool _traceHitch = OS.GetCmdlineUserArgs().Contains("--hitch");
     string _shot;
     int _shotFrame = 90, _frame;
-    float _warp; bool _trace;
+    float _warp; bool _trace; int _logLines;
+
+    /// <summary>One line of war statistics at the end of a traced warp (docs/superpowers/plans/2026-10-19-war-in-the-field.md, Task 8).</summary>
+    void PrintWarStats(double years)
+    {
+        var wars = Sim.Wars; var ended = wars.Where(w => w.Ending != null).ToList();
+        string endings = string.Join(",", new[] { "surrender", "compromise", "ceasefire", "status quo", "collapse" }.Select(e => $"{e}:{ended.Count(w => w.Ending == e)}"));
+        int fought = Sim.Civs.Count(c => wars.Any(w => w.Has(c.Id)));
+        GD.Print($"WARSTATS wars={wars.Count} ended={ended.Count} battles={wars.Sum(w => w.Battles)} perwar={(wars.Count > 0 ? wars.Average(w => w.Battles) : 0):0.0} " +
+                 $"nobattle={ended.Count(w => w.Battles == 0)} endings={endings} civsfought={fought}/{Sim.Civs.Count} chronicle={_logLines * 100 / Math.Max(years, 1):0}");
+    }
     Godot.Environment _env;
     float _directorT;
     Vector2 _pressPos;
@@ -131,12 +141,14 @@ public partial class Main : Node3D
         bool loaded = PendingLoad != null;
         PendingLoad = null;
         _seed = seed;
-        if (_trace) Sim.Logged += e => GD.Print($"  {e.Year:0000.0} [{e.Kind}] {(e.Civ.Main ? "" : e.Civ.Name + ": ")}{e.System}: {e.Text}");
+        if (_trace) Sim.Logged += e => { _logLines++; GD.Print($"  {e.Year:0000.0} [{e.Kind}] {(e.Civ.Main ? "" : e.Civ.Name + ": ")}{e.System}: {e.Text}"); };
         if (_trace) foreach (var c in Sim.Civs.Where(x => x.Alien)) GD.Print($"ALIEN {c.Name} home={c.Colonies[0].Star.Name} cols={c.Colonies.Count} seat={c.Colonies[0].Seat?.Name}");
         if (_warp > 0)
         {
+            double y0 = Sim.Year;
             try { Warp(_warp); }
             catch (Exception ex) { GD.PrintErr(ex.ToString()); if (_trace) { GetTree().Quit(1); return; } }
+            if (_trace) PrintWarStats(Sim.Year - y0);
         }
         if (OS.GetCmdlineUserArgs().Contains("--savetest"))
         {

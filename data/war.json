@@ -83,14 +83,14 @@
     { "id": "existential",  "tier": "survival",  "name": "An existential threat", "terms": [] }
   ],
   "field": {
-    "declareRelation": -60, "maxWarTravelYears": 25, "claimsMax": 3, "allyRelation": 40, "truceYears": 20,
+    "declareRelation": -60, "maxWarTravelYears": 10, "claimsMax": 3, "allyRelation": 40, "truceYears": 20,
     "orderEvery": 0.5, "supplyRangeGu": 3.0, "supplyLossPerYear": 0.3, "supplyGainPerYear": 0.6,
-    "moraleRegenPerYear": 0.4, "retreatShipsShare": 0.3, "embarkArmies": 4,
+    "moraleRegenPerYear": 0.4, "retreatShipsShare": 0.3, "embarkArmies": 12,
     "defenceHullsBase": 4, "defenceHome": 3, "defenceRegenPerYear": 0.25,
-    "garrisonHome": 2.0, "landingMargin": 1.0,
+    "garrisonHome": 2.0, "militiaShare": 0.25, "landingMargin": 1.0, "stalemateScore": 5,
     "scorePerOccupied": 8, "scorePerClaimHeld": 20, "scorePerBattle": 2,
     "exhaustionPerYear": 3, "exhaustionPerLossShare": 40, "exhaustionPerOccupiedShare": 40,
-    "bothExhausted": 60, "minWarYears": 2, "reparationsShare": 0.2, "tributeShare": 0.1, "tributeYears": 50,
+    "bothExhausted": 60, "settleExhaustion": 40, "minWarYears": 2, "reparationsShare": 0.2, "tributeShare": 0.1, "tributeYears": 50,
     "logBattleShare": 0.1
   },
   "battle": {

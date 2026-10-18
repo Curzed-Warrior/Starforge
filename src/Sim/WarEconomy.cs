@@ -205,7 +205,9 @@ public partial class Simulation
         // the garrison wanted, in standard armies; past maxArmies the armies grow bigger instead of more numerous
         double want = WarData.D("armies", "garrisonPerBillion") * pop * (c.Mobilisation >= 2 ? 4 : c.Mobilisation == 1 ? 2 : 1);
         double size = per * Math.Max(1, Math.Ceiling(want / WarData.D("armies", "maxArmies")));
-        var at = c.Colonies.Where(Free).OrderByDescending(col => col.Pop).FirstOrDefault();
+        // at war, recruits train at the frontier; in peace, where the people are
+        var at = (c.AtWar.Count > 0 ? Frontier(c, c.AtWar.Where(id => id < Civs.Count && !Civs[id].Dead).Select(id => Civs[id]).ToList()) : null)
+                 ?? c.Colonies.Where(Free).OrderByDescending(col => col.Pop).FirstOrDefault();
         if (at == null) return;
         bool war = c.AtWar.Count > 0;
         int max = (int)WarData.D("armies", "maxArmies");

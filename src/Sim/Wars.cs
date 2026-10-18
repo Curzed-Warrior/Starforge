@@ -39,7 +39,7 @@ public partial class Simulation
     {
         if (a == b) return 0;
         if (LaneFrom(a, b) != null) return 0.1;
-        var ca = Colonies.FirstOrDefault(c => c.Star == a); var cb = ca == null ? null : Colonies.FirstOrDefault(c => c.Star == b);
+        var ca = ColonyAtAny(a.Id); var cb = ca == null ? null : ColonyAtAny(b.Id);
         if (ca != null && cb != null && ca.Civ == civ && cb.Civ == civ && ca.Done("gateway") && cb.Done("gateway")) return 0.1;
         return 0.15 + a.Pos.DistanceTo(b.Pos) * Galaxy.LyPerUnit / Math.Max(ShipSpeed(civ), 0.01f);
     }
@@ -49,7 +49,6 @@ public partial class Simulation
     {
         double years = F("maxWarTravelYears");
         double gu = years * Math.Max(Math.Max(ShipSpeed(a), ShipSpeed(b)), 0.01f) / Galaxy.LyPerUnit;
-        if (Folds(a) || Folds(b)) gu = Math.Max(gu, Math.Max(MaxRangeGu(a), MaxRangeGu(b)));
         float g2 = (float)(gu * gu);
         foreach (var x in a.Colonies)
             foreach (var y in b.Colonies)
@@ -198,11 +197,20 @@ public partial class Simulation
         if (Year - w.Start < F("minWarYears")) return;
         double be = F("bothExhausted");
         bool both = w.ExhA >= be && w.ExhB >= be;
+        // a stalemate: nobody is losing, so it ends only when both are worn out
+        if (Math.Abs(w.Score) < F("stalemateScore"))
+        {
+            if (!both) return;
+            bool truce = WarData.P("stakes", WarModel.ReasonById(w.Reason).Tier, "ceasefire").GetBoolean();
+            Offer(w, w.Score >= 0, new() { WarModel.TermById(truce ? "ceasefire" : "status_quo") });
+            return;
+        }
         if (w.Score > 0)
         {
             double give = WarModel.Concede(b, w.Reason, -w.Score, w.ExhB);
             var terms = WarModel.ChooseTerms(w.Reason, give, both);
-            if (terms.Count > 0) Offer(w, true, terms);
+            // a winner holds out for what it went to war for, and settles for less only once it is tired too
+            if (terms.Count > 0 && (WarModel.Ending(terms, w.Reason) != "compromise" || w.ExhA >= F("settleExhaustion"))) Offer(w, true, terms);
         }
         else
         {

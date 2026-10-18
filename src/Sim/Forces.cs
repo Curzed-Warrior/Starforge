@@ -55,6 +55,9 @@ public class Army
     public bool Rushed;
     /// <summary>The fleet carrying it, or -1 when it is on the ground.</summary>
     public int Fleet = -1;
+    /// <summary>Shipping between own systems: where it is bound (-1 when on the ground) and when it lands.</summary>
+    public int To = -1;
+    public double Arrive;
 }
 
 public static class Forces
