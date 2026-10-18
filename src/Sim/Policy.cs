@@ -5,7 +5,7 @@ using System.Linq;
 namespace Starforge.Sim;
 
 /// <summary>The areas of government a player can hand to the council or take into their own hands.</summary>
-public enum Area { Economy, Research, Construction, Colonisation, Military, Diplomacy, Production, Fleets, Interior }
+public enum Area { Economy, Research, Construction, Colonisation, Military, Diplomacy, Production, Fleets, Interior, Intelligence }
 
 /// <summary>
 /// How a civilisation is run. Every area is either left to the council (automatic, leaning on these priorities) or held
@@ -55,6 +55,7 @@ public class Policy
         Area.Fleets => "Where fleets go and what they do. Manual: your fleets wait for your orders.",
         Area.Production => "How much of the economy goes to war. Manual: you set the mobilisation level and mandatory service.",
         Area.Interior => "How the council answers unrest. Manual: each movement's demands come to you.",
+        Area.Intelligence => "Where special forces go and what they do. Manual: each ready team waits for your orders.",
         _ => ""
     };
 }
@@ -116,7 +117,7 @@ public partial class Simulation
         civ.Policy.Manual[(int)a] = manual;
         if (manual && a == Area.Production) civ.Policy.Mobilisation = civ.Mobilisation;   // start from the level in force
         if (manual) return;
-        string prefix = a switch { Area.Research => "research:", Area.Construction => "build:", Area.Colonisation => "seed:", Area.Military => "war:", Area.Diplomacy => "peace:", Area.Interior => "interior:", _ => null };
+        string prefix = a switch { Area.Research => "research:", Area.Construction => "build:", Area.Colonisation => "seed:", Area.Military => "war:", Area.Diplomacy => "peace:", Area.Interior => "interior:", Area.Intelligence => "intel:", _ => null };
         if (prefix != null) foreach (var x in Alerts.Where(x => x.Key != null && x.Key.StartsWith(prefix) && !x.Done)) { x.Done = true; x.Outcome = "Left to the council"; }
     }
 }

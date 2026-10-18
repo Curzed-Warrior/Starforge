@@ -57,6 +57,9 @@ public partial class Simulation
         foreach (var t in TeamsOf(c).Where(t => t.To >= 0 && t.Mission != "guard").ToList())
             if (!CanTarget(c, ColonyAtAny(t.Target), t.Mission)) { SpecCount("aborted"); t.To = -1; Dispatch(t, null, "guard"); }
 
+        // a team home for a year is ready for its next mission
+        foreach (var t in TeamsOf(c).Where(t => t.Mission == "guard" && t.To < 0 && Year >= t.Arrive + 1).ToList()) OfferTeam(c, t);
+
         bool war = c.AtWar.Count > 0;
         double men = S("manpowerPerTeam");
         while (TeamsOf(c).Count() + c.Academy.Count < cap && c.Materiel >= kg && c.Manpower >= men)

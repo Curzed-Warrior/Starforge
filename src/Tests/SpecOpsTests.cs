@@ -127,5 +127,31 @@ public static class SpecOpsTests
             sim.Teams.RemoveAll(x => x.Civ == h.Id);
             SelfTest.Check(sim.ActOptions(h).Contains("steal_tech") && sim.ActOptions(h).Contains("incite"), "without teams, the old acts still run");
         }),
+        ("war_aims_at_the_front", () => {
+            // aliens are centuries away at sublight; a secession war is next door
+            var (sim, h, _, t) = Ready();
+            var s = sim.Separate(h, h.Colonies.Where(x => !x.Home).Take(3).ToList(), h.Drive, peaceful: false);
+            h.Met.Add(s.Id); s.Met.Add(h.Id);
+            var c = s.Colonies.FirstOrDefault(x => sim.CanTarget(h, x, "prepare_invasion"));
+            SelfTest.Check(c != null && h.AtWar.Contains(s.Id), "a reachable enemy world");
+            var f = sim.FleetsOf(h).First(); f.Target = c.Star.Id;
+            var pick = sim.ChooseMission(h, t);
+            SelfTest.Check(pick?.Mission is "prepare_invasion" or "assassinate" or "sabotage_yard", $"at war, teams serve the war (got {pick?.Mission ?? "none"})");
+        }),
+        ("reverent_never_assassinate", () => {
+            var (sim, h, o, t) = Ready(); h.SetDrive(h.Drive, "Reverent"); sim.DeclareWar(h, o);
+            for (int i = 0; i < 20; i++) SelfTest.Check(sim.ChooseMission(h, t)?.Mission != "assassinate", "a Reverent council will not order a killing");
+        }),
+        ("manual_intel_asks", () => {
+            var (sim, h, o, t) = Ready(); sim.SetManual(h, Area.Intelligence, true);
+            sim.OfferTeam(h, t);
+            SelfTest.Check(sim.Alerts.Any(a => a.Cat == "Decision" && !a.Done && a.Key == "intel:" + t.Id) && t.Mission == "guard", "the player chooses");
+        }),
+        ("switch_player_teams", () => {
+            var (sim, h, o, t) = Ready(); sim.SetManual(h, Area.Intelligence, true); sim.OfferTeam(h, t);
+            var s = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: true);
+            sim.SwitchPlayer(s);
+            SelfTest.Check(t.Civ == h.Id && !sim.TeamsOf(s).Any() && sim.Alerts.Where(a => a.Key?.StartsWith("intel:") == true).All(a => a.Done), "teams stay with the old civ");
+        }),
     };
 }
