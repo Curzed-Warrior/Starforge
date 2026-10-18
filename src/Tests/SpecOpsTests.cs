@@ -102,13 +102,13 @@ public static class SpecOpsTests
         }),
         ("counter_intel_defends", () => {
             var (sim, h, o, t) = Ready();
-            // known skills and no guards yet, so neither chance sits at a clamp
+            // known skills, no guards yet and the lowest-risk mission, so no chance sits at a clamp
             sim.Teams.RemoveAll(x => x.Civ == o.Id); h.M.Spy = o.M.Spy = 1; h.M.Stealth = 1;
-            double p0 = sim.CaptureChance(t, o, "steal_tech");
+            double p0 = sim.CaptureChance(t, o, "sabotage_deposit");
             o.M.Acts.Add("spy"); for (int i = 0; i < 3; i++) sim.Teams.Add(new Team { Id = sim.NextTeamId++, Civ = o.Id, At = o.Colonies[0].Star.Id, Quality = 1 });
-            double p1 = sim.CaptureChance(t, o, "steal_tech");
+            double p1 = sim.CaptureChance(t, o, "sabotage_deposit");
             SelfTest.Check(p1 > p0 * 1.5, "guarding teams catch more spies");
-            t.Quality = 0.5f; SelfTest.Check(sim.CaptureChance(t, o, "steal_tech") > p1, "rushed teams are caught more often");
+            t.Quality = 0.5f; SelfTest.Check(sim.CaptureChance(t, o, "sabotage_deposit") > p1, "rushed teams are caught more often");
         }),
         ("target_changes_hands", () => {
             var (sim, h, o, t) = Ready(); var c = o.Colonies.First(x => !x.Home);
