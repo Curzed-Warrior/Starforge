@@ -56,8 +56,9 @@ public partial class Simulation
                 var mine = civ.Colonies.Where(c => !c.Home).OrderByDescending(c => c.Capture).Take(Math.Max(0, civ.Colonies.Count / 5)).ToList();
                 if (mine.Count >= 2)
                 {
-                    var split = Splinter(civ, civ.Drive, mine);
-                    split.Name = "the Machine Concord of " + mine[0].Sys.Name; split.Digital = 1;
+                    // a rising of machines, not a movement: always a war
+                    var split = Separate(civ, mine, civ.Drive, peaceful: false, name: "the Machine Concord of " + mine[0].Sys.Name);
+                    split.Digital = 1;
                     Log(home, $"Rogue minds in {Called()}'s networks stop answering and start governing. {mine.Count} colonies wake up as {split.Name}.", "loss", null);
                 }
                 else if (site != null) Narrative.StartCrisis(site, "secession");

@@ -72,6 +72,15 @@ public partial class Main : Node3D
         GD.Print($"WARSTATS wars={wars.Count} ended={ended.Count} battles={wars.Sum(w => w.Battles)} perwar={(wars.Count > 0 ? wars.Average(w => w.Battles) : 0):0.0} " +
                  $"nobattle={ended.Count(w => w.Battles == 0)} endings={endings} civsfought={fought}/{Sim.Civs.Count} chronicle={_logLines * 100 / Math.Max(years, 1):0}");
     }
+    /// <summary>One line of strife statistics at the end of a traced warp (docs/superpowers/plans/2026-10-19-infighting.md, Task 7).</summary>
+    void PrintStrifeStats(double years)
+    {
+        int N(string k) => Sim.StrifeStats.GetValueOrDefault(k);
+        int humans = Sim.Civs.Count(c => c.Human && !c.Dead && c.Colonies.Count > 0);
+        GD.Print($"STRIFESTATS movements={N("movements")} revolts={N("revolts")} peaceful={N("peaceful")} civilwars={N("civilwars")} coups={N("coups")} " +
+                 $"revolutions={N("revolutions")} uprisings={N("uprisings")} firstSolUprising={(Sim.FirstSolUprising > 0 ? Sim.FirstSolUprising.ToString("0") : "none")} " +
+                 $"humanity={humans} fractured={(humans >= 2 ? "yes" : "no")} chronicle={_logLines * 100 / Math.Max(years, 1):0}");
+    }
     Godot.Environment _env;
     float _directorT;
     Vector2 _pressPos;
@@ -148,7 +157,7 @@ public partial class Main : Node3D
             double y0 = Sim.Year;
             try { Warp(_warp); }
             catch (Exception ex) { GD.PrintErr(ex.ToString()); if (_trace) { GetTree().Quit(1); return; } }
-            if (_trace) PrintWarStats(Sim.Year - y0);
+            if (_trace) { PrintWarStats(Sim.Year - y0); PrintStrifeStats(Sim.Year - y0); }
         }
         if (OS.GetCmdlineUserArgs().Contains("--savetest"))
         {

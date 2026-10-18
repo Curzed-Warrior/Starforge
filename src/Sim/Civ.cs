@@ -61,6 +61,9 @@ public class Civ
     /// <summary>Things this civ does of its own accord, unlocked by act: effects; year each may next be tried.</summary>
     public readonly Dictionary<string, double> ActAt = new();
     public double WyrmUntil, OvermindUntil, NextYearly, LastYearly = 2061;
+    /// <summary>Infighting: a junta rules (Coups.cs) until this year.</summary>
+    public double JuntaUntil;
+    public bool Junta(double year) => JuntaUntil > year;
     public Civ Overlord;                                                  // an Imperial mandate's subject answers to this civ
     public int Federation = -1;                                           // id of the federation's founder, or -1
     public bool Custodian, Imperial;

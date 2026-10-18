@@ -27,7 +27,7 @@ public static class SelfTest
     public static int Run(string filter)
     {
         int pass = 0, fail = 0;
-        foreach (var (name, body) in WarTests.All.Concat(FieldTests.All).Where(t => string.IsNullOrEmpty(filter) || t.Name.Contains(filter)))
+        foreach (var (name, body) in WarTests.All.Concat(FieldTests.All).Concat(StrifeTests.All).Where(t => string.IsNullOrEmpty(filter) || t.Name.Contains(filter)))
         {
             try { body(); pass++; GD.Print($"SELFTEST PASS {name}"); }
             catch (Exception e) { fail++; GD.Print($"SELFTEST FAIL {name}: {(e is Failed ? e.Message : e.ToString())}"); }

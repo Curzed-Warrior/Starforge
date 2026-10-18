@@ -228,7 +228,7 @@ public partial class Simulation
     {
         var home = civ.Colonies.FirstOrDefault();
         if (home == null) return;
-        if (civ.OvermindUntil > Year) return;
+        if (civ.OvermindUntil > Year || civ.Junta(Year)) return;      // a junta rules by decree
         if (civ.M.Hive)
         {
             if (!civ.Used.Contains("hive")) { civ.Used.Add("hive"); Log(home, "Election day passes without an election. There is only agreement now.", "omen", null); }
@@ -244,7 +244,7 @@ public partial class Simulation
             var frontier = civ.Colonies.Where(c => !c.Home).OrderByDescending(c => c.Star.Pos.DistanceTo(home.Star.Pos)).Take(Math.Max(0, (int)(civ.Colonies.Count / (3 * civ.M.Admin)))).ToList();
             if (frontier.Count >= 2)
             {
-                var split = Splinter(civ, leaving, frontier);
+                var split = Separate(civ, frontier, leaving, peaceful: civ.Ethic != "Ruthless");
                 Log(home, $"Schism. {frontier.Count} colonies of the {civ.Faction(leaving)} declare themselves {split.Name}, and close their borders.", "loss", null);
                 if (civ.Main) Raise("Unrest", "Schism", $"{frontier.Count} colonies of the {civ.Faction(leaving)} break away as {split.Name}.", home);
                 return;
@@ -507,7 +507,7 @@ public partial class Simulation
             Log(HomeColony, "Type III. Humanity now commands the light of a hundred billion suns. Seen from Andromeda, a whole quarter of the Milky Way has gone dark.", "era", null);
             Milestone(HomeColony, "Type III", $"Year {Year:0}. Humanity now commands the light of a hundred billion suns. Seen from Andromeda, a quarter of the Milky Way has gone dark.", "galaxy");
         }
-        if (!Humanity.Used.Contains("typeii") && HomeColony.Capture >= 0.9)
+        if (!Humanity.Used.Contains("typeii") && HomeColony.Home && HomeColony.Capture >= 0.9)
         {
             Humanity.Used.Add("typeii");
             Milestone(HomeColony, "Type II", $"Year {Year:0}. The Sun is wrapped. Every photon it makes now works for humanity before it is allowed to leave.", "star");
@@ -563,6 +563,9 @@ public partial class Simulation
         civ.Dead = true;
         DisbandForces(civ);
         foreach (var o in Civs) { o.AtWar.Remove(civ.Id); }
+        // a player whose polity is gone goes on leading the largest human polity left
+        if (civ.Main && Civs.Where(c => c.Human && !c.Dead && c.Colonies.Count > 0).OrderByDescending(c => c.Colonies.Count).FirstOrDefault() is { } heir)
+            SwitchPlayer(heir);
         Log(Humanity.Colonies.FirstOrDefault(), $"{Narrative2.Called(civ, true)} {(civ.Main ? "are" : "are")} gone. The chronicle keeps their name.", "loss", null);
     }
 
@@ -632,6 +635,7 @@ public partial class Simulation
                 MobiliseStep(civ, yd);
                 YardStep(civ, yd);
                 BarracksStep(civ, yd);
+                StrifeStep(civ, yd);
             }
             if (Year >= civ.NextElection) { Election(civ); civ.NextElection = Year + 25; }
             foreach (var k in civ.Inf.Keys.ToList()) civ.Inf[k] = Math.Max(0.02f, civ.Inf[k] + (float)((_r.NextDouble() - 0.5) * 0.004 * dy));

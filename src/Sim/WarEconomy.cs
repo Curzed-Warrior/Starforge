@@ -32,6 +32,7 @@ public partial class Simulation
             if (c.Emergency || home != null && c.Colonies.Any(x => x.OccupiedBy >= 0 && x.Star.Pos.DistanceSquaredTo(home.Star.Pos) <= near * near)) lvl = 3;
         }
         else lvl = c.Relations.Any(r => r.Value < -40 && r.Key < Civs.Count && !Civs[r.Key].Dead) ? 1 : 0;
+        if (c.Junta(Year)) lvl = Math.Min(3, lvl + 1);           // a junta puts the economy on a war footing
         return Math.Min(lvl, Comfort(c) + 1);
     }
 
@@ -105,7 +106,8 @@ public partial class Simulation
     {
         // stage 2: skip colonies under occupation
         // occupied and blockaded systems make nothing for their owner; a besieged station is repaired once the enemy leaves
-        double made = c.Colonies.Where(Free).Sum(col => col.IndustryKg) * c.MilShare * c.Efficiency * dy;
+        double self = WarData.D("strife", "answers", "selfRuleIndustry");
+        double made = c.Colonies.Where(Free).Sum(col => col.IndustryKg * (col.Autonomy ? self : 1)) * c.MilShare * c.Efficiency * dy;
         // tribute to a victor, for as long as the peace says
         if (c.TributeTo >= 0 && Year < c.TributeUntil && c.TributeTo < Civs.Count && !Civs[c.TributeTo].Dead)
         {

@@ -119,6 +119,9 @@ public partial class EmpireScreen : PanelContainer
         string met = civ.Met.Count > 0 ? $"\n[color=#{dim}]Known: {string.Join(", ", civ.Met.Where(i => i < Sim.Civs.Count && !Sim.Civs[i].Dead).Select(i => $"{Sim.Civs[i].Name} ({civ.Relations.GetValueOrDefault(i):+0;-0})"))}[/color]" : "";
         string belief = civ.Faith > 0.05f || civ.Dread > 0.05f
             ? $"\n[color=#{Ui.Hex(Ui.Omen)}]Belief in the voice {civ.Faith * 100:0}%[/color]{(civ.Dread > 0.05f ? $"   [color=#{Ui.Hex(Ui.Danger)}]dread {civ.Dread * 100:0}%[/color]" : "")}" : "";
+        int Count(int s) => civ.Colonies.Count(c => c.Unrest == s);
+        string unrest = $"\nUnrest: {Count(1)} systems discontent · {Count(2)} on strike · {Count(3)} in insurgency · {Count(4)} in revolt"
+                        + (civ.Junta(Sim.Year) ? $" · junta until {civ.JuntaUntil:0}" : "");
         string auto = string.Join("  ·  ", Enum.GetValues<Area>().Select(a => civ.Policy.IsManual(a) ? $"[color=#{Ui.Hex(Ui.Warm)}]{a}: you[/color]" : $"{a}: council"));
         _overview.Text = $"[font_size=26][color=#{Ui.Hex(civ.Color)}][b]{civ.Name.ToUpper()}[/b][/color][/font_size]\n" +
             $"[color=#{Ui.Hex(Ui.Warm)}]{gov.Name}[/color] · {civ.Faction(civ.Drive)} {(gov == Government.Assembly ? "hold the council" : "ascendant")} · {civ.Drive} · {civ.Ethic}\n" +
@@ -129,7 +132,7 @@ public partial class EmpireScreen : PanelContainer
             $"Who decides: {auto}\n" +
             $"War culture: {Cultures.Describe(civ.Culture)}\n" +
             $"{Simulation.Level(civ.Mobilisation).GetProperty("name").GetString()} · {civ.MilShare * 100:0}% of industry to the war (efficiency {civ.Efficiency * 100:0}%) · " +
-            $"materiel {Hud.Sci(civ.Materiel)} kg · navy {Sim.FleetsOf(civ).Sum(f => f.Ships):0} hulls in {Sim.FleetsOf(civ).Count()} fleets · {Sim.ArmiesOf(civ).Count()} armies" + belief + wars + met;
+            $"materiel {Hud.Sci(civ.Materiel)} kg · navy {Sim.FleetsOf(civ).Sum(f => f.Ships):0} hulls in {Sim.FleetsOf(civ).Count()} fleets · {Sim.ArmiesOf(civ).Count()} armies" + unrest + belief + wars + met;
         var keys = Defs.Drives.Keys.ToArray();
         _legend.Text = string.Join(" · ", keys.Select(k => $"{civ.Faction(k)} {civ.Inf.GetValueOrDefault(k) * 100:0}%"));
         for (int i = 0; i < 3; i++) _factionBars[i].CustomMinimumSize = new Vector2(Math.Max(2, civ.Inf.GetValueOrDefault(keys[i]) * 890f), 6);
@@ -160,6 +163,21 @@ public partial class EmpireScreen : PanelContainer
             grid.AddChild(b);
         }
         _policies.AddChild(grid);
+
+        // the human polities that broke away: the player can go and lead one instead
+        var splinters = Sim.Civs.Where(c => c != civ && c.Human && !c.Dead && c.Colonies.Count > 0).ToList();
+        if (splinters.Count > 0)
+        {
+            _policies.AddChild(Ui.Label("WHICH SIDE YOU ARE ON", 14, Ui.Accent, true));
+            _policies.AddChild(Note("Lead another human polity instead. Your policies come with you; the council runs the one you leave."));
+            foreach (var s in splinters)
+            {
+                var lb = Ui.Button($"Lead {s.Name}", $"{s.Colonies.Count} systems · {s.FmtPop()}");
+                var target = s;
+                lb.Pressed += () => { Sim.SwitchPlayer(target); BuildPolicies(); };
+                _policies.AddChild(lb);
+            }
+        }
 
         _policies.AddChild(Ui.Label("ECONOMY", 14, Ui.Accent, true));
         var gov = Government.Of(civ);
