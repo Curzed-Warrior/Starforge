@@ -59,7 +59,7 @@ public static class FieldTests
             sim.DeclareWar(h, o); var f = sim.FleetsOf(h).First();
             var target = o.Colonies.Last(); sim.Order(f, target.Star.Id, "attack");
             sim.TransferColony(target, h); sim.Warp(1);
-            SelfTest.Check(target.Civ != h || f.Target != target.Star.Id || !f.Moving, "a fleet stops chasing a system its own side now holds");
+            SelfTest.Check(target.Civ == h && target.OccupiedBy < 0 && (f.Target != target.Star.Id || f.Mission != "blockade"), "our side never besieges or occupies a system it now holds (it may stage there)");
             SelfTest.Check(sim.Armies.All(a => a.Fleet < 0 || sim.Fleets.Any(x => x.Id == a.Fleet)), "no army aboard a missing fleet");
         }),
         ("counters_matter", () => {
@@ -144,6 +144,13 @@ public static class FieldTests
             foreach (var c in o.Colonies.Where(c => c.OccupiedBy < 0).ToList()) sim.DestroyColony(c, "test");
             sim.Warp(1);
             SelfTest.Check(w.Ending != null && !sim.FleetsOf(o).Any() && sim.Colonies.All(c => c.OccupiedBy < 0 || !sim.Civs[c.OccupiedBy].Dead), "a dead side's war ends cleanly");
+        }),
+        ("wars_are_fought", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(650);                                  // first contact comes around 2620
+            SelfTest.Check(sim.Wars.Count > 0, "wars are declared");
+            var ended = sim.Wars.Where(w => w.Ending != null).ToList();
+            SelfTest.Check(sim.Wars.Sum(w => w.Battles) >= sim.Wars.Count, $"battles in the wars ({sim.Wars.Sum(w => w.Battles)} in {sim.Wars.Count})");
+            SelfTest.Check(ended.All(w => w.Ending != "none"), "every ended war has an ending");
         }),
     };
 }

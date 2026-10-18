@@ -21,6 +21,13 @@ public partial class Simulation
     public void Order(Fleet f, int starId, string mission)
     {
         f.Mission = mission; f.Target = starId;
+        if (f.Moving && starId != f.To)
+        {
+            // turn around in flight: the fleet comes about at the star nearest where it is now
+            var p = FleetPos(f);
+            f.At = Gal.Stars.OrderBy(s => s.Pos.DistanceSquaredTo(p)).First().Id;
+            f.To = -1;
+        }
         if (!f.Moving) Send(f);
     }
 
@@ -140,6 +147,23 @@ public partial class Simulation
         return r;
     }
 
+    /// <summary>Our unoccupied system nearest any enemy system: where fleets gather before a strike.</summary>
+    Colony Frontier(Civ civ, List<Civ> enemies)
+    {
+        Colony best = null; float bd = float.MaxValue;
+        foreach (var c in civ.Colonies)
+        {
+            if (c.OccupiedBy >= 0) continue;
+            foreach (var e in enemies)
+                foreach (var x in e.Colonies)
+                {
+                    float d = c.Star.Pos.DistanceSquaredTo(x.Star.Pos);
+                    if (d < bd) { bd = d; best = c; }
+                }
+        }
+        return best;
+    }
+
     static double TraitD(string trait, string key, double dflt) =>
         WarData.P("battle", "traits", trait).TryGetProperty(key, out var v) ? v.GetDouble() : dflt;
 
@@ -158,11 +182,29 @@ public partial class Simulation
         var enemies = civ.AtWar.Where(id => id < Civs.Count && !Civs[id].Dead).Select(id => Civs[id]).ToList();
         var claims = Wars.Where(w => w.Open && w.A.Contains(civ.Id)).SelectMany(w => w.Claims).ToHashSet();
 
+        Colony frontier = null, watch = null; Civ rival = null;
         foreach (var f in mine)
         {
             if (f.Morale < breakAt) { if (f.Target != home.Star.Id) Order(f, home.Star.Id, "defend"); continue; }
             if (manual) continue;
-            if (enemies.Count == 0) { if (f.Target != home.Star.Id) Order(f, home.Star.Id, f.Mission == "blockade" ? "raid" : f.Mission); continue; }
+            if (enemies.Count == 0)
+            {
+                // peace: the home fleet guards the capital; the others hold the border facing the most hostile
+                // neighbour, or stay at the nearest of our own systems (a capital can be decades from the border)
+                string m = f.Mission == "blockade" ? "raid" : f.Mission;
+                Colony post;
+                if (m == "defend") post = home;
+                else
+                {
+                    rival ??= civ.Relations.Where(r => r.Value < -40 && r.Key < Civs.Count && !Civs[r.Key].Dead && Civs[r.Key].Colonies.Count > 0)
+                        .OrderBy(r => r.Value).Select(r => Civs[r.Key]).FirstOrDefault() ?? civ;
+                    post = rival != civ ? (watch ??= Frontier(civ, new() { rival }) ?? home)
+                        : ColonyAt(f.Moving ? f.To : f.At) is { } c0 && c0.Civ == civ ? c0
+                        : civ.Colonies.OrderBy(c => c.Star.Pos.DistanceSquaredTo(Gal.Stars[f.Moving ? f.To : f.At].Pos)).First();
+                }
+                if (f.Target != post.Star.Id && !(f.Target < 0 && f.At == post.Star.Id)) Order(f, post.Star.Id, m);
+                continue;
+            }
 
             var from = Gal.Stars[f.Moving ? f.To : f.At];
             bool InReach(Colony c) => TravelYears(civ, from, c.Star) <= reach;
@@ -175,13 +217,21 @@ public partial class Simulation
                 if (f.Target != pick.Star.Id) Order(f, pick.Star.Id, "defend");
                 continue;
             }
-            var targets = enemies.SelectMany(e => e.Colonies).Where(InReach).ToList();
+            // keep a target that is still the enemy's (and not already ours by occupation)
+            if (f.Target >= 0 && ColonyAt(f.Target) is { } cur && enemies.Contains(Holder(cur)) && (f.Mission == "blockade" || cur.OccupiedBy != civ.Id)) continue;
+            var targets = enemies.SelectMany(e => e.Colonies).Where(c => c.OccupiedBy != civ.Id).Where(InReach).ToList();
             if (f.Mission == "raid" || f.Mission == "blockade")
                 pick = targets.OrderByDescending(c => c.IndustryKg).FirstOrDefault();
             else
                 pick = targets.Where(c => claims.Contains(c.Star.Id)).OrderBy(c => c.Star.Pos.DistanceSquaredTo(from.Pos)).FirstOrDefault()
                     ?? targets.OrderBy(c => c.Star.Pos.DistanceSquaredTo(from.Pos)).FirstOrDefault();
-            if (pick == null) { if (f.Target != home.Star.Id) Order(f, home.Star.Id, f.Mission); continue; }
+            if (pick == null)
+            {
+                // nothing in reach from here: stage at our system nearest the enemy, and strike from there
+                frontier ??= Frontier(civ, enemies) ?? home;
+                if (f.Target != frontier.Star.Id) Order(f, frontier.Star.Id, f.Mission);
+                continue;
+            }
             if (f.Target == pick.Star.Id) continue;
             string mission = f.Mission == "raid" ? "blockade" : f.Mission;
             // an attack carries armies from wherever it sets out
