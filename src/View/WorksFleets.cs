@@ -73,6 +73,9 @@ public partial class Works
     /// <summary>For the battle record shown: how many ghost hulls each squadron draws (latched at first sight, so the
     /// set doesn't move as ships are built, laid up or arrive), and when each ghost slot blew up (effect clock).</summary>
     readonly Dictionary<long, int> _ghostLatch = new();
+    /// <summary>The latch has been filled for the record shown: a squadron first seen after that (a fleet arriving mid-battle)
+    /// draws no ghosts, so the explosions stay the battle's real losses.</summary>
+    bool _ghostLatched;
     readonly Dictionary<long, float> _deathAt = new();
     /// <summary>A squadron's key for its ghosts: fleet (-1 for a side wiped out) and hull class. A ghost slot's key is
     /// this shifted left 12 bits plus its index in the run.</summary>
@@ -317,7 +320,7 @@ void fragment(){
         // a new record (or a battle the view has only now come upon): the ghosts are counted afresh, and kills already
         // past are simply gone
         _killFresh = !_battleWas || !ReferenceEquals(rec, _killRec);
-        if (!ReferenceEquals(rec, _killRec)) { _killRec = rec; _ghostLatch.Clear(); _deathAt.Clear(); }
+        if (!ReferenceEquals(rec, _killRec)) { _killRec = rec; _ghostLatch.Clear(); _deathAt.Clear(); _ghostLatched = false; }
 
         // what to draw, squadron by squadron, inside the per-frame budget
         _entries.Clear();
@@ -344,7 +347,7 @@ void fragment(){
                     if (ghosts > 0)
                     {
                         long gk = GhostKey(f.Id, sq.Hull);
-                        if (!_ghostLatch.TryGetValue(gk, out g))
+                        if (!_ghostLatch.TryGetValue(gk, out g) && !_ghostLatched)
                         {
                             int with = Ships.DrawCount(sq.Ships + (total > 0 ? ghosts * sq.Ships / total : 0), left);
                             _ghostLatch[gk] = g = Math.Max(0, with - alive);
@@ -359,15 +362,18 @@ void fragment(){
                 int nt = Ships.DrawCount(troops / 5e-5, left);
                 if (nt > 0) { left -= nt; any = true; _entries.Add(new Entry { Civ = civId, Fleet = f.Id, Key = TransportKey, N = nt, LenKm = TransportLenKm() }); }
             }
-            // a side wiped out in the fight still shows the ships it lost, of its best hull, until the window closes
-            if (!any && ghosts > 0)
+            // a side wiped out in the fight still shows the ships it lost, of its best hull, until the window closes,
+            // even once a fleet of its own arrives
+            long wk = GhostKey(-1, civ.Hull);
+            if (ghosts > 0 && (_ghostLatched ? _ghostLatch.ContainsKey(wk) : !any))
             {
-                long gk = GhostKey(-1, civ.Hull);
+                long gk = wk;
                 if (!_ghostLatch.TryGetValue(gk, out int n)) _ghostLatch[gk] = n = Ships.DrawCount(ghosts, left);
                 n = Math.Min(n, left);
                 if (n > 0) { left -= n; _entries.Add(new Entry { Civ = civId, Fleet = -1, Key = style * Ships.Classes + civ.Hull, N = n, LenKm = Ships.LengthKm(civ.Hull), Ghost = gk }); }
             }
         }
+        if (rec != null) _ghostLatched = true;
         if (_entries.Count == 0) return;
         float maxLen = 0;
         foreach (var e in _entries) maxLen = Math.Max(maxLen, e.LenKm);
