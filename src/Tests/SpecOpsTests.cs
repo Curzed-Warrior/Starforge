@@ -101,7 +101,10 @@ public static class SpecOpsTests
             SelfTest.Check(!sim.Teams.Contains(t) && o.Relations[h.Id] <= Math.Max(-100, r0 - 24) && sim.Alerts.Any(a => a.Cat == "Incident"), "a captured team is a diplomatic incident");
         }),
         ("counter_intel_defends", () => {
-            var (sim, h, o, t) = Ready(); double p0 = sim.CaptureChance(t, o, "steal_tech");
+            var (sim, h, o, t) = Ready();
+            // known skills and no guards yet, so neither chance sits at a clamp
+            sim.Teams.RemoveAll(x => x.Civ == o.Id); h.M.Spy = o.M.Spy = 1; h.M.Stealth = 1;
+            double p0 = sim.CaptureChance(t, o, "steal_tech");
             o.M.Acts.Add("spy"); for (int i = 0; i < 3; i++) sim.Teams.Add(new Team { Id = sim.NextTeamId++, Civ = o.Id, At = o.Colonies[0].Star.Id, Quality = 1 });
             double p1 = sim.CaptureChance(t, o, "steal_tech");
             SelfTest.Check(p1 > p0 * 1.5, "guarding teams catch more spies");
