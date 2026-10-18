@@ -132,5 +132,33 @@ public static class WarTests
             h.Culture.Resolve = -1; double soft = WarModel.Concede(h, "border_claim", -40, 50);
             SelfTest.Check(hard < soft, "an unbreakable people concedes less");
         }),
+        ("old_save_defaults", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(5);
+            SaveGame.Save(sim, 20610, "user://selftest_old.json");
+            // strip the war fields to imitate a save from before this stage
+            var root = System.Text.Json.Nodes.JsonNode.Parse(Godot.FileAccess.GetFileAsString("user://selftest_old.json"));
+            var war = new HashSet<string> { "Culture", "Mobilisation", "MilShare", "MilFrom", "MilSince", "Efficiency", "Materiel", "Manpower", "WarStrain",
+                                            "Yard", "Barracks", "Fleets", "Armies", "NextFleetId", "NextArmyId", "MandatoryService", "HullMix" };
+            void Strip(System.Text.Json.Nodes.JsonNode n)
+            {
+                if (n is System.Text.Json.Nodes.JsonObject o) { foreach (var k in o.Select(p => p.Key).Where(war.Contains).ToList()) o.Remove(k); foreach (var p in o) Strip(p.Value); }
+                else if (n is System.Text.Json.Nodes.JsonArray a) foreach (var x in a) Strip(x);
+            }
+            Strip(root);
+            if (root["Civs"][0]["Policy"]["Manual"] is System.Text.Json.Nodes.JsonArray man) man.RemoveAt(man.Count - 1);   // the enum before Production
+            using (var f = Godot.FileAccess.Open("user://selftest_old.json", Godot.FileAccess.ModeFlags.Write)) f.StoreString(root.ToJsonString());
+            var (s2, _) = SaveGame.Load("user://selftest_old.json");
+            SelfTest.Check(Math.Abs(s2.Humanity.Culture.Duty - (-0.3f)) < 1e-4, "culture from lore");
+            SelfTest.Check(s2.Humanity.Policy.Manual.Length == Enum.GetValues<Area>().Length && Math.Abs(s2.Humanity.MilShare - 0.04) < 1e-9 && s2.Humanity.Efficiency == 1, "economy defaults");
+            s2.Warp(2);
+            SelfTest.Check(s2.FleetsOf(s2.Humanity).Any(), "fleets raised after loading");
+        }),
+        ("war_state_saved", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(30);
+            SaveGame.Save(sim, 20610, "user://selftest_war.json");
+            var (s2, _) = SaveGame.Load("user://selftest_war.json");
+            SelfTest.Check(s2.Fleets.Count == sim.Fleets.Count && s2.FleetsOf(s2.Humanity).Sum(f => f.Ships) == sim.FleetsOf(sim.Humanity).Sum(f => f.Ships), "fleets round-trip");
+            SelfTest.Check(s2.Humanity.Yard.Count == sim.Humanity.Yard.Count && s2.Humanity.Materiel == sim.Humanity.Materiel && s2.Armies.Count == sim.Armies.Count, "economy round-trips");
+        }),
     };
 }
