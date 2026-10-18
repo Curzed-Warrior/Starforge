@@ -106,6 +106,33 @@ public static class InterfaceTests
             SelfTest.Check(!sim.CanPropose(w, x, out var why) && !string.IsNullOrEmpty(why), "only the lead speaks for a side");
             SelfTest.Check(sim.CanPropose(w, h, out _), "the lead can");
         }),
+        ("grievance_causes_sum", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity;
+            var c = h.Colonies.Where(x => !x.Home).OrderByDescending(x => x.Star.Pos.DistanceTo(h.Colonies.First(y => y.Home).Star.Pos)).FirstOrDefault() ?? h.Colonies[0];
+            c.Autonomy = false; h.LevyOut[c] = 1;
+            var causes = sim.GrievanceCauses(c);
+            double target = sim.GrievanceTarget(c, out _);
+            double sum = causes.Where(x => x.Key != "relief").Sum(x => x.Points), relief = causes.Single(x => x.Key == "relief").Points;
+            SelfTest.Check(relief <= 0 && Math.Abs(Math.Clamp(sum * sim.GovFactor(c.Civ) + relief, 0, 100) - target) < 1e-6, "the breakdown adds up");
+            SelfTest.Check(causes.Any(x => x.Key == "levy") && causes[0].Points >= causes[^1].Points, "biggest first");
+        }),
+        ("shortage_when_materiel_runs_out", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity;
+            foreach (var col in h.Colonies) col.BlockadedUntil = sim.Year + 5;   // blockaded systems make nothing
+            h.Materiel = 0;
+            sim.Warp(1.1);
+            SelfTest.Check(h.SlipsWaiting > 0 && h.Yard.Any(s => s.Waiting), "slips wait");
+            SelfTest.Check(sim.Shortages(h).Any(s => s.Contains("materiel")), "and the shortage is named");
+        }),
+        ("economy_figures_yearly", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity;
+            h.MilShare = 0.3; sim.Warp(1.1);
+            SelfTest.Check(h.MadeKgYr > 0 && h.UpkeepKgYr >= 0, "the yard step records its year");
+        }),
+        ("draw_cap", () => {
+            SelfTest.Check(Starforge.View.Ships.DrawCount(3e6, 1000) == (int)WarData.D("interface", "squadronDrawMax"), "a million-ship squadron is drawn capped");
+            SelfTest.Check(Starforge.View.Ships.DrawCount(0.4, 10) == 1 && Starforge.View.Ships.DrawCount(5, 2) == 2 && Starforge.View.Ships.DrawCount(0, 10) == 0, "partial, budget-limited, empty");
+        }),
         ("terms_dead_enemy", () => {
             var (sim, h, o, w) = BorderWar();
             o.Dead = true;

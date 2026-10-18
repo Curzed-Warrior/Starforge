@@ -110,6 +110,18 @@ public partial class Simulation
 
     /// <summary>The target, with its biggest cause as a key of strife.causes.</summary>
     double GrievanceTarget(Colony c, out string causeKey, double meanInd, double exhaustion, Colony capital)
+        => GrievanceWork(c, out causeKey, meanInd, exhaustion, capital, null);
+
+    /// <summary>Every positive cause of a system's grievance, biggest first, then the relief as a negative entry.
+    /// The causes sum, times GovFactor, plus the relief (negative), clamped to 0..100, is GrievanceTarget.</summary>
+    public List<(string Key, string Phrase, double Points)> GrievanceCauses(Colony c)
+    {
+        var list = new List<(string Key, string Phrase, double Points)>();
+        GrievanceWork(c, out _, MeanIndustry(c.Civ), WarExhaustionOf(c.Civ), CapitalOf(c.Civ), list);
+        return list;
+    }
+
+    double GrievanceWork(Colony c, out string causeKey, double meanInd, double exhaustion, Colony capital, List<(string, string, double)> causes)
     {
         var civ = c.Civ;
         double best = 0, sum = 0; string top = null;
@@ -118,6 +130,7 @@ public partial class Simulation
             if (k <= 0) return;
             double v = SD("causes", key) * k;
             sum += v;
+            causes?.Add((key, CausePhrase[key], v));
             if (v > best) { best = v; top = key; }
         }
         if (!c.Autonomy) Add("levy", Math.Clamp(civ.LevyOut.GetValueOrDefault(c), 0, 1));
@@ -136,6 +149,11 @@ public partial class Simulation
         double relief = SD("relief", "base") + SD("relief", "megaOrder") * c.MegaOrder + SD("relief", "faith") * civ.Faith
                         + (c.Autonomy ? SD("relief", "autonomy") : 0) + (Year < c.InvestedUntil ? SD("relief", "invested") : 0);
         causeKey = top;
+        if (causes != null)
+        {
+            causes.Sort((a, b) => b.Item3.CompareTo(a.Item3));
+            causes.Add(("relief", "what eases it: its own order, faith, and investment", -relief));
+        }
         return Math.Clamp(sum * GovFactor(civ) - relief, 0, 100);
     }
 

@@ -106,6 +106,9 @@ public class Civ
     /// <summary>Where the military share stood when the level last changed, and when.</summary>
     public double MilFrom = 0.04, MilSince;
     internal (double, float) WarCacheKey = (double.NaN, 0); internal double WarCacheG, WarCacheR;
+    /// <summary>The war economy's last year, per year (WarEconomy.YardStep; transient, not saved): materiel made, the navy's upkeep bill,
+    /// ships laid up for want of it, slips waiting on materiel, slips idle from sabotage.</summary>
+    public double MadeKgYr, UpkeepKgYr, LaidUpYr; public int SlipsWaiting, SlipsSabotaged;
     /// <summary>The building slips and what is on them (WarEconomy.YardStep).</summary>
     public List<Slip> Yard = new();
     /// <summary>Recruits in training (WarEconomy.BarracksStep).</summary>
