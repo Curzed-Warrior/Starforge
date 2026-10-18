@@ -46,9 +46,9 @@ public partial class Works
 
     // effects
     const int BeamMax = 64, BurstMax = 32, SparkMax = 256;
-    MultiMeshInstance3D _beams, _bursts, _sparks, _drives;
-    float[] _beamBuf, _burstBuf, _sparkBuf, _driveBuf;
-    int _nBeam, _nBurst, _nSpark, _nDrive;
+    MultiMeshInstance3D _beams, _bursts, _sparks, _drives, _rings;
+    float[] _beamBuf, _burstBuf, _sparkBuf, _driveBuf, _ringBuf;
+    int _nBeam, _nBurst, _nSpark, _nDrive, _nRing;
     float _fxT;
     Simulation _sim;
     /// <summary>Test: --battlefam=A,B draws the battle with these weapon families (energy, kinetic, missile, craft, exotic).</summary>
@@ -70,15 +70,27 @@ public partial class Works
     const string FxShader = @"shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 float sqr(float x){ return x * x; }
-varying vec4 v_col; varying float v_shape;
-void vertex(){ v_col = COLOR; v_shape = INSTANCE_CUSTOM.x; }
+varying vec4 v_col; varying float v_shape; varying float v_open;
+void vertex(){ v_col = COLOR; v_shape = INSTANCE_CUSTOM.x; v_open = INSTANCE_CUSTOM.y; }
 void fragment(){
 	vec2 c = UV * 2.0 - 1.0;
-	float a;
-	if (v_shape < 2.5) a = sqr(clamp(1.0 - UV.y, 0.0, 1.0)) * exp(-c.x * c.x * 4.84);
-	else a = exp(-c.x * c.x * 6.0) * (0.6 + 0.4 * exp(-c.x * c.x * 60.0)) * smoothstep(0.0, 0.03, UV.y) * (1.0 - smoothstep(0.85, 1.0, UV.y));
-	ALBEDO = v_col.rgb * v_col.a * a * 2.0;
+	vec3 col = v_col.rgb;
+	if (v_shape < 1.5) {
+		// shock ring: a sharp bright rim on a faint fill
+		float r = length(c);
+		float a = (exp(-sqr((r - 0.82) * 11.0)) + 0.18 * exp(-r * r * 3.0)) * (1.0 - smoothstep(0.95, 1.0, r));
+		ALBEDO = col * v_col.a * a * 2.0;
+	} else if (v_shape < 2.5) {
+		// tail: bright at the head (+Y), fading behind
+		ALBEDO = col * v_col.a * sqr(clamp(1.0 - UV.y, 0.0, 1.0)) * exp(-c.x * c.x * 4.84) * 2.0;
+	} else {
+		// lance: a soft coloured glow round a white-hot core; open ends join the next piece without a gap
+		float ends = v_open > 0.5 ? 1.0 : smoothstep(0.0, 0.03, UV.y) * (1.0 - smoothstep(0.92, 1.0, UV.y));
+		float glow = exp(-c.x * c.x * 5.0), core = exp(-c.x * c.x * 28.0);
+		ALBEDO = (col * glow * 0.55 + mix(col, vec3(1.0), 0.7) * core) * v_col.a * ends * 1.6;
+	}
 }";
+    const float ShapeRing = 1f, ShapeTail = 2f, ShapeLance = 3f;
 
     void BuildFleets()
     {
@@ -89,6 +101,11 @@ void fragment(){
         _beams = new MultiMeshInstance3D { Multimesh = bmm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, CustomAabb = Everywhere };
         _beamBuf = new float[BeamMax * 20];
         _near.AddChild(_beams);
+        // explosions' shock rings, camera-facing quads in the same shader
+        var rmm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, UseCustomData = true, Mesh = new QuadMesh { Size = new Vector2(2, 2), Material = beamMat }, InstanceCount = BurstMax, VisibleInstanceCount = 0 };
+        _rings = new MultiMeshInstance3D { Multimesh = rmm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, CustomAabb = Everywhere };
+        _ringBuf = new float[BurstMax * 20];
+        _near.AddChild(_rings);
         // explosions, missiles, point-defence flashes, strike craft: the glow sprite that never shrinks below a few pixels
         _bursts = Glows(BurstMax); _bursts.CustomAabb = Everywhere; _burstBuf = new float[BurstMax * 20]; _near.AddChild(_bursts);
         _sparks = Glows(SparkMax); _sparks.CustomAabb = Everywhere; _sparkBuf = new float[SparkMax * 20]; _near.AddChild(_sparks);
@@ -116,12 +133,28 @@ void fragment(){
             mesh = new BoxMesh { Size = new Vector3(0.5f, 0.35f, 2f), Material = mat };
         }
         var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = cube, UseCustomData = cube, Mesh = mesh, InstanceCount = cap, VisibleInstanceCount = 0 };
-        p = new HullPool { Mi = new MultiMeshInstance3D { Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, CustomAabb = Everywhere }, Stride = cube ? 20 : 12 };
+        p = new HullPool { Mi = new MultiMeshInstance3D { Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, CustomAabb = Everywhere, MaterialOverlay = RimMat() }, Stride = cube ? 20 : 12 };
         p.Buf = new float[cap * p.Stride];
         _near.AddChild(p.Mi);
         _hullPools[key] = p;
         return p;
     }
+
+    static ShaderMaterial _rimMat;
+    /// <summary>A faint cool rim light on every fleet hull, so a hull on the unlit side reads as a ship and not as its
+    /// window strips alone.</summary>
+    static ShaderMaterial RimMat() => _rimMat ??= new ShaderMaterial
+    {
+        Shader = new Shader
+        {
+            Code = @"shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_back, shadows_disabled, fog_disabled;
+void fragment(){
+	float f = 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0);
+	ALBEDO = vec3(0.32, 0.4, 0.55) * (pow(f, 2.2) * 0.55 + 0.05);
+}"
+        }
+    };
 
     static float TransportLenKm() => Ships.TrueLengthM.TryGetValue("Transport", out var m) ? m / 1000f : 0.3f;
 
@@ -144,7 +177,7 @@ void fragment(){
         _fxT += vdt;
         _battleOn = false;
         foreach (var p in _hullPools.Values) p.N = 0;
-        _nBeam = _nBurst = _nSpark = _nDrive = 0;
+        _nBeam = _nBurst = _nSpark = _nDrive = _nRing = 0;
         _hulls.Clear(); _sideHulls[0].Clear(); _sideHulls[1].Clear();
         var sim = _sim;
         if (sim != null && !Hide.Contains("fleets")) LayOut(sim, c);
@@ -155,6 +188,8 @@ void fragment(){
         }
         if (_nBeam > 0) _beams.Multimesh.Buffer = _beamBuf;
         if (_nBurst > 0) _bursts.Multimesh.Buffer = _burstBuf;
+        if (_nRing > 0) _rings.Multimesh.Buffer = _ringBuf;
+        _rings.Multimesh.VisibleInstanceCount = _nRing;
         if (_nSpark > 0) _sparks.Multimesh.Buffer = _sparkBuf;
         if (_nDrive > 0) _drives.Multimesh.Buffer = _driveBuf;
         _drives.Multimesh.VisibleInstanceCount = _nDrive;
@@ -382,7 +417,7 @@ void fragment(){
 
     // ---------- effects ----------
     /// <summary>A beam or tracer quad from a to b (true positions), as wide on screen at any range.</summary>
-    void Beam(D3 a, D3 b, Color col, float alpha, bool tail, float minW, float widthK = 0.002f)
+    void Beam(D3 a, D3 b, Color col, float alpha, float shape, float minW, float widthK = 0.002f, bool open = false)
     {
         if (_nBeam >= _beamLimit || alpha <= 0.01f) return;
         var da = Drawn(a, out float sq, out var ta);
@@ -406,13 +441,16 @@ void fragment(){
         int o = _nBeam++ * 20;
         Put(_beamBuf, o, new Basis(sideV * w, dir * len, sideV.Cross(dir)), da + dir * len * 0.5f);
         _beamBuf[o + 12] = col.R; _beamBuf[o + 13] = col.G; _beamBuf[o + 14] = col.B; _beamBuf[o + 15] = alpha;
-        _beamBuf[o + 16] = tail ? 2f : 3f; _beamBuf[o + 17] = _beamBuf[o + 18] = _beamBuf[o + 19] = 0;
+        _beamBuf[o + 16] = shape; _beamBuf[o + 17] = open ? 1f : 0f; _beamBuf[o + 18] = _beamBuf[o + 19] = 0;
     }
 
     void Glow(float[] buf, ref int n, int max, D3 at, float size, Color col, float alpha, float px = 0.6f)
     {
         if (n >= max || alpha <= 0.01f) return;
-        var d = Drawn(at, out float sq, out _);
+        var d = Drawn(at, out float sq, out var tv);
+        // a sprite right by the lens would fill the screen: fade it out as it gets that close
+        alpha *= 1f - Mathf.SmoothStep(0.04f, 0.1f, size / Math.Max(Frame.Cam.DistanceTo(tv), 1e-12f));
+        if (alpha <= 0.01f) return;
         int o = n++ * 20;
         Put(buf, o, Basis.Identity.Scaled(Vector3.One * size * sq), d);
         buf[o + 12] = col.R; buf[o + 13] = col.G; buf[o + 14] = col.B; buf[o + 15] = alpha;
@@ -446,15 +484,15 @@ void fragment(){
             {
                 case "energy":
                     // lances of light, on for a moment, side colour
-                    if (ph < 0.4f) { float a = Mathf.Sin(Mathf.Pi * ph / 0.4f); Beam(from, to, bright, a * 0.55f, false, sh.Half * 0.06f); Spark(to, tg.Half * 0.5f, bright, a * 0.8f); }
+                    if (ph < 0.4f) { float a = Mathf.Sin(Mathf.Pi * ph / 0.4f); Beam(from, to, col, a * 0.8f, ShapeLance, sh.Half * 0.1f, 0.005f); Spark(to, tg.Half * 0.5f, bright, a * 0.8f); }
                     break;
                 case "kinetic":
                 {
                     // tracer streaks crossing the gap, a muzzle flash as they leave and a spark where they land
                     var head = from.Lerp(to, ph);
-                    float len = dist * 0.12f;
+                    float len = Math.Min(dist * 0.12f, sh.Half * 5f);     // a round, not a rod: never longer than a few hulls
                     // thin and faint: the hulls, not the rounds, are the picture
-                    Beam(head - path / dist * Math.Min(len, dist * ph + 1e-6f), head, new Color(1f, 0.85f, 0.6f), 0.18f, true, sh.Half * 0.03f);
+                    Beam(head - path / dist * Math.Min(len, dist * ph + 1e-6f), head, new Color(1f, 0.85f, 0.6f), 0.18f, ShapeTail, sh.Half * 0.03f);
                     if (ph < 0.1f) Spark(from, sh.Half * 0.25f, new Color(1f, 0.8f, 0.5f), (1f - ph * 10f) * 0.6f);
                     if (ph > 0.9f) Spark(to, tg.Half * 0.3f, new Color(1f, 0.7f, 0.4f), (ph - 0.9f) * 6f);
                     break;
@@ -470,7 +508,7 @@ void fragment(){
                         D3 At(float p) => from.Lerp(to, p) + Vector3.Up * (Mathf.Sin(Mathf.Pi * p) * dist * 0.12f);
                         var head = At(ph);
                         var back = At(Math.Max(ph - 0.06f, 0f));
-                        Beam(back, head, new Color(1f, 0.75f, 0.45f), 0.8f, true, sh.Half * 0.05f, 0.0025f);
+                        Beam(back, head, new Color(1f, 0.75f, 0.45f), 0.8f, ShapeTail, sh.Half * 0.05f, 0.0025f);
                         Spark(head, sh.Half * 0.18f, new Color(1f, 0.97f, 0.9f), 1f, 0.6f);
                     }
                     if (shot && ph > end && ph < end + 0.08f) Spark(from.Lerp(to, end) + Vector3.Up * (Mathf.Sin(Mathf.Pi * end) * dist * 0.12f), tg.Half * 0.6f, new Color(1f, 1f, 0.9f), 1f - (ph - end) / 0.08f);
@@ -494,7 +532,7 @@ void fragment(){
                         int rank = (k + 1) / 2; float sideK = k == 0 ? 0 : k % 2 == 0 ? 1 : -1;
                         var off = lat * (sideK * rank * spread) - pd * (rank * spread * 0.8f) + Vector3.Up * (Mathf.Sin(_fxT * 3f + k * 2.1f + i) * spread * 0.3f);
                         var at = c0 + off;
-                        Beam(at - pd * (spread * 1.6f), at, bright, 0.5f, true, sh.Half * 0.02f);
+                        Beam(at - pd * (spread * 1.6f), at, bright, 0.5f, ShapeTail, sh.Half * 0.02f);
                         Spark(at, sh.Half * 0.1f, bright, 1f, 0.5f);
                     }
                     break;
@@ -511,13 +549,31 @@ void fragment(){
                     var mid = from.Lerp(to, 0.4 + 0.2 * ((Hash(i, fl, 5) % 1000) / 1000.0)) + n * (((Hash(i, fl, 4) % 1000) / 1000f - 0.5f) * dist * 0.06f);
                     var violet = new Color(0.75f, 0.35f, 1f);
                     float a2 = Mathf.Sin(Mathf.Pi * ph / 0.55f);
-                    Beam(from, mid, violet, a2 * 0.5f, false, sh.Half * 0.05f);
-                    Beam(mid, to, violet, a2 * 0.5f, false, sh.Half * 0.05f);
+                    Beam(from, mid, violet, a2 * 0.6f, ShapeLance, sh.Half * 0.08f, 0.004f, true);
+                    Beam(mid, to, violet, a2 * 0.6f, ShapeLance, sh.Half * 0.08f, 0.004f, true);
                     Spark(to, tg.Half * 0.6f, violet, a2);
                     break;
                 }
             }
         }
+    }
+
+    /// <summary>A camera-facing shock ring of this radius (true units), at least a few pixels across.</summary>
+    void Ring(D3 at, float radius, Color col, float alpha)
+    {
+        if (_nRing >= BurstMax || alpha <= 0.01f) return;
+        var d = Drawn(at, out float sq, out var tv);
+        float dist = Math.Max(Frame.Cam.DistanceTo(tv), 1e-12f);
+        radius = Math.Max(radius, dist * 0.012f);
+        alpha *= 1f - Mathf.SmoothStep(0.15f, 0.4f, radius / dist);
+        if (alpha <= 0.01f) return;
+        var toCam = (Frame.Cam - tv) / dist;
+        var right = toCam.Cross(Mathf.Abs(toCam.Y) > 0.98f ? Vector3.Right : Vector3.Up).Normalized();
+        var up = right.Cross(toCam);
+        int o = _nRing++ * 20;
+        Put(_ringBuf, o, new Basis(right * radius * sq, up * radius * sq, toCam * radius * sq), d);
+        _ringBuf[o + 12] = col.R; _ringBuf[o + 13] = col.G; _ringBuf[o + 14] = col.B; _ringBuf[o + 15] = alpha;
+        _ringBuf[o + 16] = ShapeRing; _ringBuf[o + 17] = _ringBuf[o + 18] = _ringBuf[o + 19] = 0;
     }
 
     /// <summary>Bursts on random ships of each side, as many as its share of the losses.</summary>
@@ -537,10 +593,11 @@ void fragment(){
             float q = ph / 0.35f;
             var h = _hulls[hs[(int)(Hash(i, cyc, 11) % (uint)hs.Count)]];
             var at = h.At + h.Fwd * (h.Half * 0.3f);
-            // a white flash, then a fireball that swells and cools fast
-            if (q < 0.3f) Spark(at, h.Half * (0.9f + q), new Color(1f, 0.98f, 0.9f), 2.6f * (1f - q / 0.3f), 1.2f);
-            var col = new Color(1f, 0.85f, 0.55f).Lerp(new Color(1f, 0.35f, 0.1f), q);
-            Glow(_burstBuf, ref _nBurst, BurstMax, at, h.Half * (0.6f + 2.4f * Mathf.Sqrt(q)), col, Mathf.Pow(1f - q, 2f) * 2.4f, 1.2f);
+            // a white-hot core flash, a fireball that swells and cools, and a shock ring racing out past it
+            if (q < 0.35f) Spark(at, h.Half * (1.1f + q), new Color(1f, 1f, 0.95f), 4f * (1f - q / 0.35f), 2.2f);
+            var col = new Color(1f, 0.85f, 0.55f).Lerp(new Color(1f, 0.32f, 0.08f), q);
+            Glow(_burstBuf, ref _nBurst, BurstMax, at, h.Half * (0.9f + 3.2f * Mathf.Sqrt(q)), col, Mathf.Pow(1f - q, 2f) * 3f, 2f);
+            Ring(at, h.Half * (0.8f + 4f * Mathf.Sqrt(q)), new Color(1f, 0.8f, 0.55f), Mathf.Pow(1f - q, 1.5f) * 1.6f);
         }
     }
 }
