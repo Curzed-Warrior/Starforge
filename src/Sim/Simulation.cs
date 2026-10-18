@@ -632,6 +632,7 @@ public partial class Simulation
                 MobiliseStep(civ, yd);
                 YardStep(civ, yd);
                 BarracksStep(civ, yd);
+                StrifeStep(civ, yd);
             }
             if (Year >= civ.NextElection) { Election(civ); civ.NextElection = Year + 25; }
             foreach (var k in civ.Inf.Keys.ToList()) civ.Inf[k] = Math.Max(0.02f, civ.Inf[k] + (float)((_r.NextDouble() - 0.5) * 0.004 * dy));

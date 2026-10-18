@@ -385,7 +385,7 @@ public partial class Colony
     public bool LabourBound;
 
     /// <summary>Industry arriving from the civilisation's other systems for this system's works (kg/yr).</summary>
-    public double LevyIn => Civ.Levy.TryGetValue(this, out var l) ? l.Sum(x => x.From.LocalWorks * x.F) : 0;
+    public double LevyIn => Civ.Levy.TryGetValue(this, out var l) ? l.Sum(x => x.From.LocalWorksShipped() * x.F) : 0;
 
     /// <summary>Each step: begin what the civilisation builds here (as many as it can administer), and advance it.</summary>
     void BuildStep(double dy)
@@ -412,8 +412,8 @@ public partial class Colony
 
         // the budget: what is left of this system's own, plus what the other systems ship in
         var levy = Civ.Levy.TryGetValue(this, out var lv) ? lv : null;
-        double inflow = levy?.Sum(x => x.From.LocalWorks * x.F) ?? 0;
-        double budget = LocalWorks * (1 - Civ.LevyOut.GetValueOrDefault(this)) + inflow;
+        double inflow = levy?.Sum(x => x.From.LocalWorksShipped() * x.F) ?? 0;
+        double budget = LocalWorks - LocalWorksShipped() * Civ.LevyOut.GetValueOrDefault(this) + inflow;
         double powerIn = levy?.Sum(x => x.From.GalacticPower * x.F) ?? 0;
         double power = (Power + powerIn) * 0.1 * 3.156e7;                // a tenth of the power, in joules a year
         double wsum = active.Where(a => !Raised.Contains(a)).Sum(Want);
@@ -445,7 +445,7 @@ public partial class Colony
         if (levy != null)
             foreach (var (from, f) in levy)
             {
-                double u = Civ.Emergency ? from.Stock * f : Math.Min(from.Stock * 0.5, from.LocalWorks * f * dy / Defs.SwarmKg);
+                double u = Civ.Emergency ? from.Stock * f : Math.Min(from.Stock * 0.5, from.LocalWorksShipped() * f * dy / Defs.SwarmKg);
                 if (u > 0) { offers.Add((from, u)); shipped += u; }
             }
         double pool = Stock + shipped, left = pool;
@@ -496,7 +496,7 @@ public partial class Colony
     /// <summary>Homes (billions): a Bishop ring is an Argentina of floor; a ringworld three million Earths.</summary>
     public double MegaHousing => (Done("bishop") ? 3 : 0) + (Done("ringworld") ? 1e5 : 0) + (Done("birch") ? 4e5 : 0) + (Done("alderson") ? 1e6 : 0);
     /// <summary>Stability: shields, sentinels and a seat of light make people feel safe.</summary>
-    double MegaOrder => (Done("shield") ? 0.04 : 0) + (Done("aegis") ? 0.08 : 0) + (Done("sentry") ? 0.02 : 0) + (Done("coord") ? 0.06 : 0) + (Done("throne") ? 0.08 : 0)
+    internal double MegaOrder => (Done("shield") ? 0.04 : 0) + (Done("aegis") ? 0.08 : 0) + (Done("sentry") ? 0.02 : 0) + (Done("coord") ? 0.06 : 0) + (Done("throne") ? 0.08 : 0)
                         + (Done("sanctum") ? 0.04 : 0) + (Done("suncitadel") ? 0.04 : 0) + (Done("umbralfort") ? 0.03 : 0) + (Done("gatebastion") ? 0.03 : 0);
 
     /// <summary>Years left on a work at its current pace (infinity if stalled or not begun).</summary>
