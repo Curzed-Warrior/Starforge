@@ -25,20 +25,26 @@ public partial class Simulation
         if (home == null) return list;
         double caution = c.Ethic == "Reverent" ? 2 : c.Ethic == "Ruthless" ? 0.5 : 1;
         var aims = FleetsOf(c).Select(f => f.Target).Where(id => id >= 0).ToHashSet();
+        double reach = S("travelYearsMax");
+        var ci = new Dictionary<int, double>();
         foreach (var o in Known(c))
         {
             bool war = c.AtWar.Contains(o.Id), rival = c.Relations.GetValueOrDefault(o.Id) < 0;
             var near = o.Colonies.Concat(c.Colonies.Where(x => x.OccupiedBy == o.Id))
                 .OrderByDescending(x => aims.Contains(x.Star.Id)).ThenBy(x => x.Star.Pos.DistanceSquaredTo(home.Star.Pos)).Take(TargetsPerCiv);
             foreach (var col in near)
+            {
+                var def = Holder(col);
+                if (def == c || def.Dead || !c.Met.Contains(def.Id) || TravelYears(c, home.Star, col.Star) > reach) continue;
+                if (!ci.TryGetValue(def.Id, out double d)) ci[def.Id] = d = CounterIntel(def);
                 foreach (var m in Missions)
                 {
                     double v = MissionValue(c, col, m, war, rival);
-                    if (v <= 0 || !CanTarget(c, col, m)) continue;
-                    var def = Holder(col);
-                    double score = v * SuccessChance(t, def, m) * Math.Max(0, 1 - CaptureChance(t, def, m) * caution);
+                    if (v <= 0 || !Fits(c, col, def, m)) continue;
+                    double score = v * SuccessChance(t, d, m) * Math.Max(0, 1 - CaptureChance(t, d, m) * caution);
                     if (score > 0) list.Add((col, m, score));
                 }
+            }
         }
         return list.OrderByDescending(x => x.Item3).ToList();
     }
@@ -58,15 +64,15 @@ public partial class Simulation
                 "assassinate" => AdmiralAt(col) is { } f ? 2 * (f.Admiral.Wins + 1) : 0,
                 "sabotage_yard" => 2,
                 "steal_tech" => 1,
-                "incite" => 1 + col.Grievance / 50,
-                "sabotage_deposit" => 1,
+                "incite" => 0.6 + col.Grievance / 100,
+                "sabotage_deposit" => 1.5,
                 _ => 0,
             };
         return m switch
         {
             "steal_tech" => 1.5,
-            "incite" => rival ? 1 + col.Grievance / 50 : 0,
-            "sabotage_deposit" => rival ? 1 : 0,
+            "incite" => rival ? 0.6 + col.Grievance / 100 : 0,
+            "sabotage_deposit" => rival ? 1.5 : 0,
             _ => 0,
         };
     }

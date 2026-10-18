@@ -81,6 +81,18 @@ public partial class Main : Node3D
                  $"revolutions={N("revolutions")} uprisings={N("uprisings")} firstSolUprising={(Sim.FirstSolUprising > 0 ? Sim.FirstSolUprising.ToString("0") : "none")} " +
                  $"humanity={humans} fractured={(humans >= 2 ? "yes" : "no")} chronicle={_logLines * 100 / Math.Max(years, 1):0}");
     }
+    /// <summary>One line of special-forces statistics at the end of a traced warp (docs/superpowers/plans/2026-10-20-special-forces.md, Task 5).</summary>
+    void PrintSpecOpsStats()
+    {
+        int N(string k) => Sim.SpecStats.GetValueOrDefault(k);
+        string by = string.Join(",", Simulation.Missions.Select(m => $"{m}:{N("m:" + m)}"));
+        int after = Sim.Incidents.Count(i => Sim.Wars.Any(w => w.Start >= i.Year && w.Start <= i.Year + 10
+            && (w.A.Contains(i.Att) && w.B.Contains(i.Def) || w.A.Contains(i.Def) && w.B.Contains(i.Att))));
+        string Rate(string s, string t) => N(t) > 0 ? $"{100.0 * N(s) / N(t):0}%" : "-";
+        GD.Print($"SPECOPSSTATS teams={Sim.PeakTeams} trained={N("trained")} rushed={N("rushed")} missions={N("missions")} success={N("success")} captured={N("captured")} " +
+                 $"aborted={N("aborted")} incidents={Sim.Incidents.Count} bymission={by} successTrained={Rate("successTrained", "triedTrained")} " +
+                 $"successRushed={Rate("successRushed", "triedRushed")} warsAfterIncident={after}");
+    }
     Godot.Environment _env;
     float _directorT;
     Vector2 _pressPos;
@@ -157,7 +169,7 @@ public partial class Main : Node3D
             double y0 = Sim.Year;
             try { Warp(_warp); }
             catch (Exception ex) { GD.PrintErr(ex.ToString()); if (_trace) { GetTree().Quit(1); return; } }
-            if (_trace) { PrintWarStats(Sim.Year - y0); PrintStrifeStats(Sim.Year - y0); }
+            if (_trace) { PrintWarStats(Sim.Year - y0); PrintStrifeStats(Sim.Year - y0); PrintSpecOpsStats(); }
         }
         if (OS.GetCmdlineUserArgs().Contains("--savetest"))
         {

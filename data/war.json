@@ -124,12 +124,12 @@
     "onSiteYears": 1.0, "travelYearsMax": 15, "captureMin": 0.02, "captureMax": 0.9, "guardPerTeam": 0.4,
     "incidentRelation": -25, "spyMeterOnCapture": 10,
     "missions": {
-      "sabotage_yard":    { "act": "sabotage",   "risk": 0.25, "success": 0.7,  "years": 6 },
-      "sabotage_deposit": { "act": "sabotage",   "risk": 0.20, "success": 0.7,  "years": 10 },
-      "assassinate":      { "act": "spy",        "risk": 0.45, "success": 0.5 },
-      "incite":           { "act": "incite",     "risk": 0.25, "success": 0.65, "years": 12 },
-      "steal_tech":       { "act": "steal_tech", "risk": 0.35, "success": 0.55 },
-      "prepare_invasion": { "act": "spy",        "risk": 0.30, "success": 0.7,  "years": 4,  "garrison": 0.5 }
+      "sabotage_yard":    { "act": "sabotage",   "risk": 0.35, "success": 0.7,  "years": 6 },
+      "sabotage_deposit": { "act": "sabotage",   "risk": 0.28, "success": 0.7,  "years": 10 },
+      "assassinate":      { "act": "spy",        "risk": 0.6,  "success": 0.5 },
+      "incite":           { "act": "incite",     "risk": 0.35, "success": 0.65, "years": 12 },
+      "steal_tech":       { "act": "steal_tech", "risk": 0.5,  "success": 0.55 },
+      "prepare_invasion": { "act": "spy",        "risk": 0.42, "success": 0.7,  "years": 4,  "garrison": 0.5 }
     }
   },
   "placeholders": {

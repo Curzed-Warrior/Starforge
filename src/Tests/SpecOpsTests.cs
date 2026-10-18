@@ -123,9 +123,11 @@ public static class SpecOpsTests
         }),
         ("acts_not_doubled", () => {
             var (sim, h, o, t) = Ready(); h.ActAt.Clear();
-            SelfTest.Check(!sim.ActOptions(h).Contains("steal_tech") && !sim.ActOptions(h).Contains("incite"), "with teams, the acts give way to the missions");
+            SelfTest.Check(!sim.ActOptions(h).Contains("steal_tech"), "with teams, tech theft is the teams' work");
+            // the incite act shifts a whole people's beliefs and the sabotage act burns laboratories: no mission does either
+            SelfTest.Check(sim.ActOptions(h).Contains("incite") && sim.ActOptions(h).Contains("sabotage"), "acts with no mission of their own still run");
             sim.Teams.RemoveAll(x => x.Civ == h.Id);
-            SelfTest.Check(sim.ActOptions(h).Contains("steal_tech") && sim.ActOptions(h).Contains("incite"), "without teams, the old acts still run");
+            SelfTest.Check(sim.ActOptions(h).Contains("steal_tech"), "without teams, the old act still runs");
         }),
         ("war_aims_at_the_front", () => {
             // aliens are centuries away at sublight; a secession war is next door

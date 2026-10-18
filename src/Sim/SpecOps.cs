@@ -41,6 +41,8 @@ public partial class Simulation
                 Name = Forces.Ordinals[n % Forces.Ordinals.Length] + " Special Group",
                 Quality = (float)S(t.Rushed ? "rushedQuality" : "trainedQuality"),
             });
+            SpecCount(t.Rushed ? "rushed" : "trained");
+            PeakTeams = Math.Max(PeakTeams, Teams.Count);
         }
 
         double kg = S("kgPerTeam"), upk = S("upkeepPerYear") * kg * dy;
@@ -90,9 +92,15 @@ public partial class Simulation
         if (c == null || c.Civ == null || c.Civ.Dead || !c.Civ.Colonies.Contains(c)) return false;
         var holder = Holder(c);
         if (holder == att || holder.Dead || !att.Met.Contains(holder.Id)) return false;
-        if (!att.M.Acts.Contains(MissionAct(mission))) return false;
         var home = Home(att);
         if (home == null || TravelYears(att, home.Star, c.Star) > S("travelYearsMax")) return false;
+        return Fits(att, c, holder, mission);
+    }
+
+    /// <summary>CanTarget past the reach and ownership checks: the act is known and there is something to work on.</summary>
+    bool Fits(Civ att, Colony c, Civ holder, string mission)
+    {
+        if (!att.M.Acts.Contains(MissionAct(mission))) return false;
         return mission switch
         {
             "sabotage_yard" => WorkingSlips(c) > 0,
@@ -126,11 +134,13 @@ public partial class Simulation
     /// <summary>A team's craft: its training, its experience and its civ's espionage skill.</summary>
     double Craft(Team t) => Math.Max(0.05, t.Quality * (1 + t.Xp) * Civs[t.Civ].M.Spy);
 
-    public double CaptureChance(Team t, Civ def, string mission) =>
-        Math.Clamp(M(mission, "risk") * CounterIntel(def) / (Craft(t) * Math.Max(0.2, Civs[t.Civ].M.Stealth)), S("captureMin"), S("captureMax"));
+    public double CaptureChance(Team t, Civ def, string mission) => CaptureChance(t, CounterIntel(def), mission);
+    double CaptureChance(Team t, double ci, string mission) =>
+        Math.Clamp(M(mission, "risk") * ci / (Craft(t) * Math.Max(0.2, Civs[t.Civ].M.Stealth)), S("captureMin"), S("captureMax"));
 
-    public double SuccessChance(Team t, Civ def, string mission) =>
-        Math.Min(0.95, M(mission, "success") * Craft(t) / Math.Sqrt(Math.Max(0.05, CounterIntel(def))));
+    public double SuccessChance(Team t, Civ def, string mission) => SuccessChance(t, CounterIntel(def), mission);
+    double SuccessChance(Team t, double ci, string mission) =>
+        Math.Min(0.95, M(mission, "success") * Craft(t) / Math.Sqrt(Math.Max(0.05, ci)));
 
     /// <summary>Per tick: teams travel; a team's time on site ends in capture, success or quiet failure, and it heads home.</summary>
     void SpecOpsStep(double dy)
@@ -161,6 +171,8 @@ public partial class Simulation
 
     /// <summary>Counters for the trace's SPECOPSSTATS line.</summary>
     public readonly Dictionary<string, int> SpecStats = new();
+    /// <summary>The most teams alive at once, across every civ (the trace).</summary>
+    public int PeakTeams;
     void SpecCount(string what) => SpecStats[what] = SpecStats.GetValueOrDefault(what) + 1;
 
     /// <summary>Incidents so far: whose team, whose world, when (the trace counts the wars that follow them).</summary>

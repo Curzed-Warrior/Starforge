@@ -41,8 +41,11 @@ public partial class Simulation
         }
     }
 
-    /// <summary>Espionage acts a civ's special forces do instead, once it has teams (SpecOps.cs): never both.</summary>
-    static readonly HashSet<string> TeamActs = new() { "steal_tech", "sabotage", "incite" };
+    /// <summary>
+    /// Espionage acts a civ's special forces do instead, once it has teams (SpecOps.cs): never both. The incite act (a
+    /// whole people's beliefs) and the sabotage act (laboratories) have no mission doing the same, so they keep running.
+    /// </summary>
+    static readonly HashSet<string> TeamActs = new() { "steal_tech" };
 
     /// <summary>The acts a council may consider now (before each act's own condition): known, off cooldown, allowed.</summary>
     internal List<string> ActOptions(Civ civ)
