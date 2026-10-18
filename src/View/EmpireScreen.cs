@@ -419,9 +419,9 @@ public partial class EmpireScreen : PanelContainer
         return g;
     }
 
-    static Label Note(string text)
+    static Label Note(string text, int size = 12)
     {
-        var l = Ui.Label(text, 12, Ui.Dim);
+        var l = Ui.Label(text, size, Ui.Dim);
         l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         l.CustomMinimumSize = new Vector2(880, 0);
         return l;

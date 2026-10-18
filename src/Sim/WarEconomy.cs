@@ -183,13 +183,20 @@ public partial class Simulation
         if (c.LaidUpYr > 0) l.Add($"Ships are being laid up: the materiel runs out before the navy's upkeep is paid.");
         if (c.SlipsSabotaged > 0) l.Add($"{c.SlipsSabotaged} slip{(c.SlipsSabotaged == 1 ? " is" : "s are")} idle, sabotaged.");
         var seen = new HashSet<string>();
+        var byNeed = new List<(string Need, List<string> Names)>();   // works missing the same resource share one sentence
         foreach (var col in c.Colonies)
             foreach (var (id, p) in col.Built)
                 if (p > 0 && p < 1 && Colony.Needs(id) is string need && !c.Strategic.Contains(need) && seen.Add(id))
                 {
                     string name = Array.Find(Starforge.View.Megastructures.Catalogue, e => e.Id == id).Name ?? id;
-                    l.Add($"No {need}: the {name} goes at a quarter pace.");
+                    int i = byNeed.FindIndex(x => x.Need == need);
+                    if (i < 0) byNeed.Add((need, new List<string> { name })); else byNeed[i].Names.Add(name);
                 }
+        foreach (var (need, names) in byNeed)
+        {
+            string list = names.Count == 1 ? names[0] : string.Join(", ", names.Take(names.Count - 1)) + " and " + names[^1];
+            l.Add($"No {need}: the {list} {(names.Count == 1 ? "goes" : "go")} at a quarter pace.");
+        }
         double per = WarData.D("armies", "troopsPerArmy");
         double pop = c.Colonies.Where(Free).Sum(col => col.Pop);
         double want = WarData.D("armies", "garrisonPerBillion") * pop * (c.Mobilisation >= 2 ? 4 : c.Mobilisation == 1 ? 2 : 1);
