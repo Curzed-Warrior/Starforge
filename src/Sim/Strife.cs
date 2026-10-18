@@ -15,6 +15,8 @@ public partial class Colony
     public string Cause, Movement;
     /// <summary>Self-rule granted: its industry stays at home, and it resents the core less.</summary>
     public bool Autonomy;
+    /// <summary>The cause key behind Cause (strife.causes), recomputed yearly.</summary>
+    public string CauseKey;
     /// <summary>The council has invested here: relief until this year.</summary>
     public double InvestedUntil;
 
@@ -24,6 +26,10 @@ public partial class Colony
 
 public partial class Simulation
 {
+    /// <summary>Counts of strife events this game (movements, revolts, coups...), for the trace summary. Not saved.</summary>
+    public readonly Dictionary<string, int> StrifeStats = new();
+    void StrifeCount(string what) => StrifeStats[what] = StrifeStats.GetValueOrDefault(what) + 1;
+
     static double SD(params string[] path) => WarData.D(new[] { "strife" }.Concat(path).ToArray());
 
     static string[] _unrestNames;
@@ -66,37 +72,55 @@ public partial class Simulation
 
     static double MeanIndustry(Civ civ) => civ.Colonies.Count == 0 ? 0 : civ.Colonies.Average(x => x.IndustryKg);
 
-    /// <summary>Where this system's grievance is heading (0..100), and its biggest cause as a phrase.</summary>
-    public double GrievanceTarget(Colony c, out string cause) => GrievanceTarget(c, out cause, MeanIndustry(c.Civ), WarExhaustionOf(c.Civ));
+    /// <summary>Each cause of grievance (strife.causes) as the chronicle and the interface say it.</summary>
+    public static readonly Dictionary<string, string> CausePhrase = new()
+    {
+        ["levy"] = "its industry is shipped off to the capital's great works", ["distance"] = "the capital is a lifetime away",
+        ["distanceSlow"] = "the capital is a lifetime away", ["crowding"] = "there is no room left to live",
+        ["emergency"] = "the emergency takes everything it makes", ["warStrain"] = "the war economy bleeds it dry",
+        ["warExhaustion"] = "the war has gone on far too long", ["outOfPower"] = "its people have no voice on the council",
+        ["deposits"] = "its rare deposits feed other worlds' projects", ["occupied"] = "it is under enemy occupation",
+        ["poverty"] = "it is poor beside the core's wealth", ["dread"] = "it lives in fear of the voice",
+        ["mandatory"] = "its young are called up against their will",
+    };
 
-    double GrievanceTarget(Colony c, out string cause, double meanInd, double exhaustion)
+    /// <summary>Where this system's grievance is heading (0..100), and its biggest cause as a phrase.</summary>
+    public double GrievanceTarget(Colony c, out string cause)
+    {
+        double t = GrievanceTarget(c, out string key, MeanIndustry(c.Civ), WarExhaustionOf(c.Civ));
+        cause = key == null ? null : CausePhrase[key];
+        return t;
+    }
+
+    /// <summary>The target, with its biggest cause as a key of strife.causes.</summary>
+    double GrievanceTarget(Colony c, out string causeKey, double meanInd, double exhaustion)
     {
         var civ = c.Civ;
         double best = 0, sum = 0; string top = null;
-        void Add(string key, double k, string phrase)
+        void Add(string key, double k)
         {
             if (k <= 0) return;
             double v = SD("causes", key) * k;
             sum += v;
-            if (v > best) { best = v; top = phrase; }
+            if (v > best) { best = v; top = key; }
         }
-        if (!c.Autonomy) Add("levy", Math.Clamp(civ.LevyOut.GetValueOrDefault(c), 0, 1), "its industry is shipped off to the capital's great works");
+        if (!c.Autonomy) Add("levy", Math.Clamp(civ.LevyOut.GetValueOrDefault(c), 0, 1));
         var capital = civ.Colonies.FirstOrDefault(x => x.Home) ?? civ.Colonies.FirstOrDefault();
         if (capital != null && capital != c)
-            Add(Folds(civ) ? "distance" : "distanceSlow", Math.Min(c.Star.Pos.DistanceTo(capital.Star.Pos) / 25.0, 3) / 3, "the capital is a lifetime away");
-        if (c.PopCap > 0 && c.Pop > 0.92 * c.PopCap) Add("crowding", 1, "there is no room left to live");
-        if (civ.Emergency) Add("emergency", 1, "the emergency takes everything it makes");
-        Add("warStrain", civ.WarStrain, "the war economy bleeds it dry");
-        Add("warExhaustion", exhaustion, "the war has gone on far too long");
-        if (Leaning(c) != civ.Drive) Add("outOfPower", 1, "its people have no voice on the council");
-        if (!c.Autonomy && c.Res.Strategic.Count > 0) Add("deposits", 1, "its rare deposits feed other worlds' projects");
-        if (c.OccupiedBy >= 0) Add("occupied", 1, "it is under enemy occupation");
-        if (meanInd > 0 && c.IndustryKg < 0.2 * meanInd) Add("poverty", 1, "it is poor beside the core's wealth");
-        Add("dread", civ.Dread, "it lives in fear of the voice");
-        if (civ.MandatoryService && civ.Culture != null && civ.Culture.Duty < 0) Add("mandatory", 1, "its young are called up against their will");
+            Add(Folds(civ) ? "distance" : "distanceSlow", Math.Min(c.Star.Pos.DistanceTo(capital.Star.Pos) / 25.0, 3) / 3);
+        if (c.PopCap > 0 && c.Pop > 0.92 * c.PopCap) Add("crowding", 1);
+        if (civ.Emergency) Add("emergency", 1);
+        Add("warStrain", civ.WarStrain);
+        Add("warExhaustion", exhaustion);
+        if (Leaning(c) != civ.Drive) Add("outOfPower", 1);
+        if (!c.Autonomy && c.Res.Strategic.Count > 0) Add("deposits", 1);
+        if (c.OccupiedBy >= 0) Add("occupied", 1);
+        if (meanInd > 0 && c.IndustryKg < 0.2 * meanInd) Add("poverty", 1);
+        Add("dread", civ.Dread);
+        if (civ.MandatoryService && civ.Culture != null && civ.Culture.Duty < 0) Add("mandatory", 1);
         double relief = SD("relief", "base") + SD("relief", "megaOrder") * c.MegaOrder + SD("relief", "faith") * civ.Faith
                         + (c.Autonomy ? SD("relief", "autonomy") : 0) + (Year < c.InvestedUntil ? SD("relief", "invested") : 0);
-        cause = top;
+        causeKey = top;
         return Math.Clamp(sum * GovFactor(civ) - relief, 0, 100);
     }
 
@@ -115,11 +139,13 @@ public partial class Simulation
         foreach (var c in civ.Colonies.ToList())
         {
             if (c.Home) continue;
-            double t = GrievanceTarget(c, out var cause, mean, exh);
+            double t = GrievanceTarget(c, out var key, mean, exh);
             c.Grievance = (float)Math.Clamp(c.Grievance + (t - c.Grievance) * pull, 0, 100);
-            c.Cause = cause;
+            c.CauseKey = key; c.Cause = key == null ? null : CausePhrase[key];
             int old = c.Unrest;
             c.Unrest = Stage(c.Grievance, old);
+            if (old < 3 && c.Unrest >= 3) Rise(c);
+            else if (c.Unrest >= 3) AnswerAgain(c);
             if (old >= 3 && c.Unrest < 3 && c.Movement != null)
             {
                 if (civ.Main) Log(c, $"{Cap(c.Movement)} lay down their arms. {c.Sys.Name} is quiet again.", "council", null);

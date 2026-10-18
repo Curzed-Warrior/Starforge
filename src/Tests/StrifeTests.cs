@@ -37,5 +37,22 @@ public static class StrifeTests
             sim.TransferColony(c, o);
             SelfTest.Check(c.Grievance == 0 && c.Unrest == 0 && c.Movement == null, "a new owner starts the books afresh");
         }),
+        ("council_answers", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.SetDrive(h.Drive, "Reverent");
+            var c = h.Colonies.First(x => !x.Home); h.Materiel = 1e30;
+            sim.Rise(c);
+            SelfTest.Check(c.Movement != null && c.InvestedUntil > sim.Year, "a Reverent council invests");
+        }),
+        ("manual_interior_asks", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; sim.SetManual(h, Area.Interior, true);
+            var c = h.Colonies.First(x => !x.Home); sim.Rise(c);
+            SelfTest.Check(sim.Alerts.Any(a => a.Cat == "Decision" && !a.Done && a.Key == "interior:" + c.Star.Id), "the player is asked");
+        }),
+        ("self_rule_relieves", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.M.Hive = false;
+            var c = h.Colonies.First(x => !x.Home); h.LevyOut[c] = 1;
+            double before = sim.GrievanceTarget(c, out _); sim.Respond(c, Simulation.Answer.SelfRule);
+            SelfTest.Check(sim.GrievanceTarget(c, out _) < before - 15 && c.LocalWorksShipped() == 0, "self-rule calms and keeps its industry home");
+        }),
     };
 }

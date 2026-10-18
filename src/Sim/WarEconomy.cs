@@ -105,7 +105,8 @@ public partial class Simulation
     {
         // stage 2: skip colonies under occupation
         // occupied and blockaded systems make nothing for their owner; a besieged station is repaired once the enemy leaves
-        double made = c.Colonies.Where(Free).Sum(col => col.IndustryKg) * c.MilShare * c.Efficiency * dy;
+        double self = WarData.D("strife", "answers", "selfRuleIndustry");
+        double made = c.Colonies.Where(Free).Sum(col => col.IndustryKg * (col.Autonomy ? self : 1)) * c.MilShare * c.Efficiency * dy;
         // tribute to a victor, for as long as the peace says
         if (c.TributeTo >= 0 && Year < c.TributeUntil && c.TributeTo < Civs.Count && !Civs[c.TributeTo].Dead)
         {
