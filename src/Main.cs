@@ -671,11 +671,13 @@ public partial class Main : Node3D
         var r = Sim.TestFight(w, star);
         // whoever lost stays to be seen
         foreach (var f in new[] { mine, theirs }) if (Sim.Fleets.Contains(f)) { f.At = star; f.To = -1; f.Target = -1; }
-        // --battlerun=S: time runs at a day a second for S real seconds, then pauses, so the staged fight's losses blow up
-        // one by one on screen (the same moment at any frame rate). The two sides stop counting as at war, so the sim fights no second battle meanwhile, and
-        // the staged heavy line's upkeep is paid, so it isn't laid up
-        SpeedIdx = BattleRunTo() > 0 ? 1 : 0;
-        if (BattleRunTo() > 0) { me.AtWar.Remove(foe.Id); foe.AtWar.Remove(me.Id); me.Materiel += 1e40; _battleRunT = 0; }
+        // --battlerun=S: time runs at a week a second for S real seconds, then pauses, so the staged fight's losses blow up
+        // one by one on screen (the same moment at any frame rate). The war ends in a ceasefire right after the fight (a
+        // proper close, so the screens agree), so the sim fights no second battle meanwhile; the staged heavy line's
+        // upkeep is paid, so it isn't laid up
+        // (the peace is made while time is still stopped, so its news doesn't pause the run)
+        if (BattleRunTo() > 0) { Sim.EndWarWith(w, r.AWins, new() { WarModel.TermById("ceasefire") }); me.Materiel += 1e40; _battleRunT = 0; }
+        SpeedIdx = BattleRunTo() > 0 ? 2 : 0;
         GD.Print($"STAGEBATTLE {me.Name} vs {foe.Name} at {ViewStar.Name}: aWins={r.AWins} lostA={r.LostA:0.0} lostB={r.LostB:0.0} ships {mine.Ships:0}/{theirs.Ships:0} fam {Starforge.Sim.Battles.BestFamily(me)}/{Starforge.Sim.Battles.BestFamily(foe)}");
     }
 

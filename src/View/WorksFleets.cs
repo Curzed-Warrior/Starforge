@@ -31,15 +31,17 @@ public partial class Works
     int _beamLimit = BeamMax;
 
     /// <summary>A hull to draw this frame: where (true system position), which way, how big (half-length, drawn).
-    /// Culled: too close to the lens to draw. Dying: blowing up now (holds its fire, not a target). Dead: gone.</summary>
-    struct HullAt { public int Key; public D3 At; public Vector3 Fwd; public float Half; public Color Empire; public bool Culled, Dying, Dead; }
+    /// Culled: too close to the lens to draw. Dying: blowing up now (holds its fire, not a target). Dead: gone.
+    /// Ghost: for one of the hulls a battle destroyed, drawn back in for its window, its slot's stable key (0 otherwise).</summary>
+    struct HullAt { public int Key; public D3 At; public Vector3 Fwd; public float Half; public Color Empire; public bool Culled, Dying, Dead; public long Ghost; }
     readonly List<HullAt> _hulls = new();
     readonly List<int>[] _sideHulls = { new(), new() };
 
-    /// <summary>A squadron (or a fleet's transports) to lay out: count to draw, mesh key, length.</summary>
-    struct Entry { public int Civ, Fleet, Key, N; public float LenKm; }
+    /// <summary>A squadron (or a fleet's transports) to lay out: count to draw, mesh key, length.
+    /// Ghost: the squadron's key for its ghost hulls (see GhostKey), 0 if it has none; its slots from Alive on are ghosts.</summary>
+    struct Entry { public int Civ, Fleet, Key, N, Alive; public float LenKm; public long Ghost; }
     readonly List<Entry> _entries = new();
-    readonly List<(int Key, Vector3 Local, float Half)> _local = new();
+    readonly List<(int Key, Vector3 Local, float Half, long Ghost)> _local = new();
     readonly List<int> _civsHere = new();
     readonly List<Fleet> _fleetsHere = new();
     readonly List<(int From, int To, float W)> _spans = new();
@@ -47,9 +49,9 @@ public partial class Works
 
     // effects
     const int BeamMax = 256, BillMax = 96, SparkMax = 384, BeamsPerSide = 96;
-    MultiMeshInstance3D _beams, _sparks, _drives, _rings;
-    float[] _beamBuf, _sparkBuf, _driveBuf, _ringBuf;
-    int _nBeam, _nSpark, _nDrive, _nRing;
+    MultiMeshInstance3D _beams, _sparks, _drives, _lights, _rings;
+    float[] _beamBuf, _sparkBuf, _driveBuf, _lightBuf, _ringBuf;
+    int _nBeam, _nSpark, _nDrive, _nLight, _nRing;
     float _fxT;
     /// <summary>Fleet hulls sit on their own render layer, lit by their own lights: the star's light, softer than on the
     /// worlds (the human paint is pale and goes flat white under the full sun), and a cool fill from the camera's side.</summary>
@@ -65,12 +67,16 @@ public partial class Works
 
     // losses: the battle record they belong to, each side's drawn ghost hulls (the hulls it lost), how many of those
     // have blown up so far and when (effect clock; far in the past for one that went before the view saw it)
-    const int KillMax = 128;
     const float KillLife = 1.8f;
     BattleRecord _killRec;
-    readonly int[] _ghostsDrawn = new int[2], _killed = new int[2];
-    readonly float[][] _deathT = { new float[KillMax], new float[KillMax] };
-    int[] _perm = new int[64];
+    bool _killFresh;
+    /// <summary>For the battle record shown: how many ghost hulls each squadron draws (latched at first sight, so the
+    /// set doesn't move as ships are built, laid up or arrive), and when each ghost slot blew up (effect clock).</summary>
+    readonly Dictionary<long, int> _ghostLatch = new();
+    readonly Dictionary<long, float> _deathAt = new();
+    /// <summary>A squadron's key for its ghosts: fleet (-1 for a side wiped out) and hull class. A ghost slot's key is
+    /// this shifted left 12 bits plus its index in the run.</summary>
+    static long GhostKey(int fleet, int hull) => ((long)(fleet + 2) << 8) | (long)(hull & 0xFF);
     readonly List<Squadron> _sqs = new();
     static readonly Comparison<Squadron> ByHull = (a, b) => a.Hull.CompareTo(b.Hull);
     /// <summary>Where to watch the battle from: horizontal direction from its centre out past the player's side
@@ -89,7 +95,8 @@ public partial class Works
     const string FxShader = @"shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 float sqr(float x){ return x * x; }
-float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// (a sin-free hash: fract(sin(big)) loses precision on the GPU and tears the noise into flat patches)
+float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float noise(vec2 p){
 	vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
 	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
@@ -104,14 +111,17 @@ void fragment(){
 		// fireball: billowing and ragged-edged, a white-hot heart cooling through yellow and orange to a deep red rim
 		float r = length(c), q = v_prog;
 		vec2 sd = vec2(v_seed * 17.0, v_seed * 5.3);
-		float n = fbm(c * (3.2 - 1.2 * q) + sd);
-		float edge = 0.5 + 0.38 * n;
-		float body = (1.0 - smoothstep(edge * 0.6, edge, r)) * (1.0 - smoothstep(0.8, 1.0, r));
-		float heat = clamp((1.0 - r / edge) * (0.5 + 1.0 * n) * (1.35 - q), 0.0, 1.4);
+		// noise turned by the seed and warped by itself, so no two fireballs share the lattice's square grain
+		float ang = v_seed * 6.2832; mat2 rot = mat2(vec2(cos(ang), sin(ang)), vec2(-sin(ang), cos(ang)));
+		vec2 p = rot * c * (3.2 - 1.2 * q) + sd;
+		float n = fbm(p + 1.6 * vec2(fbm(p * 0.7 + 5.2), fbm(p * 0.7 + 9.7)) - 0.8);
+		float edge = 0.5 + 0.34 * n;
+		float body = (1.0 - smoothstep(edge * 0.6, edge, r)) * (1.0 - smoothstep(0.62, 0.95, r));
+		float heat = clamp((1.0 - r / edge) * (0.6 + 1.0 * n) * (1.5 - q), 0.0, 1.5);
 		vec3 ramp = mix(vec3(0.5, 0.05, 0.015), vec3(1.0, 0.4, 0.07), smoothstep(0.05, 0.4, heat));
 		ramp = mix(ramp, vec3(1.0, 0.82, 0.45), smoothstep(0.45, 0.8, heat));
 		ramp = mix(ramp, vec3(1.0, 0.98, 0.93), smoothstep(0.85, 1.2, heat));
-		ALBEDO = ramp * col * body * (0.45 + 1.6 * heat) * v_col.a * 2.0;
+		ALBEDO = ramp * col * body * (0.6 + 2.6 * heat) * v_col.a * 2.6;
 	} else if (v_shape < 1.5) {
 		// shock ring: a thin bright edge, broken into arcs, nothing inside
 		float r = length(c);
@@ -121,8 +131,8 @@ void fragment(){
 		a *= 1.0 - smoothstep(0.97, 1.0, r);
 		ALBEDO = col * v_col.a * a * 1.7;
 	} else if (v_shape < 2.5) {
-		// tail: bright at the head (+Y), fading behind
-		ALBEDO = col * v_col.a * sqr(clamp(1.0 - UV.y, 0.0, 1.0)) * exp(-c.x * c.x * 4.84) * 2.0;
+		// tail: bright at the head (+Y), fading behind, with soft edges all round (a hard edge shows over a fireball)
+		ALBEDO = col * v_col.a * sqr(clamp(1.0 - UV.y, 0.0, 1.0)) * smoothstep(0.0, 0.08, UV.y) * exp(-c.x * c.x * 4.84) * (1.0 - smoothstep(0.7, 1.0, abs(c.x))) * 2.0;
 	} else {
 		// lance: a soft coloured glow round a white-hot core; open ends join the next piece without a gap
 		float ends = v_open > 0.5 ? 1.0 : smoothstep(0.0, 0.03, UV.y) * (1.0 - smoothstep(0.92, 1.0, UV.y));
@@ -151,7 +161,9 @@ void fragment(){
         // each hull's drive in its empire's colour (what shows of a fleet from across the system), and up close the
         // running lights of the human hulls
         int cap = Math.Max(1, (int)WarData.D("interface", "fleetDrawMax"));
-        _drives = Glows(cap * 4); _drives.CustomAabb = Everywhere; _driveBuf = new float[cap * 4 * 20]; _near.AddChild(_drives);
+        _drives = Glows(cap); _drives.CustomAabb = Everywhere; _driveBuf = new float[cap * 20]; _near.AddChild(_drives);
+        // running lights have their own budget, so they can never crowd out a later hull's drive
+        _lights = Glows(cap * 4); _lights.CustomAabb = Everywhere; _lightBuf = new float[cap * 4 * 20]; _near.AddChild(_lights);
         // the fleet layer's lights: the star's, softer, and a cool fill from above the camera so the side of a hull
         // facing the camera shows its shape even when the star lights the other side
         _fleetKey = new DirectionalLight3D { LightCullMask = FleetLayer, ShadowEnabled = false };
@@ -243,7 +255,7 @@ void fragment(){
             _fleetKey.LightColor = sun.LightColor; _fleetKey.LightEnergy = sun.LightEnergy * KeyShare;
         }
         foreach (var p in _hullPools.Values) p.N = 0;
-        _nBeam = _nSpark = _nDrive = _nRing = 0;
+        _nBeam = _nSpark = _nDrive = _nLight = _nRing = 0;
         _hulls.Clear(); _sideHulls[0].Clear(); _sideHulls[1].Clear();
         var sim = _sim;
         if (sim != null && !Hide.Contains("fleets")) LayOut(sim, c);
@@ -258,6 +270,8 @@ void fragment(){
         if (_nSpark > 0) _sparks.Multimesh.Buffer = _sparkBuf;
         if (_nDrive > 0) _drives.Multimesh.Buffer = _driveBuf;
         _drives.Multimesh.VisibleInstanceCount = _nDrive;
+        if (_nLight > 0) _lights.Multimesh.Buffer = _lightBuf;
+        _lights.Multimesh.VisibleInstanceCount = _nLight;
         _beams.Multimesh.VisibleInstanceCount = _nBeam;
         _sparks.Multimesh.VisibleInstanceCount = _nSpark;
     }
@@ -294,13 +308,16 @@ void fragment(){
                     if (sim.Civs[_civsHere[i]].AtWar.Contains(_civsHere[j])) { ca = _civsHere[i]; cb = _civsHere[j]; break; }
         bool battle = ca >= 0 && cb >= 0 && ca < sim.Civs.Count && cb < sim.Civs.Count;
         if (battle) { if (!_civsHere.Contains(ca)) _civsHere.Add(ca); if (!_civsHere.Contains(cb)) _civsHere.Add(cb); }
-        if (_civsHere.Count == 0) { _killRec = null; return; }
+        if (_civsHere.Count == 0) return;
 
         // losses still to be seen: the hulls the battle destroyed (the sim has already removed them) are drawn back in
         // as ghosts for the whole window, in place, and blow up one by one as it passes (ScheduleBursts)
         float u = rec == null ? 0f : (float)Math.Clamp((sim.Year - rec.Year) / Math.Max(show, 1e-9), 0, 1);
         double ghostA = rec == null ? 0 : rec.LostA, ghostB = rec == null ? 0 : rec.LostB;
-        _ghostsDrawn[0] = _ghostsDrawn[1] = 0;
+        // a new record (or a battle the view has only now come upon): the ghosts are counted afresh, and kills already
+        // past are simply gone
+        _killFresh = !_battleWas || !ReferenceEquals(rec, _killRec);
+        if (!ReferenceEquals(rec, _killRec)) { _killRec = rec; _ghostLatch.Clear(); _deathAt.Clear(); }
 
         // what to draw, squadron by squadron, inside the per-frame budget
         _entries.Clear();
@@ -320,13 +337,22 @@ void fragment(){
                 _sqs.Clear(); _sqs.AddRange(f.Squadrons); _sqs.Sort(ByHull);
                 foreach (var sq in _sqs)
                 {
-                    double extra = total > 0 ? ghosts * sq.Ships / total : 0;
-                    int n = Ships.DrawCount(sq.Ships + extra, left);
-                    if (n <= 0) continue;
-                    // the drawn ghosts: what the squadron draws with its losses beyond what it draws without them
-                    if (sideOf >= 0) _ghostsDrawn[sideOf] += n - Math.Min(n, Ships.DrawCount(sq.Ships, left));
-                    left -= n; any = true;
-                    _entries.Add(new Entry { Civ = civId, Fleet = f.Id, Key = style * Ships.Classes + sq.Hull, N = n, LenKm = Ships.LengthKm(sq.Hull) });
+                    int key = style * Ships.Classes + sq.Hull;
+                    int alive = Ships.DrawCount(sq.Ships, left);
+                    // the squadron's ghosts: what it draws with its share of the losses beyond what it draws without them
+                    int g = 0;
+                    if (ghosts > 0)
+                    {
+                        long gk = GhostKey(f.Id, sq.Hull);
+                        if (!_ghostLatch.TryGetValue(gk, out g))
+                        {
+                            int with = Ships.DrawCount(sq.Ships + (total > 0 ? ghosts * sq.Ships / total : 0), left);
+                            _ghostLatch[gk] = g = Math.Max(0, with - alive);
+                        }
+                        g = Math.Min(g, Math.Max(0, left - alive));
+                    }
+                    if (alive + g > 0) { any = true; _entries.Add(new Entry { Civ = civId, Fleet = f.Id, Key = key, N = alive + g, Alive = alive, LenKm = Ships.LengthKm(sq.Hull), Ghost = g > 0 ? GhostKey(f.Id, sq.Hull) : 0 }); }
+                    left -= alive + g;
                 }
                 // armies aboard: one transport per 50,000 troops (troops are counted in billions)
                 double troops = _troops.GetValueOrDefault(f.Id);
@@ -336,8 +362,10 @@ void fragment(){
             // a side wiped out in the fight still shows the ships it lost, of its best hull, until the window closes
             if (!any && ghosts > 0)
             {
-                int n = Ships.DrawCount(ghosts, left);
-                if (n > 0) { left -= n; _ghostsDrawn[sideOf] += n; _entries.Add(new Entry { Civ = civId, Fleet = -1, Key = style * Ships.Classes + civ.Hull, N = n, LenKm = Ships.LengthKm(civ.Hull) }); }
+                long gk = GhostKey(-1, civ.Hull);
+                if (!_ghostLatch.TryGetValue(gk, out int n)) _ghostLatch[gk] = n = Ships.DrawCount(ghosts, left);
+                n = Math.Min(n, left);
+                if (n > 0) { left -= n; _entries.Add(new Entry { Civ = civId, Fleet = -1, Key = style * Ships.Classes + civ.Hull, N = n, LenKm = Ships.LengthKm(civ.Hull), Ghost = gk }); }
             }
         }
         if (_entries.Count == 0) return;
@@ -402,6 +430,9 @@ void fragment(){
     /// <summary>Drawn half-length (the transform scale, as Ships.Size): true size, or at least 0.4% of the camera distance.</summary>
     static float Half(float lenKm, float dcam) => Math.Max(lenKm * StarSystem.Km * 0.5f, dcam * 0.004f);
 
+    /// <summary>A hull's biggest extent over its length (1 for a hull longer than it is wide or tall), from its mesh.</summary>
+    float Spread(int key) { var sz = Pool(key).Box.Size; return Math.Max(1f, Math.Max(sz.X, sz.Y) / Math.Max(sz.Z, 1e-3f)); }
+
     /// <summary>
     /// One civ's fleets in formation: a wedge per fleet, side by side, each squadron starting a new rank (ranks of
     /// 1, 3, 5 ... hulls), 3 hull lengths apart. front is the true position of the formation's leading edge (or its
@@ -426,7 +457,8 @@ void fragment(){
                 lastFleet = e.Fleet; start = _local.Count; fz = 0; fwidth = 0; row = 0;
             }
             float half = Half(e.LenKm, dcam);
-            float sp = 3f * 2f * half;
+            // 3 hull lengths apart, or 3 spans for a hull wider or taller than it is long
+            float sp = 3f * 2f * half * Spread(e.Key);
             int placed = 0;
             while (placed < e.N)
             {
@@ -436,7 +468,9 @@ void fragment(){
                 {
                     float x = (k - (inRow - 1) * 0.5f) * sp;
                     float y = (row % 2 == 0 ? 0.15f : -0.15f) * sp;
-                    _local.Add((e.Key, new Vector3(x, y, fz), half));
+                    // the squadron's ghosts are its last slots, after the hulls still flying
+                    int slot = placed + k;
+                    _local.Add((e.Key, new Vector3(x, y, fz), half, e.Ghost != 0 && slot >= e.Alive ? (e.Ghost << 12) | (long)(slot - e.Alive) : 0));
                 }
                 fwidth = Math.Max(fwidth, inRow * sp);
                 placed += inRow; row++;
@@ -459,15 +493,17 @@ void fragment(){
             float cx = x0 + w * 0.5f;
             for (int i = from; i < to; i++)
             {
-                var (key, l, half) = _local[i];
+                var (key, l, half, ghost) = _local[i];
                 // a slow drift in place, so a parked fleet is alive
                 float bob = Mathf.Sin(_clock * 0.4f + i * 1.3f) * 0.08f * half;
                 // each hull a little off its slot and off the line's heading, as crews hold station, not a stamped grid
                 float J(int k) => (Hash(civId, i, k) % 1000) / 1000f - 0.5f;
-                var jit = right * (J(41) * 2.4f * half) + up * (J(42) * 1.6f * half) + fwd * (J(43) * 3f * half);
+                // (at most a twelfth of the spacing each way, so neighbours never touch)
+                float js = 0.33f * 3f * half * Spread(key);
+                var jit = right * (J(41) * js) + up * (J(42) * js * 0.7f) + fwd * (J(43) * js);
                 var hfwd = fwd.Rotated(up, J(44) * 0.22f).Rotated(right, J(45) * 0.1f);
                 var at = front + right * (cx + l.X) + up * (l.Y + bob) + fwd * (l.Z + shift) + jit;
-                AddHull(key, at, hfwd, half, empire);
+                AddHull(key, at, hfwd, half, empire, ghost);
                 if (side >= 0) _sideHulls[side].Add(_hulls.Count - 1);
             }
             x0 += w + between;
@@ -477,11 +513,11 @@ void fragment(){
 
     /// <summary>Adds a hull to this frame's list. One right in front of the lens would fill the screen as a smear, so it
     /// is kept (the battle's bookkeeping counts it) but marked culled: not drawn, not firing, not a target.</summary>
-    void AddHull(int key, D3 at, Vector3 fwd, float half, Color empire)
+    void AddHull(int key, D3 at, Vector3 fwd, float half, Color empire, long ghost)
     {
         Drawn(at, out _, out var tv);
         bool culled = half > Frame.Cam.DistanceTo(tv) * 0.08f;
-        _hulls.Add(new HullAt { Key = key, At = at, Fwd = fwd, Half = half, Empire = empire, Culled = culled });
+        _hulls.Add(new HullAt { Key = key, At = at, Fwd = fwd, Half = half, Empire = empire, Culled = culled, Ghost = ghost });
     }
 
     static readonly Color NavRed = new(1f, 0.12f, 0.06f), NavGreen = new(0.15f, 1f, 0.3f), Lamp = new(1f, 0.8f, 0.5f);
@@ -507,18 +543,17 @@ void fragment(){
                 p.Buf[o + 16] = h.Empire.R; p.Buf[o + 17] = h.Empire.G; p.Buf[o + 18] = h.Empire.B; p.Buf[o + 19] = 1;
             }
             p.N++;
-            int max = _driveBuf.Length / 20;
-            Glow(_driveBuf, ref _nDrive, max, h.At - h.Fwd * (h.Half * 1.05f), h.Half * 0.3f, h.Empire.Lerp(Colors.White, 0.45f), 0.55f, 0.2f);
+            Glow(_driveBuf, ref _nDrive, _driveBuf.Length / 20, h.At - h.Fwd * (h.Half * 1.05f), h.Half * 0.3f, h.Empire.Lerp(Colors.White, 0.45f), 0.55f, 0.2f);
             // running lights only where the hull is a dozen pixels or more: on a speck they are noise
             if (!p.Lit || h.Half < Frame.Cam.DistanceTo(tv) * 0.006f) continue;
             var bx = p.Box; var lo = bx.Position; var hi = bx.End; float cz = (lo.Z + hi.Z) * 0.5f;
             D3 L(float x, float y, float z) => h.At + (basis.X * x + basis.Y * y + basis.Z * z) * h.Half;
-            float lamp = h.Half * 0.05f;
-            Glow(_driveBuf, ref _nDrive, max, L(hi.X * 0.95f, 0, cz), lamp, NavRed, 2.2f, 0.8f);
-            Glow(_driveBuf, ref _nDrive, max, L(lo.X * 0.95f, 0, cz), lamp, NavGreen, 2.2f, 0.8f);
-            if (Frac(_clock * 0.7f + i * 0.37f) < 0.1f) Glow(_driveBuf, ref _nDrive, max, L(0, hi.Y * 1.05f, lo.Z * 0.5f), lamp * 1.3f, Colors.White, 2.6f, 0.9f);
+            float lamp = h.Half * 0.05f; int max = _lightBuf.Length / 20;
+            Glow(_lightBuf, ref _nLight, max, L(hi.X * 0.95f, 0, cz), lamp, NavRed, 2.2f, 0.8f);
+            Glow(_lightBuf, ref _nLight, max, L(lo.X * 0.95f, 0, cz), lamp, NavGreen, 2.2f, 0.8f);
+            if (Frac(_clock * 0.7f + i * 0.37f) < 0.1f) Glow(_lightBuf, ref _nLight, max, L(0, hi.Y * 1.05f, lo.Z * 0.5f), lamp * 1.3f, Colors.White, 2.6f, 0.9f);
             // windows along the top of the spine
-            for (int w = 0; w < 4; w++) Glow(_driveBuf, ref _nDrive, max, L(0, hi.Y * 1.02f, Mathf.Lerp(lo.Z * 0.55f, hi.Z * 0.6f, w / 3f)), lamp * 0.7f, Lamp, 1.4f, 0.55f);
+            for (int w = 0; w < 4; w++) Glow(_lightBuf, ref _nLight, max, L(0, hi.Y * 1.02f, Mathf.Lerp(lo.Z * 0.55f, hi.Z * 0.6f, w / 3f)), lamp * 0.7f, Lamp, 1.4f, 0.55f);
         }
     }
 
@@ -591,6 +626,7 @@ void fragment(){
         var mine = _sideHulls[side]; var theirs = _sideHulls[1 - side];
         if (mine.Count == 0 || theirs.Count == 0) return;
         int slots = Math.Clamp(mine.Count, 4, 16);
+        if (fam == "kinetic") slots = Math.Clamp(mine.Count / 2, 3, 7);     // a few streams, so the hulls and hits stay the picture
         // each side gets its share of the beam pool, so one family's many pieces can't starve the other side or the explosions
         _beamLimit = Math.Min(BeamMax, _nBeam + BeamsPerSide);
         var bright = col.Lerp(Colors.White, 0.35f);
@@ -620,9 +656,10 @@ void fragment(){
                 {
                     // a burst of rounds walking from the gun to the target: a dashed line of tracers in flight along it,
                     // the muzzle flashing while it fires and sparks where the rounds strike
-                    const int rounds = 6; const float gapPh = 0.07f, flight = 0.42f;
-                    float len = Math.Min(dist * 0.06f, sh.Half * 3f);
-                    var gold = new Color(1f, 0.82f, 0.45f);
+                    const int rounds = 4; const float gapPh = 0.08f, flight = 0.42f;
+                    float len = Math.Min(dist * 0.05f, sh.Half * 3f);
+                    // each side's rounds in its own colour, warmed toward white-hot, so the two streams read as fire and return fire
+                    var gold = col.Lerp(new Color(1f, 0.9f, 0.7f), 0.45f);
                     for (int r = 0; r < rounds; r++)
                     {
                         float p = (ph - r * gapPh) / flight;
@@ -630,7 +667,7 @@ void fragment(){
                         if (p <= 1f)
                         {
                             var head = from.Lerp(to, p);
-                            Beam(head - path / dist * Math.Min(len, dist * p + 1e-6f), head, gold, 0.55f, ShapeTail, sh.Half * 0.03f);
+                            Beam(head - path / dist * Math.Min(len, dist * p + 1e-6f), head, gold, 0.5f, ShapeTail, sh.Half * 0.03f);
                         }
                         if (p > 0.93f) Spark(to + j * (tg.Half * 0.15f * r), tg.Half * 0.22f, new Color(1f, 0.75f, 0.4f), 1.2f * (1.08f - p) / 0.15f, 0.5f);
                     }
@@ -724,42 +761,35 @@ void fragment(){
 
     /// <summary>
     /// The battle's explosions this frame, before anyone fires.
-    /// Kills: each side's ghost hulls (the hulls it lost) blow up one by one as the battle's window passes, in a fixed
-    /// order; a hull stops firing as it goes and is gone for good once its flash has peaked. Kills that happened before
-    /// the view saw the battle are simply gone. Hits: hulls that fly on take bursts of fire on their armour (flash, fireball, burning debris; no shock ring), more on the
-    /// side that lost more, so even a paused frame shows the fight.
+    /// Kills: only the ghost hulls blow up (the hulls the record says each side lost, drawn back in as the last slots of their
+    /// squadrons), each at its own moment in the battle's window, fixed by its slot's key; a hull stops firing as it goes
+    /// and is gone for good once its flash has peaked. Kills that happened before the view saw the battle are simply
+    /// gone. When the window closes it is exactly these hulls that leave the layout. Hits: hulls that fly on take bursts
+    /// of fire on their armour (flash, fireball, burning debris; no shock ring), more on the side that lost more, so even
+    /// a paused frame shows the fight.
     /// </summary>
     void ScheduleBursts(BattleRecord rec, float u, float shareA)
     {
         _blasts.Clear();
-        bool fresh = !_battleWas || !ReferenceEquals(rec, _killRec);
-        if (!ReferenceEquals(rec, _killRec)) { _killRec = rec; _killed[0] = _killed[1] = 0; }
         int recSeed = rec == null ? 0 : (int)(rec.Year * 1000) ^ rec.CivA * 31 ^ rec.CivB;
-        for (int side = 0; side < 2; side++)
-        {
-            var hs = _sideHulls[side]; int n = hs.Count;
-            int kills = rec == null ? 0 : Math.Min(Math.Min(_ghostsDrawn[side], n), KillMax);
-            if (kills == 0) continue;
-            // a fixed shuffle of this side's hulls: the first `kills` of it are the ones that die, in that order
-            if (_perm.Length < n) _perm = new int[Math.Max(n, _perm.Length * 2)];
-            for (int i = 0; i < n; i++) _perm[i] = i;
-            for (int i = n - 1; i > 0; i--) { int k = (int)(Hash(i, side, recSeed) % (uint)(i + 1)); (_perm[i], _perm[k]) = (_perm[k], _perm[i]); }
-            for (int k = 0; k < kills; k++)
-            {
-                float uk = 0.03f + 0.9f * (k + 0.5f) / kills;
-                if (u < uk) break;
-                if (k >= _killed[side]) { _deathT[side][k] = fresh ? -1e9f : _fxT; _killed[side] = k + 1; }
-                int idx = hs[_perm[k]];
-                var h = _hulls[idx];
-                float q = (_fxT - _deathT[side][k]) / KillLife;
-                if (q > 0.14f) h.Dead = true; else h.Dying = true;
-                _hulls[idx] = h;
-                if (q <= 1f && !h.Culled) _blasts.Add((h.At, h.Half * (1.4f + 0.6f * Unit(Hash(k, side, recSeed + 3))), q, (int)Hash(k, side, recSeed + 4), true));
-            }
-        }
+        if (rec != null)
+            for (int side = 0; side < 2; side++)
+                foreach (int idx in _sideHulls[side])
+                {
+                    var h = _hulls[idx];
+                    if (h.Ghost == 0) continue;
+                    uint hk = Hash((int)h.Ghost, (int)(h.Ghost >> 32), recSeed);
+                    float uk = 0.03f + 0.9f * Unit(hk);
+                    if (u < uk) continue;
+                    if (!_deathAt.TryGetValue(h.Ghost, out float t0)) _deathAt[h.Ghost] = t0 = _killFresh ? -1e9f : _fxT;
+                    float q = (_fxT - t0) / KillLife;
+                    if (q > 0.14f) h.Dead = true; else h.Dying = true;
+                    _hulls[idx] = h;
+                    if (q <= 1f && !h.Culled) _blasts.Add((h.At, h.Half * (1.4f + 0.6f * Unit(hk >> 10)), q, (int)Hash((int)hk, 4, recSeed), true));
+                }
         // hits, staggered so a frame holds them at every stage: flash, fireball, ring
-        const int hits = 10;
-        int hitsA = Math.Clamp(Mathf.RoundToInt(hits * shareA), 2, hits - 2);
+        const int hits = 14;
+        int hitsA = Math.Clamp(Mathf.RoundToInt(hits * shareA), 3, hits - 3);
         for (int s = 0; s < hits; s++)
         {
             int side = s < hitsA ? 0 : 1;
@@ -771,9 +801,9 @@ void fragment(){
             int idx = PickLive(_sideHulls[side], Hash(s, cyc, 62));
             if (idx < 0) continue;
             var h = _hulls[idx];
-            // on the armour, on the side the camera sees
+            // on the armour, on the side the camera sees, so the hull doesn't hide it
             Drawn(h.At, out _, out var tv);
-            var dir = new Vector3(Unit(Hash(s, cyc, 63)) - 0.5f, Unit(Hash(s, cyc, 64)) - 0.5f, Unit(Hash(s, cyc, 65)) - 0.5f) + (Frame.Cam - tv).Normalized() * 0.35f;
+            var dir = new Vector3(Unit(Hash(s, cyc, 63)) - 0.5f, Unit(Hash(s, cyc, 64)) - 0.5f, Unit(Hash(s, cyc, 65)) - 0.5f) * 0.6f + (Frame.Cam - tv).Normalized() * 0.8f;
             _blasts.Add((h.At + dir * (h.Half * 0.7f), h.Half * (0.4f + 0.3f * Unit(Hash(s, cyc, 66))), q, (int)Hash(s, cyc, 67), false));
         }
     }
@@ -786,7 +816,9 @@ void fragment(){
         {
             float sd = (seed & 1023) / 1023f;
             // a white-hot flash first, peaking fast
-            if (q < 0.22f) Spark(at, r * (kill ? 0.55f : 0.35f) * (0.4f + q * 3f), Flash, (kill ? 3.2f : 2.2f) * Mathf.Sin(Mathf.Pi * q / 0.22f), 1.2f);
+            if (q < 0.3f) Spark(at, r * (kill ? 0.8f : 0.5f) * (0.5f + q * 3f), Flash, (kill ? 4f : 2.8f) * Mathf.Sin(Mathf.Pi * q / 0.3f), 1.6f);
+            // and a white-hot heart that lingers inside the fireball
+            if (q < 0.6f) Spark(at, r * (kill ? 0.3f : 0.2f), Flash, (kill ? 2.2f : 1.5f) * (1f - q / 0.6f), 1.1f);
             // the fireball billows out, white at the heart through orange to a red rim, and burns down
             float fq = Mathf.Clamp((q - 0.02f) / 0.85f, 0, 1);
             if (q > 0.02f && fq < 1f) Billboard(at, r * (kill ? 0.9f + 2.4f * Mathf.Sqrt(fq) : 0.8f + 1.2f * Mathf.Sqrt(fq)), Colors.White, Mathf.Pow(1f - fq, 1.4f), ShapeFire, sd, fq);
@@ -814,9 +846,9 @@ void fragment(){
                     float reach = r * (kill ? 4.5f : 2.2f) * (0.6f + 0.4f * Unit(Hash(seed, d, 4)));
                     var head = at + dir * (reach * dq);
                     var tail = at + dir * (reach * Math.Max(dq - 0.3f, 0f));
-                    float a = Mathf.Pow(1f - q, 1.2f);
-                    Beam(tail, head, Debris, a, ShapeTail, r * 0.05f);
-                    Spark(head, r * 0.09f, Debris.Lerp(Flash, 0.5f), a * 1.6f, 0.6f);
+                    float a = Mathf.Pow(1f - q, 1.1f);
+                    Beam(tail, head, Debris, a * 1.2f, ShapeTail, r * 0.06f);
+                    Spark(head, r * 0.12f, Debris.Lerp(Flash, 0.6f), a * 2.4f, 0.9f);
                 }
             }
         }
