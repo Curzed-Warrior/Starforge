@@ -461,7 +461,7 @@ void fragment(){
         using (Prof.T("closeup")) _close.Update(c, dt, cam);
         using (Prof.T("mega")) Mega.Apply();
         // fleets gather at any star, settled or not
-        using (Prof.T("fleets")) UpdateFleets(c, year, dt);
+        using (Prof.T("fleets")) UpdateFleets(c, year, dt, cam);
         if (c == null) { HideAll(); return; }
         using (Prof.T("traffic")) UpdateTraffic(c, year, dt, cam);
         using (Prof.T("stations")) UpdateStations(c, year);

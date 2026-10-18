@@ -11,7 +11,7 @@ namespace Starforge;
 /// <summary>
 /// Entry point. One continuous world: the viewed star sits at the origin, the galaxy is scaled by G around it.
 /// Command line (after "--"): --shot=abs.png [--shotframe=N] --focus=Earth|Sun|Galaxy --dist=D --yaw=Y --pitch=P
-/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] stages a fight here
+/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] [--battlerun=SECONDS] stages a fight here
 /// </summary>
 public partial class Main : Node3D
 {
@@ -671,9 +671,17 @@ public partial class Main : Node3D
         var r = Sim.TestFight(w, star);
         // whoever lost stays to be seen
         foreach (var f in new[] { mine, theirs }) if (Sim.Fleets.Contains(f)) { f.At = star; f.To = -1; f.Target = -1; }
-        SpeedIdx = 0;
+        // --battlerun=S: time runs at a day a second for S real seconds, then pauses, so the staged fight's losses blow up
+        // one by one on screen (the same moment at any frame rate). The two sides stop counting as at war, so the sim fights no second battle meanwhile, and
+        // the staged heavy line's upkeep is paid, so it isn't laid up
+        SpeedIdx = BattleRunTo() > 0 ? 1 : 0;
+        if (BattleRunTo() > 0) { me.AtWar.Remove(foe.Id); foe.AtWar.Remove(me.Id); me.Materiel += 1e40; _battleRunT = 0; }
         GD.Print($"STAGEBATTLE {me.Name} vs {foe.Name} at {ViewStar.Name}: aWins={r.AWins} lostA={r.LostA:0.0} lostB={r.LostB:0.0} ships {mine.Ships:0}/{theirs.Ships:0} fam {Starforge.Sim.Battles.BestFamily(me)}/{Starforge.Sim.Battles.BestFamily(foe)}");
     }
+
+    static float? _battleRunTo;
+    static float BattleRunTo() => _battleRunTo ??= Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--battlerun=")) is string s ? F(s[12..]) : 0;
+    float _battleRunT = -1;
 
     public void OnLabelClicked(object key)
     {
@@ -1054,6 +1062,7 @@ public partial class Main : Node3D
         }
         // test: --stagebattle puts Humanity's Home Fleet and the nearest alien fleet at the view star, at war, fights once and pauses
         if (_frame == 5 && OS.GetCmdlineUserArgs().Contains("--stagebattle")) StageBattle();
+        if (_battleRunT >= 0 && (_battleRunT += dt) >= BattleRunTo()) { SpeedIdx = 0; _battleRunT = -1; }
         // test: --focus=battle frames the battle here (once the fleets have been drawn)
         if (_frame == 8 && OS.GetCmdlineUserArgs().Contains("--focus=battle"))
         {
