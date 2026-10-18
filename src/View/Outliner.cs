@@ -18,6 +18,8 @@ public partial class Outliner : PanelContainer
     readonly HashSet<string> _folded = new() { "Ships" };
     public event Action<Alert> OpenAlert;
     public event Action OpenTech;
+    public event Action<int> OpenWar;
+    public event Action OpenInterior;
 
     public void Setup(Main main)
     {
@@ -49,9 +51,35 @@ public partial class Outliner : PanelContainer
 
     // Rows are pooled: the list is described afresh twice a second, and the same buttons are re-labelled. Creating
     // and freeing dozens of nodes a second made garbage, and garbage collections are frame hitches.
-    readonly List<(bool Head, string L, string R, Color Col, string Tip, Action Click)> _spec = new();
+    readonly List<(bool Head, string L, string R, Color Col, string Tip, Action Click, bool Sub)> _spec = new();
     readonly List<(Button B, Label L, Label R)> _pool = new();
     readonly List<Action> _acts = new();
+    readonly List<Fleet> _fleets = new();
+    readonly List<Colony> _moving = new();
+
+    static double ShipsIn(Fleet f)
+    {
+        double n = 0;
+        foreach (var s in f.Squadrons) n += s.Ships;
+        return n;
+    }
+
+    static readonly Comparison<Fleet> FleetOrder = (a, b) =>
+        a.Moving != b.Moving ? (a.Moving ? -1 : 1) : a.Moving ? a.Arrive.CompareTo(b.Arrive) : ShipsIn(b).CompareTo(ShipsIn(a));
+
+    static readonly Comparison<Colony> MovementOrder = (a, b) =>
+        a.Unrest != b.Unrest ? b.Unrest.CompareTo(a.Unrest) : b.Grievance.CompareTo(a.Grievance);
+
+    static string UpFirst(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
+
+    /// <summary>How long ago, in days for the first two months and in months after.</summary>
+    static string Ago(double years)
+    {
+        int d = (int)(years * 365.25);
+        if (d < 60) return d == 1 ? "1 day ago" : $"{d} days ago";
+        int m = (int)(years * 12);
+        return $"{m} months ago";
+    }
 
     void Rebuild()
     {
@@ -67,17 +95,81 @@ public partial class Outliner : PanelContainer
                 foreach (var a in decisions.Take(8)) Row(a.Title, $"{(int)a.Year}", () => OpenAlert?.Invoke(a), Ui.Warm, a.Text);
         }
 
-        var wars = civ.AtWar.Where(i => i < sim.Civs.Count && !sim.Civs[i].Dead).Select(i => sim.Civs[i]).ToList();
-        if (wars.Count > 0)
+        int nWars = 0;
+        foreach (var w in sim.Wars) if (w.Open && Simulation.Side(w, civ) >= 0) nWars++;
+        if (nWars > 0)
         {
-            Header("Wars", wars.Count, Ui.Danger);
+            Header("Wars", nWars, Ui.Danger);
             if (!_folded.Contains("Wars"))
-                foreach (var w in wars)
+            {
+                double mapYears = WarData.D("interface", "battleMapYears");
+                foreach (var w in sim.Wars)
                 {
-                    var front = w.Colonies.OrderBy(c => civ.Colonies.Count == 0 ? 0 : civ.Colonies.Min(m => m.Star.Pos.DistanceSquaredTo(c.Star.Pos))).FirstOrDefault();
-                    Row(Narrative2.Called(w, true), $"{sim.WarStrength(civ) / Math.Max(sim.WarStrength(w), 1e-9):0.0}×", front == null ? null : () => _main.TravelTo(front.Star), w.Color,
-                        $"Our strength against theirs. Click to fly to the nearest of their systems.");
+                    int s = Simulation.Side(w, civ);
+                    if (!w.Open || s < 0) continue;
+                    var enemy = sim.Lead(w, 1 - s);
+                    float score = s == 0 ? w.Score : -w.Score, exh = s == 0 ? w.ExhA : w.ExhB;
+                    int id = w.Id;
+                    Row(Narrative2.Called(enemy, true), $"{score:+0;-0;0} · tired {exh:0}%", () => OpenWar?.Invoke(id), enemy.Color,
+                        "War score from our side, and how worn out we are. Click to open the war.");
+                    // the newest battle of this war, while the galaxy map still marks it
+                    for (int i = sim.Battles.Count - 1; i >= 0; i--)
+                    {
+                        var b = sim.Battles[i];
+                        if (b.WarId != id) continue;
+                        double age = sim.Year - b.Year;
+                        if (age < mapYears)
+                        {
+                            int star = b.Star;
+                            Row($"Battle at {(star >= 0 && star < sim.Gal.Stars.Count ? sim.Gal.Stars[star].Name : "?")}, {Ago(age)}", "", () => _main.GoToBattle(star), Ui.Warm,
+                                "Click to fly to the battle.", true);
+                        }
+                        break;
+                    }
                 }
+            }
+        }
+
+        // the player's fleets: those under way first, soonest arrival first, then the biggest in port
+        _fleets.Clear();
+        foreach (var f in sim.Fleets) if (f.Civ == civ.Id) _fleets.Add(f);
+        if (_fleets.Count > 0)
+        {
+            _fleets.Sort(FleetOrder);
+            Header("Fleets", _fleets.Count, new Color(0.75f, 0.85f, 1f));
+            if (!_folded.Contains("Fleets"))
+            {
+                for (int i = 0; i < _fleets.Count && i < 8; i++)
+                {
+                    var f = _fleets[i];
+                    var dest = sim.Gal.Stars[f.Moving ? f.To : f.At];
+                    double n = ShipsIn(f);
+                    string hulls = $"{n:#,0} {(n >= 0.5 && n < 1.5 ? "ship" : "ships")}";
+                    Row(f.Name, f.Moving ? $"{hulls} · {Math.Max(0, f.Arrive - sim.Year):0.0}y" : $"{hulls} · {f.Mission}", () => _main.TravelTo(dest), Ui.Text,
+                        f.Moving ? $"{UpFirst(f.Mission)}: on the way to {dest.Name}. Click to go there." : $"{UpFirst(f.Mission)}, at {dest.Name}. Click to go there.");
+                }
+                if (_fleets.Count > 8) Row($"and {_fleets.Count - 8} more", "", null, Ui.Dim);
+            }
+        }
+
+        // movements: the systems where one has risen, the furthest up the ladder first
+        _moving.Clear();
+        foreach (var c in civ.Colonies) if (c.Movement != null) _moving.Add(c);
+        if (_moving.Count > 0)
+        {
+            _moving.Sort(MovementOrder);
+            Header("Movements", _moving.Count, Ui.Warm);
+            if (!_folded.Contains("Movements"))
+            {
+                var names = Simulation.UnrestNames;
+                for (int i = 0; i < _moving.Count && i < 6; i++)
+                {
+                    var c = _moving[i];
+                    Row(c.Sys.Name, names[Math.Clamp(c.Unrest, 0, names.Length - 1)], () => OpenInterior?.Invoke(), c.Unrest >= 3 ? Ui.Danger : Ui.Warm,
+                        $"{UpFirst(c.Movement)}. Click to open the Interior tab.");
+                }
+                if (_moving.Count > 6) Row($"and {_moving.Count - 6} more", "", null, Ui.Dim);
+            }
         }
 
         var cols = civ.Colonies.OrderByDescending(c => c.Home).ThenByDescending(c => c.Power).ToList();
@@ -133,10 +225,10 @@ public partial class Outliner : PanelContainer
     {
         bool folded = _folded.Contains(title);
         _spec.Add((true, $"{(folded ? "▸" : "▾")} {title.ToUpper()}  {n}", "", col, folded ? "Show" : "Fold",
-            () => { if (!_folded.Remove(title)) _folded.Add(title); _t = 1; _dirty = true; }));
+            () => { if (!_folded.Remove(title)) _folded.Add(title); _t = 1; _dirty = true; }, false));
     }
 
-    void Row(string left, string right, Action click, Color col, string tip = null) => _spec.Add((false, left, right, col, tip ?? "", click));
+    void Row(string left, string right, Action click, Color col, string tip = null, bool sub = false) => _spec.Add((false, left, right, col, tip ?? "", click, sub));
 
     /// <summary>Label the pooled buttons from the description, making more only when the list grows.</summary>
     void Apply()
@@ -175,9 +267,9 @@ public partial class Outliner : PanelContainer
             if (l.Text != sp.L) l.Text = sp.L;
             if (r.Text != sp.R) r.Text = sp.R;
             l.AddThemeColorOverride("font_color", sp.Col);
-            l.AddThemeFontSizeOverride("font_size", sp.Head ? 11 : 13);
+            l.AddThemeFontSizeOverride("font_size", sp.Head ? 11 : sp.Sub ? 12 : 13);
             l.OffsetLeft = 0;
-            ((HBoxContainer)l.GetParent()).OffsetLeft = sp.Head ? 4 : 12;
+            ((HBoxContainer)l.GetParent()).OffsetLeft = sp.Head ? 4 : sp.Sub ? 24 : 12;
         }
     }
 }
