@@ -32,17 +32,21 @@ public partial class EmpireScreen
             if (_fleetOpen.Contains(f.Id)) foreach (var s in f.Squadrons) { h.Add(s.Hull); h.Add((int)s.Ships); h.Add(s.Level); }
         }
         h.Add(armies.Count);
-        foreach (var a in armies.Take(ArmyCap)) { h.Add(a.Id); h.Add(a.At); h.Add(a.Fleet); h.Add((int)a.Troops); h.Add(a.Xp > 0 ? Forces.Level(a.Xp) : ""); }
-        foreach (var t in teams) { h.Add(t.Id); h.Add(t.At); h.Add(t.To); h.Add(t.Mission); h.Add((int)t.Due); }
+        foreach (var a in armies) { h.Add(a.Id); h.Add(a.At); h.Add(a.Fleet); h.Add(a.To); h.Add((long)(a.Troops * 1e6)); h.Add(Forces.Level(a.Xp)); h.Add(a.To >= 0 ? (int)Math.Ceiling((a.Arrive - Sim.Year) * 10) : 0); }
+        foreach (var t in teams) { h.Add(t.Id); h.Add(t.At); h.Add(t.To); h.Add(t.Mission); h.Add((int)t.Due); h.Add(t.To >= 0 ? (int)Math.Ceiling((t.Arrive - Sim.Year) * 10) : 0); }
         foreach (var s in me.Yard) { h.Add(s.Hull); h.Add((int)(s.Progress * 20)); h.Add(s.Waiting); }
         foreach (var c in me.Colonies) h.Add(c.YardDownUntil > Sim.Year);
-        foreach (var b in me.Barracks) { h.Add((int)b.Troops); h.Add((int)(b.Left * 4)); }
+        foreach (var b in me.Barracks) { h.Add((long)(b.Troops * 1e6)); h.Add((int)(b.Left * 4)); }
         foreach (var b in me.Academy) h.Add((int)(b.Left * 4));
         return h.ToHashCode();
     }
 
+    readonly List<OptionButton> _milOpts = new();
+
     partial void RefreshMilitary()
     {
+        // never free a dropdown while the player is choosing from it; try again next tick
+        foreach (var ob in _milOpts) if (IsInstanceValid(ob) && ob.GetPopup().Visible) return;
         var me = Sim.Humanity;
         var fleets = Sim.FleetsOf(me).ToList();
         var armies = Sim.ArmiesOf(me).ToList();
@@ -50,6 +54,7 @@ public partial class EmpireScreen
         int sig = MilitarySig(me, fleets, armies, teams);
         if (sig == _milSig) return;
         _milSig = sig;
+        _milOpts.Clear();
         Clear(_military);
 
         // FLEETS
@@ -81,18 +86,18 @@ public partial class EmpireScreen
         {
             var g = RowGrid(5);
             foreach (var t in new[] { "Where", "Troops", "Quality", "Experience", "Training" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
-            foreach (var a in armies.Take(ArmyCap))
+            var groups = armies.GroupBy(a => (Where: ArmyWhere(a), Q: $"{a.Quality:0.00}", Lv: Forces.Level(a.Xp), a.Rushed)).ToList();
+            foreach (var grp in groups.Take(ArmyCap))
             {
-                string where = a.Fleet >= 0 ? $"aboard {Sim.Fleets.FirstOrDefault(x => x.Id == a.Fleet)?.Name ?? "a fleet"}"
-                    : a.To >= 0 ? $"{StarName(a.At)} to {StarName(a.To)}, lands in {Years(a.Arrive - Sim.Year)}" : StarName(a.At);
-                g.AddChild(Ui.Label(where, 13));
-                g.AddChild(Ui.Label($"{Soldiers(a.Troops)}", 13));
-                g.AddChild(Ui.Label($"{a.Quality:0.00}", 13));
-                g.AddChild(Ui.Label(Forces.Level(a.Xp), 13));
-                g.AddChild(Ui.Label(a.Rushed ? "rushed" : "full", 13, a.Rushed ? Ui.Warm : Ui.Dim));
+                int n = grp.Count();
+                g.AddChild(Ui.Label(n > 1 ? $"{grp.Key.Where}  ×{n}" : grp.Key.Where, 13));
+                g.AddChild(Ui.Label(Soldiers(grp.Sum(a => a.Troops)), 13));
+                g.AddChild(Ui.Label(grp.Key.Q, 13));
+                g.AddChild(Ui.Label(grp.Key.Lv, 13));
+                g.AddChild(Ui.Label(grp.Key.Rushed ? "rushed" : "full", 13, grp.Key.Rushed ? Ui.Warm : Ui.Dim));
             }
             _military.AddChild(g);
-            if (armies.Count > ArmyCap) _military.AddChild(Ui.Label($"and {armies.Count - ArmyCap:#,0} more", 13, Ui.Dim));
+            if (groups.Count > ArmyCap) _military.AddChild(Ui.Label($"and {groups.Skip(ArmyCap).Sum(x => x.Count()):#,0} more armies", 13, Ui.Dim));
         }
 
         // SPECIAL FORCES
@@ -183,31 +188,56 @@ public partial class EmpireScreen
     /// <summary>Troops are held in billions of people; show them as people.</summary>
     static string Soldiers(double billions) => billions >= 1 ? $"{billions:0.0} billion" : billions >= 0.001 ? $"{billions * 1000:#,0} million" : $"{billions * 1e9:#,0}";
 
+    string ArmyWhere(Army a) => a.Fleet >= 0 ? $"aboard {Sim.Fleets.FirstOrDefault(x => x.Id == a.Fleet)?.Name ?? "a fleet"}"
+        : a.To >= 0 ? $"{StarName(a.At)} to {StarName(a.To)}, lands in {Years(a.Arrive - Sim.Year)}" : StarName(a.At);
+
     static string Years(double y) => $"{Math.Max(0, y):0.0} y";
 
-    /// <summary>One row per fleet: fold toggle, name (click to fly there), admiral, strength, bars, stance, orders.</summary>
+    /// <summary>Two lines per fleet: fixed-width cells (fold, name, ships, morale, supply, stance), then admiral and orders.</summary>
     Control FleetHeader(Fleet f, bool open)
     {
-        var row = new HFlowContainer();
-        row.AddThemeConstantOverride("h_separation", 10);
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 0);
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 10);
         var fold = Ui.Button(open ? "▾" : "▸", open ? "Fold this fleet" : "Show squadrons");
+        fold.CustomMinimumSize = new Vector2(34, 0);
         int id = f.Id;
         fold.Pressed += () => { if (!_fleetOpen.Remove(id)) _fleetOpen.Add(id); _milSig = -1; RefreshMilitary(); };
         row.AddChild(fold);
         var name = Ui.Button(f.Name, "Fly to this fleet");
+        name.CustomMinimumSize = new Vector2(150, 0);
         int at = f.At;
         name.Pressed += () => { Visible = false; _main.TravelTo(Sim.Gal.Stars[at]); };
         row.AddChild(name);
+        row.AddChild(Cell(Ui.Label($"{f.Ships:#,0} ships", 13, Ui.Warm), 90));
+        row.AddChild(Meter("morale", f.Morale, Good));
+        row.AddChild(Meter("supply", f.Supply, Ui.Warm.Lightened(0.15f)));
+        row.AddChild(Cell(Ui.Label(f.Stance, 13, Ui.Dim), 80));
+        box.AddChild(row);
         var a = f.Admiral;
-        row.AddChild(Mid(Ui.Label(a == null ? "no admiral" : $"Adm. {a.Name} · skill {a.Skill:0.00} · {a.Trait} · {a.Wins}W {a.Losses}L", 13, Ui.Text)));
-        row.AddChild(Mid(Ui.Label($"{f.Ships:#,0} ships", 13, Ui.Warm)));
-        row.AddChild(Mid(Ui.Label("morale", 12, Ui.Dim))); row.AddChild(Bar(f.Morale, Good, 70));
-        row.AddChild(Mid(Ui.Label("supply", 12, Ui.Dim))); row.AddChild(Bar(f.Supply, Ui.Warm.Lightened(0.15f), 70));
-        row.AddChild(Mid(Ui.Label(f.Stance, 13, Ui.Dim)));
+        string who = a == null ? "no admiral" : $"Adm. {a.Name} · skill {a.Skill:0.00} · {a.Trait} · {a.Wins}W {a.Losses}L";
         string where = f.Moving ? $"{f.Mission}: in transit to {StarName(f.To)}, arrives in {Years(f.Arrive - Sim.Year)}"
             : f.Target >= 0 && f.Target != f.At ? $"{f.Mission} at {StarName(f.Target)}" : $"{f.Mission}, at {StarName(f.At)}";
-        row.AddChild(Mid(Ui.Label(where, 13, Ui.Text)));
-        return row;
+        var line = Ui.Label($"{who}   ·   {where}", 12, Ui.Dim);
+        var m = new MarginContainer();
+        m.AddThemeConstantOverride("margin_left", 44);
+        m.AddThemeConstantOverride("margin_bottom", 4);
+        m.AddChild(line);
+        box.AddChild(m);
+        return box;
+    }
+
+    static Control Cell(Label l, float w) { l.CustomMinimumSize = new Vector2(w, 0); l.SizeFlagsVertical = SizeFlags.ShrinkCenter; return l; }
+
+    static Control Meter(string caption, float v01, Color col)
+    {
+        var h = new HBoxContainer { CustomMinimumSize = new Vector2(150, 0) };
+        h.AddThemeConstantOverride("separation", 4);
+        h.AddChild(Cell(Ui.Label(caption, 12, Ui.Dim), 44));
+        h.AddChild(Bar(v01, col, 60));
+        h.AddChild(Cell(Ui.Label($"{Math.Clamp(v01, 0, 1) * 100:0}%", 12, Ui.Text), 34));
+        return h;
     }
 
     /// <summary>Squadron grid, and the order buttons (disabled with the council's choice when the Fleets area is automatic).</summary>
@@ -233,7 +263,9 @@ public partial class EmpireScreen
         int mi = Array.IndexOf(MissionNames, f.Mission);
         if (mi < 0) { mission.AddItem(f.Mission); mi = MissionNames.Length; }
         mission.Selected = mi;
+        _milOpts.Add(mission);
         var target = new OptionButton { TooltipText = tip, Disabled = !manual };
+        _milOpts.Add(target);
         var list = new List<(int Id, string Name)>(targets);
         int want = f.Target >= 0 ? f.Target : f.At;
         if (!list.Any(t => t.Id == want)) list.Insert(0, (want, StarName(want)));

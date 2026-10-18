@@ -966,6 +966,8 @@ public partial class Main : Node3D
         // tests: --open=empire|policies|systems|inbox|wars|military|economy|interior opens the empire screen; --manual=all|Research,Colonisation,... takes areas into the player's hands
         if (_frame == 10 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--open=")) is string op && Array.IndexOf(new[] { "empire", "policies", "systems", "inbox", "wars", "military", "economy", "interior" }, op[7..]) is int tab and >= 0)
             _hud.ToggleEmpire(tab);
+        // test: --scroll=N scrolls the open empire tab down N px
+        if (_frame == 30 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--scroll=")) is string scr) _hud.ScrollEmpire(int.Parse(scr[9..]));
         if (_frame == 2 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--manual=")) is string mn)
             foreach (var ar in Enum.GetValues<Area>()) if (mn[9..] == "all" || mn[9..].Split(',').Contains(ar.ToString())) Sim.SetManual(Sim.Humanity, ar, true);
         // test: --decide answers every proposal with the council's own pick, at once and without pausing

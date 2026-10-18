@@ -206,6 +206,7 @@ public partial class Hud : CanvasLayer
 
     public bool EmpireOpen => _empire.Visible;
     public void ToggleEmpire(int tab) { _empire.Toggle(tab); if (_empire.Visible) { _chron.Visible = false; } }
+    public void ScrollEmpire(int px) => _empire.ScrollTab(px);
     public void CloseEmpire() => _empire.Visible = false;
     public void ShowWar(int warId) { _empire.ShowWar(warId); _chron.Visible = false; }
 

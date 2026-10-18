@@ -76,6 +76,8 @@ public partial class EmpireScreen : PanelContainer
         return v;
     }
 
+    public void ScrollTab(int px) { if (_tabs.GetCurrentTabControl() is ScrollContainer sc) sc.ScrollVertical = px; }
+
     public void Open(int tab)
     {
         Visible = true;
