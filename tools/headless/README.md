@@ -12,6 +12,9 @@ dotnet $H --warp=939 --trace --seed=7   # a whole game, with the chronicle and W
 dotnet $H --warp=939 --trace --quiet --seeds=20610,7,4242,1,99,2026   # stats lines only, several seeds
 dotnet $H --warp=300 --savetest         # save, load, save: the two files must match
 dotnet $H --warp=600 --techlog          # research pacing
+dotnet $H --warp=939 --strifedump       # every civ's grievance, ladder and causes at the end
+dotnet $H --warp=939 --savetime         # what a save and a load cost at that size
+SF_RES_OVERLAY=/tmp/exp dotnet $H ...   # tuning: /tmp/exp/data/war.json replaces the repository's
 ```
 
 Run it from inside the repository: `res://` is the repository root, `user://` a per-process temporary folder.

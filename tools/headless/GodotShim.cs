@@ -171,7 +171,13 @@ public sealed class FileAccess : IDisposable
     public static string ResRoot = ".", UserRoot = Path.Combine(Path.GetTempPath(), "starforge-headless", Environment.ProcessId.ToString());
     public static string Globalize(string p)
     {
-        if (p.StartsWith("res://")) return Path.Combine(ResRoot, p[6..]);
+        if (p.StartsWith("res://"))
+        {
+            // tuning experiments: SF_RES_OVERLAY=dir serves dir/data/war.json in place of the repository's, and so on
+            var overlay = Environment.GetEnvironmentVariable("SF_RES_OVERLAY");
+            if (overlay != null && File.Exists(Path.Combine(overlay, p[6..]))) return Path.Combine(overlay, p[6..]);
+            return Path.Combine(ResRoot, p[6..]);
+        }
         if (p.StartsWith("user://")) { Directory.CreateDirectory(UserRoot); return Path.Combine(UserRoot, p[7..]); }
         return p;
     }
