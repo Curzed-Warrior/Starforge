@@ -16,7 +16,7 @@ public static class StrifeTests
         }),
         ("levy_breeds_grievance", () => {
             var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
-            var c = h.Colonies.First(x => !x.Home); h.LevyOut[c] = 1; c.Autonomy = false;
+            var c = h.Colonies.First(x => !x.Home); h.LevyOut[c] = 1; c.Autonomy = false; h.M.Hive = false;
             double t0 = sim.GrievanceTarget(c, out _); h.LevyOut[c] = 0;
             SelfTest.Check(t0 > sim.GrievanceTarget(c, out _) + 30 * sim.GovFactor(h), "shipping its industry away is resented");
         }),
