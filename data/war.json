@@ -108,7 +108,7 @@
     "pull": 0.25, "lifetimeYears": 70,
     "causes": {
       "levy": 25, "distance": 12, "distanceSlow": 40, "crowding": 10, "emergency": 5, "warStrain": 2, "warExhaustion": 0.15,
-      "outOfPower": 12, "deposits": 6, "occupied": 30, "poverty": 20, "dread": 10, "mandatory": 8
+      "outOfPower": 12, "deposits": 6, "occupied": 30, "poverty": 20, "dread": 10, "mandatory": 8, "incited": 30
     },
     "relief": { "autonomy": 20, "invested": 25, "megaOrder": 100, "faith": 10, "base": 5 },
     "gov": { "hive": 0, "digital": 0.6, "Synthetic Commonwealth": 0.6, "Directorate": 1.1, "junta": 1.3 },
@@ -117,6 +117,20 @@
     "coup": { "exhaustion": 50, "wins": 3, "loyalty": 0.5, "chancePerYear": 0.1, "juntaYears": 25 },
     "revolution": { "insurgentShare": 0.33, "chancePerYear": 0.2, "cooldownYears": 25 },
     "homeWorlds": { "far": 25, "hub": 50, "crowding": 15, "emergency": 20, "ruthless": 35, "base": 8, "riseChance": 0.3 }
+  },
+  "specops": {
+    "teamsBase": 1, "teamsMax": 8, "kgPerTeam": 4.0e8, "manpowerPerTeam": 1.0e-6, "upkeepPerYear": 0.05,
+    "trainYears": 6.0, "rushedYears": 1.5, "trainedQuality": 1.0, "rushedQuality": 0.5, "xpPerMission": 0.15,
+    "onSiteYears": 1.0, "travelYearsMax": 15, "captureMin": 0.02, "captureMax": 0.9, "guardPerTeam": 0.4,
+    "incidentRelation": -25, "spyMeterOnCapture": 10,
+    "missions": {
+      "sabotage_yard":    { "act": "sabotage",   "risk": 0.25, "success": 0.7,  "years": 6 },
+      "sabotage_deposit": { "act": "sabotage",   "risk": 0.20, "success": 0.7,  "years": 10 },
+      "assassinate":      { "act": "spy",        "risk": 0.45, "success": 0.5 },
+      "incite":           { "act": "incite",     "risk": 0.25, "success": 0.65, "years": 12 },
+      "steal_tech":       { "act": "steal_tech", "risk": 0.35, "success": 0.55 },
+      "prepare_invasion": { "act": "spy",        "risk": 0.30, "success": 0.7,  "years": 4,  "garrison": 0.5 }
+    }
   },
   "placeholders": {
     "factory": "#ff8c2e", "shipyard": "#3a7dff", "barracks": "#3fbf5a", "transport": "#7d8a36", "specops": "#9a4fe0", "hull": "#8c8c8c"

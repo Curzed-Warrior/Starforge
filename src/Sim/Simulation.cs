@@ -558,7 +558,7 @@ public partial class Simulation
         if (c.Civ.Colonies.Count == 0) Extinct(c.Civ);
     }
 
-    void Extinct(Civ civ)
+    internal void Extinct(Civ civ)
     {
         civ.Dead = true;
         DisbandForces(civ);
@@ -636,6 +636,7 @@ public partial class Simulation
                 YardStep(civ, yd);
                 BarracksStep(civ, yd);
                 StrifeStep(civ, yd);
+                AcademyStep(civ, yd);
             }
             if (Year >= civ.NextElection) { Election(civ); civ.NextElection = Year + 25; }
             foreach (var k in civ.Inf.Keys.ToList()) civ.Inf[k] = Math.Max(0.02f, civ.Inf[k] + (float)((_r.NextDouble() - 0.5) * 0.004 * dy));

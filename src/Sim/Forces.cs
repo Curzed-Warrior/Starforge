@@ -46,6 +46,20 @@ public class Fleet
     }
 }
 
+/// <summary>
+/// An elite special-forces team (SpecOps.cs). Quality is fixed by the course it took: full in peacetime, rushed at war.
+/// At is the star it is at; To the star it is flying to (-1 when there); Target the star of the colony it works on;
+/// Due when its time on site ends.
+/// </summary>
+public class Team
+{
+    public int Id, Civ, At, Target = -1, To = -1;
+    public string Name, Mission = "guard";
+    public float Quality, Xp;
+    public bool Rushed;
+    public double Arrive, Due;
+}
+
 /// <summary>Ground troops, counted in soldiers. Rushed armies train faster and fight worse.</summary>
 public class Army
 {
@@ -63,7 +77,7 @@ public class Army
 public static class Forces
 {
     public static readonly string[] Traits = { "Aggressive", "Cautious", "Tactician", "Logistician", "Raider", "Beloved", "Ambitious", "Butcher" };
-    static readonly string[] Ordinals = { "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth" };
+    internal static readonly string[] Ordinals = { "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth" };
     static readonly string[] Missions = { "attack", "attack", "raid" };
 
     /// <summary>Green, Regular, Veteran or Elite, from experience.levels / experience.at in war.json.</summary>
@@ -83,10 +97,12 @@ public partial class Simulation
 {
     public readonly List<Fleet> Fleets = new();
     public readonly List<Army> Armies = new();
-    public int NextFleetId = 1, NextArmyId = 1;
+    public readonly List<Team> Teams = new();
+    public int NextFleetId = 1, NextArmyId = 1, NextTeamId = 1;
 
     public IEnumerable<Fleet> FleetsOf(Civ c) => Fleets.Where(f => f.Civ == c.Id);
     public IEnumerable<Army> ArmiesOf(Civ c) => Armies.Where(a => a.Civ == c.Id);
+    public IEnumerable<Team> TeamsOf(Civ c) => Teams.Where(t => t.Civ == c.Id);
 
     // ---------- Hull data (the simulation owns it; View/Ships draws from it) ----------
     /// <summary>
@@ -145,5 +161,7 @@ public partial class Simulation
     {
         Fleets.RemoveAll(f => f.Civ == civ.Id);
         Armies.RemoveAll(a => a.Civ == civ.Id);
+        Teams.RemoveAll(t => t.Civ == civ.Id);
+        civ.Academy.Clear();
     }
 }
