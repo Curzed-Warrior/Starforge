@@ -31,7 +31,7 @@ public partial class Works
     int _beamLimit = BeamMax;
 
     /// <summary>A hull to draw this frame: where (true system position), which way, how big (half-length, drawn).</summary>
-    struct HullAt { public int Key; public D3 At; public Vector3 Fwd; public float Half; }
+    struct HullAt { public int Key; public D3 At; public Vector3 Fwd; public float Half; public Color Empire; public bool Dying, Hidden; }
     readonly List<HullAt> _hulls = new();
     readonly List<int>[] _sideHulls = { new(), new() };
 
@@ -46,9 +46,9 @@ public partial class Works
 
     // effects
     const int BeamMax = 64, BurstMax = 32, SparkMax = 256;
-    MultiMeshInstance3D _beams, _bursts, _sparks, _drives, _rings;
-    float[] _beamBuf, _burstBuf, _sparkBuf, _driveBuf, _ringBuf;
-    int _nBeam, _nBurst, _nSpark, _nDrive, _nRing;
+    MultiMeshInstance3D _beams, _sparks, _drives, _rings;
+    float[] _beamBuf, _sparkBuf, _driveBuf, _ringBuf;
+    int _nBeam, _nSpark, _nDrive, _nRing;
     float _fxT;
     Simulation _sim;
     /// <summary>Test: --battlefam=A,B draws the battle with these weapon families (energy, kinetic, missile, craft, exotic).</summary>
@@ -75,10 +75,15 @@ void vertex(){ v_col = COLOR; v_shape = INSTANCE_CUSTOM.x; v_open = INSTANCE_CUS
 void fragment(){
 	vec2 c = UV * 2.0 - 1.0;
 	vec3 col = v_col.rgb;
-	if (v_shape < 1.5) {
-		// shock ring: a sharp bright rim on a faint fill
+	if (v_shape < 0.5) {
+		// fireball: white-hot centre through the colour to a transparent rim, no edge
 		float r = length(c);
-		float a = (exp(-sqr((r - 0.82) * 11.0)) + 0.18 * exp(-r * r * 3.0)) * (1.0 - smoothstep(0.95, 1.0, r));
+		float a = exp(-r * r * 5.5) * (1.0 - smoothstep(0.5, 1.0, r));
+		ALBEDO = mix(col, vec3(1.0, 0.97, 0.9), exp(-r * r * 14.0)) * v_col.a * a * 2.0;
+	} else if (v_shape < 1.5) {
+		// shock ring: a thin bright rim and nothing inside
+		float r = length(c);
+		float a = exp(-sqr((r - 0.9) * 32.0)) * (1.0 - smoothstep(0.97, 1.0, r));
 		ALBEDO = col * v_col.a * a * 2.0;
 	} else if (v_shape < 2.5) {
 		// tail: bright at the head (+Y), fading behind
@@ -90,7 +95,7 @@ void fragment(){
 		ALBEDO = (col * glow * 0.55 + mix(col, vec3(1.0), 0.7) * core) * v_col.a * ends * 1.6;
 	}
 }";
-    const float ShapeRing = 1f, ShapeTail = 2f, ShapeLance = 3f;
+    const float ShapeFire = 0f, ShapeRing = 1f, ShapeTail = 2f, ShapeLance = 3f;
 
     void BuildFleets()
     {
@@ -102,12 +107,11 @@ void fragment(){
         _beamBuf = new float[BeamMax * 20];
         _near.AddChild(_beams);
         // explosions' shock rings, camera-facing quads in the same shader
-        var rmm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, UseCustomData = true, Mesh = new QuadMesh { Size = new Vector2(2, 2), Material = beamMat }, InstanceCount = BurstMax, VisibleInstanceCount = 0 };
+        var rmm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, UseCustomData = true, Mesh = new QuadMesh { Size = new Vector2(2, 2), Material = beamMat }, InstanceCount = BurstMax * 2, VisibleInstanceCount = 0 };
         _rings = new MultiMeshInstance3D { Multimesh = rmm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, CustomAabb = Everywhere };
-        _ringBuf = new float[BurstMax * 20];
+        _ringBuf = new float[BurstMax * 2 * 20];
         _near.AddChild(_rings);
         // explosions, missiles, point-defence flashes, strike craft: the glow sprite that never shrinks below a few pixels
-        _bursts = Glows(BurstMax); _bursts.CustomAabb = Everywhere; _burstBuf = new float[BurstMax * 20]; _near.AddChild(_bursts);
         _sparks = Glows(SparkMax); _sparks.CustomAabb = Everywhere; _sparkBuf = new float[SparkMax * 20]; _near.AddChild(_sparks);
         // each hull's drive, in its empire's colour: what shows of a fleet from across the system
         int cap = Math.Max(1, (int)WarData.D("interface", "fleetDrawMax"));
@@ -177,7 +181,7 @@ void fragment(){
         _fxT += vdt;
         _battleOn = false;
         foreach (var p in _hullPools.Values) p.N = 0;
-        _nBeam = _nBurst = _nSpark = _nDrive = _nRing = 0;
+        _nBeam = _nSpark = _nDrive = _nRing = 0;
         _hulls.Clear(); _sideHulls[0].Clear(); _sideHulls[1].Clear();
         var sim = _sim;
         if (sim != null && !Hide.Contains("fleets")) LayOut(sim, c);
@@ -187,14 +191,12 @@ void fragment(){
             p.Mi.Multimesh.VisibleInstanceCount = p.N;
         }
         if (_nBeam > 0) _beams.Multimesh.Buffer = _beamBuf;
-        if (_nBurst > 0) _bursts.Multimesh.Buffer = _burstBuf;
         if (_nRing > 0) _rings.Multimesh.Buffer = _ringBuf;
         _rings.Multimesh.VisibleInstanceCount = _nRing;
         if (_nSpark > 0) _sparks.Multimesh.Buffer = _sparkBuf;
         if (_nDrive > 0) _drives.Multimesh.Buffer = _driveBuf;
         _drives.Multimesh.VisibleInstanceCount = _nDrive;
         _beams.Multimesh.VisibleInstanceCount = _nBeam;
-        _bursts.Multimesh.VisibleInstanceCount = _nBurst;
         _sparks.Multimesh.VisibleInstanceCount = _nSpark;
     }
 
@@ -300,10 +302,11 @@ void fragment(){
             string famA = rec?.FamA ?? Starforge.Sim.Battles.BestFamily(sim.Civs[ca]);
             string famB = rec?.FamB ?? Starforge.Sim.Battles.BestFamily(sim.Civs[cb]);
             if (_famOverride?.Length == 2) { famA = _famOverride[0]; famB = _famOverride[1]; }
+            ScheduleBursts(shareA);
             Fire(0, famA, sim.Civs[ca].Color, axis);
             Fire(1, famB, sim.Civs[cb].Color, -axis);
             _beamLimit = BeamMax;
-            Explosions(shareA);
+            Explosions();
         }
         foreach (int civId in _civsHere)
         {
@@ -313,6 +316,7 @@ void fragment(){
             Drawn(station, out _, out var tv);
             Formation(civId, station, Vector3.Up.Cross(d).Normalized(), Frame.Cam.DistanceTo(tv), true, -1);
         }
+        FlushHulls();
     }
 
     double Strength(Simulation sim, int civId)
@@ -386,33 +390,43 @@ void fragment(){
                 // a slow drift in place, so a parked fleet is alive
                 float bob = Mathf.Sin(_clock * 0.4f + i * 1.3f) * 0.08f * half;
                 var at = front + right * (cx + l.X) + up * (l.Y + bob) + fwd * (l.Z + shift);
-                if (PutHull(key, at, fwd, half, empire) && side >= 0) _sideHulls[side].Add(_hulls.Count - 1);
+                if (AddHull(key, at, fwd, half, empire) && side >= 0) _sideHulls[side].Add(_hulls.Count - 1);
             }
             x0 += w + between;
         }
         return depth;
     }
 
-    bool PutHull(int key, D3 at, Vector3 fwd, float half, Color empire)
+    bool AddHull(int key, D3 at, Vector3 fwd, float half, Color empire)
     {
-        var p = Pool(key);
-        if (p.N * p.Stride >= p.Buf.Length) return false;
-        var d = Drawn(at, out float sq, out var tv);
+        Drawn(at, out _, out var tv);
         // a hull right in front of the lens would fill the screen as a smear: leave it out
         if (half > Frame.Cam.DistanceTo(tv) * 0.08f) return false;
-        var b = Basis.LookingAt(-fwd, Mathf.Abs(fwd.Y) > 0.98f ? Vector3.Right : Vector3.Up).Scaled(Vector3.One * (half * sq));
-        int o = p.N * p.Stride;
-        Put(p.Buf, o, b, d);
-        if (p.Stride == 20)
-        {
-            var g = WarData.Colour("hull");
-            p.Buf[o + 12] = g.R; p.Buf[o + 13] = g.G; p.Buf[o + 14] = g.B; p.Buf[o + 15] = 1;
-            p.Buf[o + 16] = empire.R; p.Buf[o + 17] = empire.G; p.Buf[o + 18] = empire.B; p.Buf[o + 19] = 1;
-        }
-        p.N++;
-        _hulls.Add(new HullAt { Key = key, At = at, Fwd = fwd, Half = half });
-        Glow(_driveBuf, ref _nDrive, _driveBuf.Length / 20, at - fwd * (half * 1.05f), half * 0.3f, empire.Lerp(Colors.White, 0.45f), 0.55f, 0.2f);
+        _hulls.Add(new HullAt { Key = key, At = at, Fwd = fwd, Half = half, Empire = empire });
         return true;
+    }
+
+    /// <summary>Every hull still flying (not blown up this cycle) into its pool, with its drive glow.</summary>
+    void FlushHulls()
+    {
+        foreach (var h in _hulls)
+        {
+            if (h.Hidden) continue;
+            var p = Pool(h.Key);
+            if (p.N * p.Stride >= p.Buf.Length) continue;
+            var d = Drawn(h.At, out float sq, out _);
+            var b = Basis.LookingAt(-h.Fwd, Mathf.Abs(h.Fwd.Y) > 0.98f ? Vector3.Right : Vector3.Up).Scaled(Vector3.One * (h.Half * sq));
+            int o = p.N * p.Stride;
+            Put(p.Buf, o, b, d);
+            if (p.Stride == 20)
+            {
+                var g = WarData.Colour("hull");
+                p.Buf[o + 12] = g.R; p.Buf[o + 13] = g.G; p.Buf[o + 14] = g.B; p.Buf[o + 15] = 1;
+                p.Buf[o + 16] = h.Empire.R; p.Buf[o + 17] = h.Empire.G; p.Buf[o + 18] = h.Empire.B; p.Buf[o + 19] = 1;
+            }
+            p.N++;
+            Glow(_driveBuf, ref _nDrive, _driveBuf.Length / 20, h.At - h.Fwd * (h.Half * 1.05f), h.Half * 0.3f, h.Empire.Lerp(Colors.White, 0.45f), 0.55f, 0.2f);
+        }
     }
 
     // ---------- effects ----------
@@ -437,7 +451,7 @@ void fragment(){
         if (sideV.LengthSquared() < 1e-6f) sideV = dir.Cross(Vector3.Up);
         sideV = sideV.Normalized();
         // never under about 1.6 px wide: a thinner quad breaks up into dots on screen
-        float w = Math.Max(dClose * Math.Max(widthK, 0.0018f), Math.Min(minW, dClose * 0.01f)) * sq;
+        float w = Math.Max(dClose * Math.Max(widthK, shape == ShapeTail ? 0.0026f : 0.0018f), Math.Min(minW, dClose * 0.01f)) * sq;
         int o = _nBeam++ * 20;
         Put(_beamBuf, o, new Basis(sideV * w, dir * len, sideV.Cross(dir)), da + dir * len * 0.5f);
         _beamBuf[o + 12] = col.R; _beamBuf[o + 13] = col.G; _beamBuf[o + 14] = col.B; _beamBuf[o + 15] = alpha;
@@ -475,6 +489,7 @@ void fragment(){
             float t = _fxT / period + i * 0.618034f + side * 0.31f;
             int cyc = (int)Mathf.Floor(t); float ph = Frac(t);
             var sh = _hulls[mine[(int)(Hash(i, cyc, side) % (uint)mine.Count)]];
+            if (sh.Dying) continue;              // a ship blowing up holds its fire
             var tg = _hulls[theirs[(int)(Hash(i, cyc, side + 7) % (uint)theirs.Count)]];
             D3 from = sh.At + sh.Fwd * sh.Half;
             var j = new Vector3((Hash(i, cyc, 1) % 1000) / 1000f - 0.5f, (Hash(i, cyc, 2) % 1000) / 1000f - 0.5f, (Hash(i, cyc, 3) % 1000) / 1000f - 0.5f);
@@ -549,8 +564,8 @@ void fragment(){
                     var mid = from.Lerp(to, 0.4 + 0.2 * ((Hash(i, fl, 5) % 1000) / 1000.0)) + n * (((Hash(i, fl, 4) % 1000) / 1000f - 0.5f) * dist * 0.06f);
                     var violet = new Color(0.75f, 0.35f, 1f);
                     float a2 = Mathf.Sin(Mathf.Pi * ph / 0.55f);
-                    Beam(from, mid, violet, a2 * 0.6f, ShapeLance, sh.Half * 0.08f, 0.004f, true);
-                    Beam(mid, to, violet, a2 * 0.6f, ShapeLance, sh.Half * 0.08f, 0.004f, true);
+                    Beam(from, mid, violet, (0.35f + 0.65f * a2) * 0.7f, ShapeLance, sh.Half * 0.08f, 0.004f, true);
+                    Beam(mid, to, violet, (0.35f + 0.65f * a2) * 0.7f, ShapeLance, sh.Half * 0.08f, 0.004f, true);
                     Spark(to, tg.Half * 0.6f, violet, a2);
                     break;
                 }
@@ -558,10 +573,10 @@ void fragment(){
         }
     }
 
-    /// <summary>A camera-facing shock ring of this radius (true units), at least a few pixels across.</summary>
-    void Ring(D3 at, float radius, Color col, float alpha)
+    /// <summary>A camera-facing fireball or shock ring of this radius (true units), at least a few pixels across.</summary>
+    void Billboard(D3 at, float radius, Color col, float alpha, float shape)
     {
-        if (_nRing >= BurstMax || alpha <= 0.01f) return;
+        if (_nRing >= BurstMax * 2 || alpha <= 0.01f) return;
         var d = Drawn(at, out float sq, out var tv);
         float dist = Math.Max(Frame.Cam.DistanceTo(tv), 1e-12f);
         radius = Math.Max(radius, dist * 0.012f);
@@ -573,12 +588,20 @@ void fragment(){
         int o = _nRing++ * 20;
         Put(_ringBuf, o, new Basis(right * radius * sq, up * radius * sq, toCam * radius * sq), d);
         _ringBuf[o + 12] = col.R; _ringBuf[o + 13] = col.G; _ringBuf[o + 14] = col.B; _ringBuf[o + 15] = alpha;
-        _ringBuf[o + 16] = ShapeRing; _ringBuf[o + 17] = _ringBuf[o + 18] = _ringBuf[o + 19] = 0;
+        _ringBuf[o + 16] = shape; _ringBuf[o + 17] = _ringBuf[o + 18] = _ringBuf[o + 19] = 0;
     }
 
-    /// <summary>Bursts on random ships of each side, as many as its share of the losses.</summary>
-    void Explosions(float shareA)
+    /// <summary>One explosion this frame: which hull, how far through (0..1), and its size and seed.</summary>
+    readonly List<(int Hull, float Q, float Scale, int Seed)> _blasts = new();
+
+    /// <summary>
+    /// Which hulls blow up this frame: bursts on random ships of each side, as many as its share of the losses, each
+    /// with its own size and timing. A ship that is exploding stops firing, and is gone once the flash has peaked
+    /// (until its slot's cycle comes round again).
+    /// </summary>
+    void ScheduleBursts(float shareA)
     {
+        _blasts.Clear();
         int splitA = Mathf.RoundToInt(BurstMax * shareA);
         for (int i = 0; i < BurstMax; i++)
         {
@@ -587,17 +610,41 @@ void fragment(){
             // never more bursts on a side than half its hulls, so the ships still show through the fire
             int k = side == 0 ? i : i - splitA;
             if (hs.Count == 0 || k >= Math.Max(1, hs.Count / 2)) continue;
-            float t = _fxT / 2.2f + i * 0.618034f;
+            float period = 2.0f + (Hash(i, 0, 21) % 1000) / 1000f * 1.4f;
+            float t = _fxT / period + i * 0.618034f;
             int cyc = (int)Mathf.Floor(t); float ph = Frac(t);
-            if (ph > 0.35f) continue;
-            float q = ph / 0.35f;
-            var h = _hulls[hs[(int)(Hash(i, cyc, 11) % (uint)hs.Count)]];
+            float life = 0.28f + (Hash(i, cyc, 22) % 1000) / 1000f * 0.14f;
+            int idx = hs[(int)(Hash(i, cyc, 11) % (uint)hs.Count)];
+            var h = _hulls[idx];
+            h.Dying = true;
+            float q = ph / life;
+            if (q > 0.12f) h.Hidden = true;
+            _hulls[idx] = h;
+            if (q <= 1f) _blasts.Add((idx, q, 0.6f + (Hash(i, cyc, 23) % 1000) / 1000f * 0.9f, (int)Hash(i, cyc, 24)));
+        }
+    }
+
+    void Explosions()
+    {
+        foreach (var (idx, q, scale, seed) in _blasts)
+        {
+            var h = _hulls[idx];
             var at = h.At + h.Fwd * (h.Half * 0.3f);
-            // a white-hot core flash, a fireball that swells and cools, and a shock ring racing out past it
-            if (q < 0.35f) Spark(at, h.Half * (1.1f + q), new Color(1f, 1f, 0.95f), 4f * (1f - q / 0.35f), 2.2f);
-            var col = new Color(1f, 0.85f, 0.55f).Lerp(new Color(1f, 0.32f, 0.08f), q);
-            Glow(_burstBuf, ref _nBurst, BurstMax, at, h.Half * (0.9f + 3.2f * Mathf.Sqrt(q)), col, Mathf.Pow(1f - q, 2f) * 3f, 2f);
-            Ring(at, h.Half * (0.8f + 4f * Mathf.Sqrt(q)), new Color(1f, 0.8f, 0.55f), Mathf.Pow(1f - q, 1.5f) * 1.6f);
+            float r = h.Half * scale;
+            // a hot white point first, peaking as the hull goes
+            if (q < 0.25f) Spark(at, r * (0.12f + q * 0.8f), new Color(1f, 1f, 0.97f), 2.5f * Mathf.Sin(Mathf.Pi * q / 0.25f), 1.0f);
+            // the fireball swells, yellow-white to orange, and fades out (never to a dark disc)
+            float fq = Mathf.Clamp((q - 0.04f) / 0.7f, 0, 1);
+            if (q > 0.04f && fq < 1f) Billboard(at, r * (0.8f + 2.4f * Mathf.Sqrt(fq)), new Color(1f, 0.82f, 0.5f).Lerp(new Color(1f, 0.62f, 0.3f), fq), Mathf.Pow(1f - fq, 3f) * 0.9f, ShapeFire);
+            // a thin shock ring racing out, fading as it grows
+            if (q > 0.1f) { float rq = (q - 0.1f) / 0.9f; Billboard(at, r * (1.2f + 8f * Mathf.Sqrt(rq)), new Color(1f, 0.88f, 0.7f), Mathf.Pow(1f - rq, 3f) * 0.9f, ShapeRing); }
+            // a few pieces of the hull tumbling away
+            if (q > 0.12f)
+                for (int d = 0; d < 4; d++)
+                {
+                    var dir = new Vector3((Hash(seed, d, 1) % 1000) / 500f - 1f, (Hash(seed, d, 2) % 1000) / 500f - 1f, (Hash(seed, d, 3) % 1000) / 500f - 1f);
+                    Spark(at + dir * (r * (0.4f + 2.2f * q)), r * 0.1f, new Color(1f, 0.7f, 0.4f), (1f - q) * 0.9f, 0.4f);
+                }
         }
     }
 }

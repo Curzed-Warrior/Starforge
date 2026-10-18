@@ -650,12 +650,14 @@ public partial class Main : Node3D
         {
             var f = Sim.FleetsOf(civ).FirstOrDefault(x => x.Name == Forces.FleetName(0)) ?? Sim.FleetsOf(civ).FirstOrDefault();
             if (f == null) { f = new Fleet { Id = Sim.NextFleetId++, Civ = civ.Id, At = star, Name = Forces.FleetName(0) }; Sim.Fleets.Add(f); }
-            // a fleet with no ships gets a squadron of its best hull, so both sides have something to fight with; the
-            // player's early navy (shuttles) would be specks beside an old empire's, so it gets a mixed light squadron
-            if (f.Ships <= 0)
+            // an alien fleet with no ships gets a squadron of its best hull. The player's early navy (shuttles) would be
+            // specks beside an old empire's line, so for this test the Home Fleet is a heavy line of the modelled hulls
+            if (civ.Alien) { if (f.Ships <= 0) f.Add(civ.Hull, 12, 0); }
+            else
             {
-                if (civ.Alien) f.Add(civ.Hull, 12, 0);
-                else foreach (var (name, n) in new[] { ("Corvette", 8), ("Frigate", 6), ("Destroyer", 4), ("Cruiser", 2) }) f.Add(Math.Max(Array.IndexOf(Defs.Hulls, name), 0), n, 0);
+                f.Squadrons.Clear();
+                foreach (var (name, n) in new[] { ("Carrier", 3), ("Titan", 3), ("Juggernaut", 3), ("Colossus", 3), ("Dreadnought", 3) })
+                    if (Array.IndexOf(Defs.Hulls, name) is int hi and >= 0) f.Add(hi, n, 0);
             }
             f.At = star; f.To = -1; f.Target = -1;
             return f;
