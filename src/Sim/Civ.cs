@@ -102,6 +102,8 @@ public class Civ
     public double MilShare = 0.04, Efficiency = 1, Materiel, Manpower, WarStrain;
     /// <summary>Where the military share stood when the level last changed, and when.</summary>
     public double MilFrom = 0.04, MilSince;
+    /// <summary>The building slips and what is on them (WarEconomy.YardStep).</summary>
+    public List<Slip> Yard = new();
     /// <summary>How many believe the unseen voice is real (0..1), and how many fear it.</summary>
     public float Faith, Dread;
     public int FaithStage;     // how hungrily this polity spreads: old empires are slow, young ones restless

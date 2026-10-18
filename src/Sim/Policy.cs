@@ -29,6 +29,8 @@ public class Policy
 
     /// <summary>Production in manual: the mobilisation level the player has chosen (0 peace .. 3 total war).</summary>
     public int Mobilisation;
+    /// <summary>Production in manual: the hull class every slip builds, or -1 to leave the mix to the council.</summary>
+    public int HullMix = -1;
 
     /// <summary>Construction in manual: great works the player has approved, and ones turned down (never proposed again).</summary>
     public HashSet<string> Approved = new(), Declined = new();

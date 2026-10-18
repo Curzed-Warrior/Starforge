@@ -71,5 +71,25 @@ public static class WarTests
             var sim = SelfTest.NewSim(); sim.Warp(2);
             SelfTest.Check(sim.CouncilMobilisation(sim.Humanity) == 0 && sim.Humanity.MilShare < 0.05, "peacetime by default");
         }),
+        ("yards_build_ships", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(30);
+            var h = sim.Humanity;
+            SelfTest.Check(sim.FleetsOf(h).Sum(f => f.Ships) >= 1, "peacetime yards launch something in thirty years");
+            SelfTest.Check(h.Yard.Count <= sim.Slips(h), "never more work than slips");
+        }),
+        ("slips_bound_output", () => {
+            var sim = SelfTest.NewSim(); var h = sim.Humanity;
+            h.Materiel = 1e30;                                                           // a late-game stockpile
+            double before = sim.FleetsOf(h).Sum(f => f.Ships); sim.Warp(10);
+            double built = sim.FleetsOf(h).Sum(f => f.Ships) - before;
+            SelfTest.Check(built <= sim.Slips(h) * 10 / Simulation.BuildYears(0) + 1, "slips and build time bound the output");
+            SelfTest.Check(!double.IsNaN(h.Materiel) && !double.IsInfinity(h.Materiel), "no overflow");
+        }),
+        ("upkeep_mothballs", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity;
+            var f = sim.FleetsOf(h).First(); f.Add(Defs.Hulls.Length - 1, 500, 0f); h.Materiel = 0;   // 500 worldships: far beyond 2060s industry
+            sim.Warp(3);
+            SelfTest.Check(f.Ships < 500, "a navy the economy cannot pay for is laid up");
+        }),
     };
 }
