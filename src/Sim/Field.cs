@@ -58,6 +58,7 @@ public partial class Simulation
         if (from == to) return;
         // a new owner starts the books afresh: grievance is judged by them from the next year
         c.Grievance = 0; c.Unrest = 0; c.Cause = null; c.Movement = null; c.Autonomy = false; c.InvestedUntil = 0;
+        c.YardDownUntil = c.DepositsDownUntil = c.IncitedUntil = c.PreparedUntil = 0; c.PreparedBy = -1;
         from.Colonies.Remove(c);
         to.Colonies.Add(c);
         c.Home = false;                       // a conquered capital is not the conqueror's capital

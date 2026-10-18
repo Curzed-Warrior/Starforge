@@ -616,6 +616,7 @@ public partial class Simulation
         }
         Year += dy;
         FieldStep(dy);
+        SpecOpsStep(dy);
         if (sw != null) t0 = sw.ElapsedTicks;
         foreach (var civ in Civs.ToList())
         {

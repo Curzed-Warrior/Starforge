@@ -23,11 +23,9 @@ public partial class Simulation
         // a council acts every eight years or so, more often at war
         if (_r.NextDouble() > dy * (civ.AtWar.Count > 0 ? 0.25 : 0.12)) return;
         var options = new List<(string Id, Act A, double W)>();
-        foreach (var id in civ.M.Acts)
+        foreach (var id in ActOptions(civ))
         {
-            if (!Acts.TryGetValue(id, out var a)) continue;
-            if (Year < civ.ActAt.GetValueOrDefault(id)) continue;
-            if (a.Atrocity && !AtrocityAllowed(civ)) continue;
+            var a = Acts[id];
             if (!a.Can(civ)) continue;
             options.Add((id, a, a.Weight));
         }
@@ -41,6 +39,25 @@ public partial class Simulation
             else civ.ActAt[o.Id] = Year + 5;
             return;
         }
+    }
+
+    /// <summary>Espionage acts a civ's special forces do instead, once it has teams (SpecOps.cs): never both.</summary>
+    static readonly HashSet<string> TeamActs = new() { "steal_tech", "sabotage", "incite" };
+
+    /// <summary>The acts a council may consider now (before each act's own condition): known, off cooldown, allowed.</summary>
+    internal List<string> ActOptions(Civ civ)
+    {
+        bool teams = Teams.Any(t => t.Civ == civ.Id);
+        return civ.M.Acts.Where(id => Acts.ContainsKey(id) && Year >= civ.ActAt.GetValueOrDefault(id)
+                                      && !(Acts[id].Atrocity && !AtrocityAllowed(civ)) && !(teams && TeamActs.Contains(id))).ToList();
+    }
+
+    /// <summary>Take one technology the victim has and the thief could use (the steal_tech act and the special forces' mission). Null when there is none.</summary>
+    Tech StealTech(Civ c, Civ o)
+    {
+        var t = o.Techs.Select(Defs.TechById).Where(x => Available(c, x)).OrderBy(_ => _r.Next()).FirstOrDefault();
+        if (t != null) CompleteTech(c, t, true);
+        return t;
     }
 
     // ---------- helpers ----------
@@ -291,8 +308,7 @@ public partial class Simulation
         d["steal_tech"] = new(c => mark(c) is { } o && o.Techs.Any(id => Available(c, Defs.TechById(id))), c =>
         {
             var o = Known(c).Where(o => o.Techs.Any(id => Available(c, Defs.TechById(id)))).OrderBy(_ => _r.Next()).First();
-            var t = o.Techs.Select(Defs.TechById).Where(x => Available(c, x)).OrderBy(_ => _r.Next()).First();
-            CompleteTech(c, t, true);
+            var t = StealTech(c, o);
             bool caught = Caught(c, o, 0.35);
             Say(c, Home(c), caught ? $"{Cap(N(c))} are caught stealing {t.Name} from {N(o)}." : $"{Cap(N(c))} acquire {t.Name}. Nobody asks where from.", caught ? "loss" : "event");
             return true;

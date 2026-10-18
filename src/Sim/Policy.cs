@@ -42,7 +42,7 @@ public class Policy
     public Dictionary<string, double> AskAfter = new();
 
     public static readonly string[] WorkKinds = { "Industry", "Stellar", "Mind", "Transit", "Habitat", "War" };
-    public static readonly string[] Categories = { "War", "Battle", "Contact", "Decision", "Milestone", "Crisis", "Unrest" };
+    public static readonly string[] Categories = { "War", "Battle", "Contact", "Decision", "Milestone", "Crisis", "Unrest", "Incident" };
 
     public static string Describe(Area a) => a switch
     {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
@@ -140,8 +141,17 @@ public partial class Simulation
         int slips = Slips(c);
         if (c.Yard.Count > slips) c.Yard.RemoveRange(slips, c.Yard.Count - slips);
         while (c.Yard.Count < slips) c.Yard.Add(new Slip { Hull = ChooseHull(c) });
+        // which slips belong to a colony whose yards are sabotaged (the Yard list holds slips colony by colony)
+        var idle = new HashSet<int>();
+        for (int ci = 0, at = 0; ci < c.Colonies.Count; ci++)
+        {
+            int n = SlipsOf(c.Colonies[ci]);
+            if (c.Colonies[ci].YardDownUntil > Year) for (int j = at; j < at + n; j++) idle.Add(j);
+            at += n;
+        }
         for (int i = 0; i < c.Yard.Count; i++)
         {
+            if (idle.Contains(i)) continue;
             var sl = c.Yard[i];
             double kg = HullKg(sl.Hull);
             double step = Math.Min(dy / BuildYears(sl.Hull), 1 - sl.Progress);

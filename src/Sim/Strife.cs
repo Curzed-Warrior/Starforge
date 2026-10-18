@@ -8,6 +8,9 @@ namespace Starforge.Sim;
 public partial class Colony
 {
     /// <summary>Grievance 0..100, pulled each year toward a target made of named causes (Simulation.GrievanceTarget).</summary>
+    /// <summary>Special forces' work here (SpecOps.Succeed): until when its yards and deposits are wrecked, agitators stir it, and who prepared it for invasion.</summary>
+    public double YardDownUntil, DepositsDownUntil, IncitedUntil, PreparedUntil;
+    public int PreparedBy = -1;
     public float Grievance;
     /// <summary>The ladder: 0 calm, 1 discontent, 2 strikes, 3 insurgency, 4 open revolt.</summary>
     public int Unrest;
@@ -94,7 +97,7 @@ public partial class Simulation
         ["warExhaustion"] = "the war has gone on far too long", ["outOfPower"] = "its people have no voice on the council",
         ["deposits"] = "its rare deposits feed other worlds' projects", ["occupied"] = "it is under enemy occupation",
         ["poverty"] = "it is poor beside the core's wealth", ["dread"] = "it lives in fear of the voice",
-        ["mandatory"] = "its young are called up against their will",
+        ["mandatory"] = "its young are called up against their will", ["incited"] = "agitators from abroad are stirring it up",
     };
 
     /// <summary>Where this system's grievance is heading (0..100), and its biggest cause as a phrase.</summary>
@@ -129,6 +132,7 @@ public partial class Simulation
         if (meanInd > 0 && c.IndustryKg < 0.2 * meanInd) Add("poverty", 1);
         Add("dread", civ.Dread);
         if (civ.MandatoryService && civ.Culture != null && civ.Culture.Duty < 0) Add("mandatory", 1);
+        if (c.IncitedUntil > Year) Add("incited", 1);
         double relief = SD("relief", "base") + SD("relief", "megaOrder") * c.MegaOrder + SD("relief", "faith") * civ.Faith
                         + (c.Autonomy ? SD("relief", "autonomy") : 0) + (Year < c.InvestedUntil ? SD("relief", "invested") : 0);
         causeKey = top;

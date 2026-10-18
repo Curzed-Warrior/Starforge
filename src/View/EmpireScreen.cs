@@ -390,12 +390,12 @@ public partial class EmpireScreen : PanelContainer
     public static string CatName(string cat) => cat switch
     {
         "War" => "Wars and losses", "Battle" => "Battles won", "Contact" => "Contact and diplomacy", "Decision" => "Decisions",
-        "Milestone" => "Milestones", "Crisis" => "Crises", "Unrest" => "Unrest", _ => cat
+        "Milestone" => "Milestones", "Crisis" => "Crises", "Unrest" => "Unrest", "Incident" => "Incidents", _ => cat
     };
 
     public static Color CatColor(string cat) => cat switch
     {
         "War" => Ui.Danger, "Battle" => new Color(1f, 0.6f, 0.45f), "Contact" => Ui.Omen, "Decision" => Ui.Warm,
-        "Milestone" => Ui.Accent, "Crisis" => Ui.Danger, "Unrest" => new Color(1f, 0.8f, 0.4f), _ => Ui.Text
+        "Milestone" => Ui.Accent, "Crisis" => Ui.Danger, "Unrest" => new Color(1f, 0.8f, 0.4f), "Incident" => new Color(0.75f, 0.5f, 1f), _ => Ui.Text
     };
 }

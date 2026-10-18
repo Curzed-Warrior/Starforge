@@ -71,6 +71,6 @@ public partial class Notifications : HBoxContainer
 
     static string Glyph(Alert a) => a.Cat switch
     {
-        "War" => "⚔", "Battle" => "✦", "Contact" => "◎", "Decision" => "?", "Milestone" => "★", "Crisis" => "!", "Unrest" => "≈", _ => "•"
+        "War" => "⚔", "Battle" => "✦", "Contact" => "◎", "Decision" => "?", "Milestone" => "★", "Crisis" => "!", "Unrest" => "≈", "Incident" => "◆", _ => "•"
     };
 }
