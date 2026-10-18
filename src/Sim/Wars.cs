@@ -121,11 +121,17 @@ public partial class Simulation
             if (a.Dead || b.Dead)
             {
                 // a side is gone: the survivors keep what they hold of it, and nobody occupies for the dead
-                var dead = a.Dead ? a : b;
-                foreach (var c in Colonies) if (c.OccupiedBy == dead.Id) c.OccupiedBy = -1;
+                ReturnOccupied(w);
                 Close(w, "collapse");
             }
-            else if (!a.AtWar.Contains(b.Id)) Close(w, "status quo");
+            else if (!a.AtWar.Contains(b.Id)) { ReturnOccupied(w); Close(w, "status quo"); }
+        }
+        // nobody occupies for the dead, or for a side no longer at war (a ceasefire's frozen front excepted)
+        foreach (var c in Colonies)
+        {
+            if (c.OccupiedBy < 0) continue;
+            var occ = Civs[c.OccupiedBy];
+            if (occ.Dead || occ == c.Civ || !occ.AtWar.Contains(c.Civ.Id) && !Wars.Any(x => x.Ceasefire && x.Has(occ.Id) && x.Has(c.Civ.Id))) c.OccupiedBy = -1;
         }
         foreach (var c in Civs)
         {
@@ -232,7 +238,7 @@ public partial class Simulation
             {
                 case "cede_claims": foreach (var c in loser.Colonies.Where(c => w.Claims.Contains(c.Star.Id)).ToList()) TransferColony(c, winner); break;
                 case "cede_occupied": case "partition": case "collapse":
-                    foreach (var c in held) if (c.Civ == loser) TransferColony(c, Civs[c.OccupiedBy]);
+                    foreach (var c in held) if (c.Civ == loser && c.OccupiedBy >= 0 && !Civs[c.OccupiedBy].Dead) TransferColony(c, Civs[c.OccupiedBy]);
                     if (t.Id == "collapse" && !loser.Dead) loser.Overlord = winner;
                     break;
                 case "reunion": foreach (var c in loser.Colonies.ToList()) TransferColony(c, winner); break;

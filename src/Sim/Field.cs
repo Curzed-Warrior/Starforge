@@ -58,6 +58,7 @@ public partial class Simulation
         if (from == to) return;
         from.Colonies.Remove(c);
         to.Colonies.Add(c);
+        c.Home = false;                       // a conquered capital is not the conqueror's capital
         c.Civ = to;
         c.Star.Owner = to.Id;
         from.LastLoss = Year;
@@ -78,7 +79,14 @@ public partial class Simulation
         Armies.RemoveAll(a => a.Fleet >= 0 && !fleetById.ContainsKey(a.Fleet));
         foreach (var a in Armies)
         {
-            if (a.Fleet >= 0) a.At = fleetById[a.Fleet].At;
+            if (a.Fleet >= 0)
+            {
+                var f = fleetById[a.Fleet];
+                a.At = f.At;
+                // troops come ashore at their own systems unless the fleet is about to attack, and always at peace
+                var own = f.Moving ? null : ColonyAt(f.At);
+                if (own != null && own.Civ.Id == a.Civ && own.OccupiedBy < 0 && (f.Mission != "attack" || Civs[a.Civ].AtWar.Count == 0)) a.Fleet = -1;
+            }
             else if (a.To >= 0 && Year >= a.Arrive) { a.At = a.To; a.To = -1; }
         }
 
@@ -143,6 +151,7 @@ public partial class Simulation
         var source = sa.Civ.Colonies.OrderBy(c => c.Star.Pos.DistanceSquaredTo(Gal.Stars[star].Pos)).FirstOrDefault();
         if (source != null && target != null) BattleFought?.Invoke(source, target, sa.Civ);
         var (win, lose) = r.AWins ? (sa.Civ, sb.Civ) : (sb.Civ, sa.Civ);
+        AfterBattle(win, lose, target);
         double lostKg = r.AWins ? r.KgLostB : r.KgLostA, navy = r.AWins ? navyB : navyA;
         if ((win.Main || lose.Main) && Year - w.LastLog >= 1 && lostKg >= F("logBattleShare") * Math.Max(navy, 1))
         {
@@ -179,6 +188,18 @@ public partial class Simulation
         return best;
     }
 
+    /// <summary>Wrecks teach: salvage toward the Umbral and Vault gates, and the salvage act's stolen techs.</summary>
+    public void AfterBattle(Civ att, Civ def, Colony at)
+    {
+        if (def.Knows("UMB-3") && att.Gates.GetValueOrDefault("GE6") == 1) att.GateP["GE6:salvage"] = att.GateP.GetValueOrDefault("GE6:salvage") + 1;
+        if (def.Knows("GLY-1") && att.Gates.GetValueOrDefault("GE8") == 1) att.GateP["GE8:wrecks"] = 1;
+        if (att.M.Acts.Contains("salvage_tech") && _r.NextDouble() < 0.3)
+        {
+            var t = def.Techs.Select(Defs.TechById).Where(x => Available(att, x)).OrderBy(_ => _r.Next()).FirstOrDefault();
+            if (t != null) { CompleteTech(att, t, true); if (att.Main && at != null) Log(at, $"Salvage teams pick over the wrecks at {at.Sys.Name}. What they find becomes {t.Name}.", "event", null); }
+        }
+    }
+
     static double TraitD(string trait, string key, double dflt) =>
         WarData.P("battle", "traits", trait).TryGetProperty(key, out var v) ? v.GetDouble() : dflt;
 
@@ -197,7 +218,8 @@ public partial class Simulation
         var enemies = civ.AtWar.Where(id => id < Civs.Count && !Civs[id].Dead).Select(id => Civs[id]).ToList();
         var claims = Wars.Where(w => w.Open && w.A.Contains(civ.Id)).SelectMany(w => w.Claims).ToHashSet();
 
-        Colony frontier = null, watch = null; Civ rival = null; HashSet<int> hostile = null;
+        Colony frontier = null, watch = null; Civ rival = null; HashSet<int> hostile = null; List<Colony> lost = null;
+        var inReach = new Dictionary<int, List<Colony>>();
         // at war, armies beyond the capital's own garrison ship out to the frontier, where the attack fleets gather
         if (enemies.Count > 0 && !manual && (frontier = Frontier(civ, enemies)) != null && frontier != home)
         {
@@ -243,13 +265,35 @@ public partial class Simulation
                 if (f.Target != pick.Star.Id) Order(f, pick.Star.Id, "defend");
                 continue;
             }
+            // our own systems in enemy hands come first
+            if (f.Mission == "attack")
+            {
+                lost ??= civ.Colonies.Where(c => c.OccupiedBy >= 0 && enemies.Contains(Holder(c))).ToList();
+                var lib = lost.Count == 0 ? null : lost.Where(InReach).OrderBy(c => c.Star.Pos.DistanceSquaredTo(from.Pos)).FirstOrDefault();
+                if (lib != null)
+                {
+                    if (f.Target != lib.Star.Id)
+                    {
+                        if (!f.Moving)
+                            foreach (var a in Armies.Where(a => a.Civ == civ.Id && a.Fleet < 0 && a.To < 0 && a.At == f.At).Skip(f.At == home.Star.Id ? 1 : 0).Take((int)F("embarkArmies")).ToList())
+                                a.Fleet = f.Id;
+                        Order(f, lib.Star.Id, "attack");
+                    }
+                    continue;
+                }
+            }
             // keep a target that is still the enemy's (and not already ours by occupation)
             if (f.Target >= 0 && ColonyAt(f.Target) is { } cur && enemies.Contains(Holder(cur)) && (f.Mission == "blockade" || cur.OccupiedBy != civ.Id)) continue;
-            var targets = enemies.SelectMany(e => e.Colonies).Where(c => c.OccupiedBy != civ.Id).Where(InReach).ToList();
+            // the enemy's systems not already in friendly hands, and our own systems the enemy holds
+            // (fleets setting out from the same star share one list)
+            lost ??= civ.Colonies.Where(c => c.OccupiedBy >= 0 && enemies.Contains(Holder(c))).ToList();
+            if (!inReach.TryGetValue(from.Id, out var targets))
+                inReach[from.Id] = targets = enemies.SelectMany(e => e.Colonies).Where(c => enemies.Contains(Holder(c))).Concat(lost).Where(InReach).ToList();
             if (f.Mission == "raid" || f.Mission == "blockade")
                 pick = targets.OrderByDescending(c => c.IndustryKg).FirstOrDefault();
             else
-                pick = targets.Where(c => claims.Contains(c.Star.Id)).OrderBy(c => c.Star.Pos.DistanceSquaredTo(from.Pos)).FirstOrDefault()
+                pick = targets.Where(c => c.Civ == civ).OrderBy(c => c.Star.Pos.DistanceSquaredTo(from.Pos)).FirstOrDefault()
+                    ?? targets.Where(c => claims.Contains(c.Star.Id)).OrderBy(c => c.Star.Pos.DistanceSquaredTo(from.Pos)).FirstOrDefault()
                     ?? targets.OrderBy(c => c.Star.Pos.DistanceSquaredTo(from.Pos)).FirstOrDefault();
             if (pick == null)
             {
@@ -262,7 +306,7 @@ public partial class Simulation
             string mission = f.Mission == "raid" ? "blockade" : f.Mission;
             // an attack carries armies from wherever it sets out
             if (mission == "attack" && !f.Moving)
-                foreach (var a in Armies.Where(a => a.Civ == civ.Id && a.Fleet < 0 && a.To < 0 && a.At == f.At).Take((int)F("embarkArmies")).ToList())
+                foreach (var a in Armies.Where(a => a.Civ == civ.Id && a.Fleet < 0 && a.To < 0 && a.At == f.At).Skip(f.At == home.Star.Id ? 1 : 0).Take((int)F("embarkArmies")).ToList())
                     a.Fleet = f.Id;
             Order(f, pick.Star.Id, mission);
         }

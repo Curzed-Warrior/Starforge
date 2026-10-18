@@ -320,7 +320,7 @@ public partial class Simulation
         // ---- flavour ----
         d["dig"] = new(c => true, c => { var h = Home(c); h.Stock += 0.05 * h.PFrac; foreach (var s in c.Slots.Values) s.P += 2; Say(c, h, $"Archaeologists of {N(c)} open a dig on a dead world and find a library nobody can read yet."); return true; }, 0.5);
         d["find_ruins"] = new(c => true, c => { var h = Home(c); h.Stock += 0.08 * h.PFrac; c.GateP["ruins"] = c.GateP.GetValueOrDefault("ruins") + 1; Say(c, h, $"Deep scans find ruins under {h.Sys.Name}'s outermost moon. Whoever built them was here before the star had planets."); return true; }, 0.5);
-        d["salvage_tech"] = new(c => false, c => false);       // happens after battles (War.cs)
+        d["salvage_tech"] = new(c => false, c => false);       // happens after battles (Field.AfterBattle)
         d["foresee"] = new(c => c.Colonies.Any(x => x.Crisis != null), c =>
         {
             var col = c.Colonies.First(x => x.Crisis != null);

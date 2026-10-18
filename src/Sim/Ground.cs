@@ -76,6 +76,23 @@ public partial class Simulation
         bool freed = invader == c.Civ;
         c.OccupiedBy = freed ? -1 : invader.Id;
         c.DefenceLoss = Math.Max(c.DefenceLoss, 1f);
+        if (!freed)
+        {
+            if (invader.Main) Raise("Battle", $"{c.Sys.Name} taken", $"Our armies land on {c.Sys.Name} and hold it for the rest of the war.", c);
+            else if (c.Civ.Main) Raise("War", $"{c.Sys.Name} occupied", $"{Narrative2.Called(invader, true)} land on {c.Sys.Name} and occupy it.", c);
+            // the Ruthless burn what they take; a council that purges does so
+            double burn = invader.Ethic == "Ruthless" ? 0.4 / (1 + 0.1 * invader.M.Arms.GetValueOrDefault("ground") * invader.M.Ground) : 0;
+            if (burn > 0 && _r.NextDouble() < burn)
+            {
+                DestroyColony(c, $"{Narrative2.Called(invader, true)} burn {c.Sys.Name}. Its swarm is scattered; its worlds go dark.");
+                return true;
+            }
+            if (invader.M.Acts.Contains("purge") && AtrocityAllowed(invader))
+            {
+                c.Pop *= 0.5; CivAtrocity(invader, c, 10, c.Civ);
+                if (invader.Main || c.Civ.Main) Log(c, $"{Narrative2.Called(invader, true)} purge {c.Sys.Name} of its people.", "loss", null);
+            }
+        }
         if (invader.Main || c.Civ.Main)
             Log(c, freed ? $"{c.Sys.Name} is free again: {Narrative2.Called(invader, true)} land and drive out {Narrative2.Called(holder)}."
                          : $"{Narrative2.Called(invader, true)} land on {c.Sys.Name} and occupy it.", invader.Main ? "era" : "loss", null);

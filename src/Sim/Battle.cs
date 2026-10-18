@@ -92,7 +92,11 @@ public static class Battles
         // the loser's fleets go home to refit
         var loser = aWins ? b : a;
         var home = loser.Civ.Colonies.FirstOrDefault(c => c.Home) ?? loser.Civ.Colonies.FirstOrDefault();
-        if (home != null) foreach (var f in loser.Fleets) sim.Order(f, home.Star.Id, f.Mission == "blockade" ? "raid" : f.Mission);
+        // (when Fleets is in the player's hands, their fleets go home only if broken)
+        bool manual = loser.Civ.Policy.IsManual(Area.Fleets);
+        if (home != null)
+            foreach (var f in loser.Fleets)
+                if (!manual || f.Morale < B("moraleBreak")) sim.Order(f, home.Star.Id, f.Mission == "blockade" ? "raid" : f.Mission);
         return new BattleResult(aWins, shipsA0 - Ships(a), shipsB0 - Ships(b), kgA0 - Kg(a), kgB0 - Kg(b), rounds, aBreaks, bBreaks);
     }
 

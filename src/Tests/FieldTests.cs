@@ -101,6 +101,7 @@ public static class FieldTests
         }),
         ("occupation_cuts_materiel", () => {
             var sim = SelfTest.NewSim(); sim.Warp(2); var o = sim.Civs.First(c => c.Alien && c.Colonies.Count > 1);
+            sim.DeclareWar(sim.Humanity, o);
             double before = o.Materiel; sim.Warp(1); double peace = o.Materiel - before;
             foreach (var c in o.Colonies) c.OccupiedBy = sim.Humanity.Id;
             before = o.Materiel; sim.Warp(1);
@@ -161,6 +162,77 @@ public static class FieldTests
             var f2 = s2.FleetsOf(s2.Humanity).First(x => x.Id == f.Id);
             SelfTest.Check(s2.Wars.Count == sim.Wars.Count && s2.WarBetween(s2.Humanity, s2.Civs[o.Id]).Reason == w.Reason, "wars round-trip");
             SelfTest.Check(f2.To == f.To && f2.Arrive == f.Arrive && s2.Civs[o.Id].Colonies.Last().OccupiedBy == h.Id && s2.Civs[o.Id].Colonies.Last().DefenceLoss == 0.5f && s2.Humanity.Truce[5] == 2500, "movement, occupation and truces round-trip");
+        }),
+        ("peace_returns_occupation", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien && c.Colonies.Count > 1);
+            sim.DeclareWar(h, o); var col = o.Colonies.Last(); col.OccupiedBy = h.Id;
+            h.AtWar.Remove(o.Id); o.AtWar.Remove(h.Id); sim.Warp(0.5);                   // peace imposed from outside (a god power, an act, the law)
+            SelfTest.Check(col.OccupiedBy < 0, "a war ended elsewhere hands back what was occupied");
+        }),
+        ("dead_occupier_cleared", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var o = sim.Civs.First(c => c.Alien && c.Colonies.Count > 1);
+            var q = sim.Civs.Last(c => c.Alien && c != o && c.Colonies.Count > 0);
+            var col = o.Colonies.Last(); col.OccupiedBy = q.Id;
+            foreach (var c in q.Colonies.ToList()) sim.DestroyColony(c, "test");
+            sim.Warp(0.5);
+            SelfTest.Check(q.Dead && col.OccupiedBy < 0, "nobody occupies for the dead");
+        }),
+        ("attack_skips_allied_holds", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien && c.Colonies.Count > 2);
+            var q = sim.Civs.Last(c => c.Alien && c != o && c.Colonies.Count > 0);
+            sim.DeclareWar(h, o); q.AtWar.Add(o.Id); o.AtWar.Add(q.Id);
+            foreach (var c in o.Colonies.Skip(1)) c.OccupiedBy = q.Id;
+            sim.Warp(1);
+            var held = o.Colonies.Skip(1).Select(c => c.Star.Id).ToHashSet();
+            SelfTest.Check(sim.FleetsOf(h).All(f => f.Mission != "attack" || !held.Contains(f.Target)), "no attack on a system an ally already holds");
+        }),
+        ("council_liberates", () => {
+            var sim = SelfTest.NewSim(); var h = sim.Humanity; Civ o = null; Colony col = null;
+            for (int tries = 0; tries < 20 && col == null; tries++)
+            {
+                sim.Warp(25);
+                foreach (var c in sim.Civs.Where(c => c.Alien && !c.Dead && c.Colonies.Count > 1 && sim.FleetsOf(c).Any(f => f.Mission == "attack")))
+                {
+                    var at = sim.Gal.Stars[sim.FleetsOf(c).First(f => f.Mission == "attack").At];
+                    col = c.Colonies.Where(x => x.Star != at && sim.TravelYears(c, at, x.Star) <= 8).FirstOrDefault();
+                    if (col != null) { o = c; break; }
+                }
+            }
+            SelfTest.Check(col != null, "some empire has a system within its fleets' reach");
+            sim.DeclareWar(h, o); col.OccupiedBy = h.Id; sim.Warp(1);
+            SelfTest.Check(sim.FleetsOf(o).Any(f => f.Mission == "attack" && f.Target == col.Star.Id), "attack fleets go to free their own occupied system");
+        }),
+        ("armies_disembark_home", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(20); var h = sim.Humanity; var f = sim.FleetsOf(h).First();
+            foreach (var a in sim.ArmiesOf(h)) { a.Fleet = f.Id; a.At = f.At; }
+            sim.Warp(1);
+            SelfTest.Check(sim.ArmiesOf(h).Any() && sim.ArmiesOf(h).All(a => a.Fleet < 0), "at peace, troops come ashore");
+        }),
+        ("ceded_capital_not_home", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien && c.Colonies.Count > 1);
+            var cap = h.Colonies.First(c => c.Home); sim.TransferColony(cap, o);
+            SelfTest.Check(!cap.Home && o.Colonies.Count(c => c.Home) == 0, "a conquered capital is not the conqueror's capital");
+        }),
+        ("salvage_after_battle", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien);
+            o.Techs.Add("UMB-3"); h.Gates["GE6"] = 1;
+            sim.AfterBattle(h, o, o.Colonies[0]);
+            SelfTest.Check(h.GateP.GetValueOrDefault("GE6:salvage") >= 1, "wrecks still teach");
+        }),
+        ("manual_loser_not_recalled", () => {
+            var sim = SelfTest.NewSim(); var a = sim.Humanity; var b = sim.Civs.First(c => c.Alien); sim.Warp(2);
+            sim.SetManual(a, Area.Fleets, true);
+            var fa = new Fleet { Civ = a.Id, Admiral = new Admiral { Skill = 1, Trait = "Tactician" }, Target = 77, At = 77, Mission = "attack" }; fa.Add(2, 100, 0f);
+            var fb = new Fleet { Civ = b.Id, Admiral = new Admiral { Skill = 1, Trait = "Tactician" } }; fb.Add(2, 300, 0f);
+            Even(a, b);
+            var r = Battles.Resolve(sim, new BattleSide { Civ = a, Fleets = { fa } }, new BattleSide { Civ = b, Fleets = { fb } });
+            SelfTest.Check(!r.AWins && (r.ARetreats || fa.Target == 77), "the player's unbroken fleet keeps the player's orders");
+        }),
+        ("player_told_of_occupation", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien);
+            sim.DeclareWar(o, h); var col = h.Colonies.First();
+            sim.Land(col, o, new List<Army> { new() { Civ = o.Id, Troops = 1e6, Quality = 1 } });
+            SelfTest.Check(sim.Alerts.Any(x => x.Cat == "War" && x.Title.Contains(col.Sys.Name)), "the player hears a system was taken");
         }),
     };
 }
