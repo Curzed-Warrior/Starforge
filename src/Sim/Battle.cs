@@ -21,7 +21,8 @@ public record BattleRecord(int Star, double Year, int WarId, int CivA, int CivB,
 
 public partial class Simulation
 {
-    /// <summary>Recent battles, newest last, at most interface.battleRecordsMax (transient: not saved, rebuilt as the sim runs).</summary>
+    /// <summary>Recent battles, newest last, at most interface.battleRecordsMax (transient: not saved, rebuilt as the sim runs).
+    /// Inside Simulation this name hides the static class Battles: call that one as Starforge.Sim.Battles.</summary>
     public readonly List<BattleRecord> Battles = new();
 
     /// <summary>The battles fought at a star since a year, oldest first.</summary>

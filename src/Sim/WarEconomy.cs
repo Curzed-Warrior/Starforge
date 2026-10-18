@@ -188,7 +188,7 @@ public partial class Simulation
             foreach (var (id, p) in col.Built)
                 if (p > 0 && p < 1 && Colony.Needs(id) is string need && !c.Strategic.Contains(need) && seen.Add(id))
                 {
-                    string name = Array.Find(Starforge.View.Megastructures.Catalogue, e => e.Id == id).Name ?? id;
+                    string name = WorkName(id);
                     int i = byNeed.FindIndex(x => x.Need == need);
                     if (i < 0) byNeed.Add((need, new List<string> { name })); else byNeed[i].Names.Add(name);
                 }

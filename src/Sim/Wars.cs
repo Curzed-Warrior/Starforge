@@ -369,6 +369,7 @@ public partial class Simulation
         why = null;
         int s = Side(w, by);
         if (!w.Open) why = "This war is over.";
+        else if (by.Dead) why = "There is nobody left to speak for this side.";
         else if (s < 0 || Lead(w, s) != by) why = "Only the leader of a side can make peace for it.";
         else if (Lead(w, 1 - s) is var other && (other.Dead || other.Colonies.Count == 0)) why = "There is nobody left to make peace with.";
         else if (Year < by.ProposeAfter.GetValueOrDefault(w.Id))
@@ -405,7 +406,7 @@ public partial class Simulation
             EndWarWith(w, s == 1, terms);
             return true;
         }
-        double price = terms.Sum(t => t.Price);
+        double price = terms.Sum(t => t.Id == "collapse" ? 0 : WarModel.TermById(t.Id).Price);   // the table's prices, not the caller's
         double otherScore = s == 0 ? -w.Score : w.Score, otherExh = s == 0 ? w.ExhB : w.ExhA;
         bool accept = price > 0 ? price <= WarModel.Concede(other, w.Reason, otherScore, otherExh) : WouldStop(w, 1 - s);
         if (accept)

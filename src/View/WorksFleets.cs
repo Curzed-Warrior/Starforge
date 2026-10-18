@@ -77,9 +77,14 @@ public partial class Works
     /// draws no ghosts, so the explosions stay the battle's real losses.</summary>
     bool _ghostLatched;
     readonly Dictionary<long, float> _deathAt = new();
-    /// <summary>A squadron's key for its ghosts: fleet (-1 for a side wiped out) and hull class. A ghost slot's key is
+    /// <summary>A squadron's key for its ghosts: fleet (-1 / -2 for side A / B wiped out) and hull class. A ghost slot's key is
     /// this shifted left 12 bits plus its index in the run.</summary>
-    static long GhostKey(int fleet, int hull) => ((long)(fleet + 2) << 8) | (long)(hull & 0xFF);
+    static long GhostKey(int fleet, int hull) => ((long)(fleet + 3) << 8) | (long)(hull & 0xFF);
+    // war.json numbers read every frame, looked up once (the data is loaded once)
+    static double? _showYears; static int? _drawMax; static Color? _hullCol;
+    static double ShowYears => _showYears ??= WarData.D("interface", "battleShowYears");
+    static int DrawMax => _drawMax ??= (int)WarData.D("interface", "fleetDrawMax");
+    static Color HullCol => _hullCol ??= WarData.Colour("hull");
     readonly List<Squadron> _sqs = new();
     static readonly Comparison<Squadron> ByHull = (a, b) => a.Hull.CompareTo(b.Hull);
     /// <summary>Where to watch the battle from: horizontal direction from its centre out past the player's side
@@ -295,7 +300,7 @@ void fragment(){
         _troops.Clear();
         foreach (var a in sim.Armies) if (a.Fleet >= 0) _troops[a.Fleet] = _troops.GetValueOrDefault(a.Fleet) + a.Troops;
 
-        double show = WarData.D("interface", "battleShowYears");
+        double show = ShowYears;
         BattleRecord rec = null;
         // the newest battle here within the window (Simulation.BattlesAt, without the per-frame allocation)
         for (int i = sim.Battles.Count - 1; i >= 0 && rec == null; i--)
@@ -324,7 +329,7 @@ void fragment(){
 
         // what to draw, squadron by squadron, inside the per-frame budget
         _entries.Clear();
-        int left = (int)WarData.D("interface", "fleetDrawMax");
+        int left = DrawMax;
         foreach (int civId in _civsHere)
         {
             var civ = sim.Civs[civId];
@@ -332,7 +337,7 @@ void fragment(){
             int sideOf = battle ? civId == ca ? 0 : civId == cb ? 1 : -1 : -1;
             double ghosts = sideOf == 0 ? ghostA : sideOf == 1 ? ghostB : 0;
             double total = 0;
-            foreach (var f in _fleetsHere) if (f.Civ == civId) total += f.Ships;
+            foreach (var f in _fleetsHere) if (f.Civ == civId) foreach (var q in f.Squadrons) total += q.Ships;
             bool any = false;
             foreach (var f in _fleetsHere)
             {
@@ -364,7 +369,7 @@ void fragment(){
             }
             // a side wiped out in the fight still shows the ships it lost, of its best hull, until the window closes,
             // even once a fleet of its own arrives
-            long wk = GhostKey(-1, civ.Hull);
+            long wk = GhostKey(-1 - sideOf, civ.Hull);
             if (ghosts > 0 && (_ghostLatched ? _ghostLatch.ContainsKey(wk) : !any))
             {
                 long gk = wk;
@@ -544,7 +549,7 @@ void fragment(){
             Put(p.Buf, o, basis.Scaled(Vector3.One * (h.Half * sq)), d);
             if (p.Stride == 20)
             {
-                var g = WarData.Colour("hull");
+                var g = HullCol;
                 p.Buf[o + 12] = g.R; p.Buf[o + 13] = g.G; p.Buf[o + 14] = g.B; p.Buf[o + 15] = 1;
                 p.Buf[o + 16] = h.Empire.R; p.Buf[o + 17] = h.Empire.G; p.Buf[o + 18] = h.Empire.B; p.Buf[o + 19] = 1;
             }

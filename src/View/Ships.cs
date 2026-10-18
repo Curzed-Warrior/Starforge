@@ -43,8 +43,9 @@ public static class Ships
     public static int DrawCount(double ships, int left)
     {
         if (ships <= 0 || left <= 0) return 0;
-        return Math.Max(1, (int)Math.Min(Math.Min(Math.Ceiling(ships), (int)WarData.D("interface", "squadronDrawMax")), left));
+        return Math.Max(1, (int)Math.Min(Math.Min(Math.Ceiling(ships), _squadronMax ??= (int)WarData.D("interface", "squadronDrawMax")), left));
     }
+    static int? _squadronMax;
 
     static readonly Dictionary<string, ArrayMesh> _named = new();
     /// <summary>A kit-v2 hull by name (assets/ships/hum/&lt;Name&gt;.glb), cached; null if there is no such file.</summary>
