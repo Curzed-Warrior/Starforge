@@ -11,7 +11,9 @@ namespace Starforge;
 /// <summary>
 /// Entry point. One continuous world: the viewed star sits at the origin, the galaxy is scaled by G around it.
 /// Command line (after "--"): --shot=abs.png [--shotframe=N] --focus=Earth|Sun|Galaxy --dist=D --yaw=Y --pitch=P
-/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] [--battlerun=SECONDS] stages a fight here
+/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] [--battlerun=SECONDS] [--stagelayers] stages a fight here
+/// (--stagelayers also stages the galaxy map's war markers nearby: an occupied, a blockaded and a both system, a moving
+/// fleet carrying an army and an idle fleet)
 /// </summary>
 public partial class Main : Node3D
 {
@@ -679,6 +681,22 @@ public partial class Main : Node3D
         if (BattleRunTo() > 0) { Sim.EndWarWith(w, r.AWins, new() { WarModel.TermById("ceasefire") }); me.Materiel += 1e40; _battleRunT = 0; }
         SpeedIdx = BattleRunTo() > 0 ? 2 : 0;
         GD.Print($"STAGEBATTLE {me.Name} vs {foe.Name} at {ViewStar.Name}: aWins={r.AWins} lostA={r.LostA:0.0} lostB={r.LostB:0.0} ships {mine.Ships:0}/{theirs.Ships:0} fam {Starforge.Sim.Battles.BestFamily(me)}/{Starforge.Sim.Battles.BestFamily(foe)}");
+        if (OS.GetCmdlineUserArgs().Contains("--stagelayers")) StageMapLayers(me, foe);
+    }
+
+    /// <summary>Test: the nearest systems beyond this one become occupied, blockaded and both, and two fleets of the player's
+    /// appear there (one under way with an army aboard, one in port), so every galaxy-map war marker can be seen at once.</summary>
+    void StageMapLayers(Civ me, Civ foe)
+    {
+        var near = Sim.Colonies.Where(c => c.Star.Pos.DistanceTo(ViewStar.Pos) > 8).OrderBy(c => c.Star.Pos.DistanceSquaredTo(ViewStar.Pos)).ToList();
+        if (near.Count < 6) { GD.Print("--stagelayers: too few systems nearby"); return; }
+        near[0].OccupiedBy = foe.Id; near[1].BlockadedUntil = Sim.Year + 5; near[2].OccupiedBy = foe.Id; near[2].BlockadedUntil = Sim.Year + 5;
+        var moving = new Fleet { Id = Sim.NextFleetId++, Civ = me.Id, At = near[3].Star.Id, To = near[4].Star.Id, Depart = Sim.Year - 0.1, Arrive = Sim.Year + 0.2, Name = "Staged" };
+        moving.Add(0, 5000, 0); Sim.Fleets.Add(moving);
+        Sim.Armies.Add(new Army { Id = Sim.NextArmyId++, Civ = me.Id, At = near[3].Star.Id, Troops = 1e6, Fleet = moving.Id });
+        var idle = new Fleet { Id = Sim.NextFleetId++, Civ = me.Id, At = near[5].Star.Id, Name = "Staged in port" };
+        idle.Add(0, 1e6, 0); Sim.Fleets.Add(idle);
+        GD.Print($"STAGELAYERS occupied={near[0].Star.Name} blockaded={near[1].Star.Name} both={near[2].Star.Name} moving {near[3].Star.Name}->{near[4].Star.Name} with army, in port {near[5].Star.Name}");
     }
 
     static float? _battleRunTo;
