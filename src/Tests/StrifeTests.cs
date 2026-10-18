@@ -172,5 +172,18 @@ public static class StrifeTests
             SelfTest.Check(s2.Humanity.Id == s.Id && s2.HomeColony != null && s2.HomeColony.Civ == s2.Humanity, "a game led from a splinter loads");
             s2.Warp(1);
         }),
+        ("crackdown_heard_once_a_year", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var cs = h.Colonies.Where(x => !x.Home).Take(3).ToList(); cs[2].Grievance = 10;
+            sim.Respond(cs[0], Simulation.Answer.Crackdown); sim.Respond(cs[1], Simulation.Answer.Crackdown);
+            SelfTest.Check(Math.Abs(cs[2].Grievance - 10 - WarData.D("strife", "answers", "crackdownSpread")) < 1e-3, "word of crackdowns spreads once a year, however many there are");
+        }),
+        ("crackdown_not_every_year", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.M.Hive = false; h.SetDrive(h.Drive, "Ruthless");
+            var c = h.Colonies.First(x => !x.Home);
+            c.Grievance = 70; c.Unrest = 3; c.Movement = "x"; c.CauseKey = "levy";
+            sim.Respond(c, Simulation.Answer.Crackdown);
+            SelfTest.Check(sim.Year + 4 < h.Policy.AskAfter.GetValueOrDefault("interior:" + c.Star.Id), "a crushed movement is next answered years later");
+        }),
     };
 }

@@ -15,6 +15,8 @@ public partial class Colony
     public string Cause, Movement;
     /// <summary>Self-rule granted: its industry stays at home, and it resents the core less.</summary>
     public bool Autonomy;
+    /// <summary>Until when word of a crackdown elsewhere has already reached this system (not saved).</summary>
+    internal double HeardCrackdown;
     /// <summary>The cause key behind Cause (strife.causes), recomputed yearly.</summary>
     public string CauseKey;
     /// <summary>The council has invested here: relief until this year.</summary>
@@ -87,13 +89,13 @@ public partial class Simulation
     /// <summary>Where this system's grievance is heading (0..100), and its biggest cause as a phrase.</summary>
     public double GrievanceTarget(Colony c, out string cause)
     {
-        double t = GrievanceTarget(c, out string key, MeanIndustry(c.Civ), WarExhaustionOf(c.Civ));
+        double t = GrievanceTarget(c, out string key, MeanIndustry(c.Civ), WarExhaustionOf(c.Civ), CapitalOf(c.Civ));
         cause = key == null ? null : CausePhrase[key];
         return t;
     }
 
     /// <summary>The target, with its biggest cause as a key of strife.causes.</summary>
-    double GrievanceTarget(Colony c, out string causeKey, double meanInd, double exhaustion)
+    double GrievanceTarget(Colony c, out string causeKey, double meanInd, double exhaustion, Colony capital)
     {
         var civ = c.Civ;
         double best = 0, sum = 0; string top = null;
@@ -101,11 +103,11 @@ public partial class Simulation
         {
             if (k <= 0) return;
             double v = SD("causes", key) * k;
+            if (_dbg != null) _dbg[key] = _dbg.GetValueOrDefault(key) + v;
             sum += v;
             if (v > best) { best = v; top = key; }
         }
         if (!c.Autonomy) Add("levy", Math.Clamp(civ.LevyOut.GetValueOrDefault(c), 0, 1));
-        var capital = civ.Colonies.FirstOrDefault(x => x.Home) ?? civ.Colonies.FirstOrDefault();
         if (capital != null && capital != c)
             Add(Folds(civ) ? "distance" : "distanceSlow", Math.Min(c.Star.Pos.DistanceTo(capital.Star.Pos) / 25.0, 3) / 3);
         if (c.PopCap > 0 && c.Pop > 0.92 * c.PopCap) Add("crowding", 1);
@@ -121,6 +123,7 @@ public partial class Simulation
         double relief = SD("relief", "base") + SD("relief", "megaOrder") * c.MegaOrder + SD("relief", "faith") * civ.Faith
                         + (c.Autonomy ? SD("relief", "autonomy") : 0) + (Year < c.InvestedUntil ? SD("relief", "invested") : 0);
         causeKey = top;
+        if (_dbg != null) { _dbg["~relief"] = _dbg.GetValueOrDefault("~relief") + relief; _dbg["~gov"] = _dbg.GetValueOrDefault("~gov") + GovFactor(civ); }
         return Math.Clamp(sum * GovFactor(civ) - relief, 0, 100);
     }
 
@@ -140,10 +143,11 @@ public partial class Simulation
         Coup(civ, dy);
         Revolution(civ, dy);
         double mean = MeanIndustry(civ), exh = WarExhaustionOf(civ), pull = Math.Min(1, SD("pull") * dy);
+        var capital = CapitalOf(civ);
         foreach (var c in civ.Colonies.ToList())
         {
             if (c.Home) { HomeWorlds(c, dy); continue; }
-            double t = GrievanceTarget(c, out var key, mean, exh);
+            double t = GrievanceTarget(c, out var key, mean, exh, capital);
             c.Grievance = (float)Math.Clamp(c.Grievance + (t - c.Grievance) * pull, 0, 100);
             c.CauseKey = key; c.Cause = key == null ? null : CausePhrase[key];
             int old = c.Unrest;
@@ -157,6 +161,18 @@ public partial class Simulation
             }
         }
         RevoltStep(civ, dy);
+        if (_dbg != null && (civ.Main || civ.Colonies.Count >= 80) && Year >= _dbgAt.GetValueOrDefault(civ.Id))
+        {
+            _dbgAt[civ.Id] = Year + 50;
+            int n = Math.Max(1, civ.Colonies.Count(x => !x.Home));
+            var h = new int[5]; foreach (var x in civ.Colonies) if (!x.Home) h[x.Unrest]++;
+            Godot.GD.Print($"STRIFEDBG {Year:0} {civ.Name} n={n} gov={Government.Of(civ).Name} eth={civ.Ethic} stages={string.Join("/", h)} g={civ.Colonies.Where(x => !x.Home).Select(x => (double)x.Grievance).DefaultIfEmpty(0).Average():0.0} "
+                + string.Join(" ", _dbg.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value / n:0.0}"))
+                + " worlds=" + string.Join(",", civ.Colonies.Where(x => x.Home).SelectMany(x => x.WorldGrievance.Select(kv => $"{kv.Key.Name}:{kv.Value:0}:{WorldTarget(x, kv.Key):0}"))));
+        }
+        if (_dbg != null) _dbg.Clear();
     }
+    static Dictionary<string, double> _dbg = Godot.OS.HasEnvironment("SF_STRIFE") ? new() : null;
+    readonly Dictionary<int, double> _dbgAt = new();
 
 }

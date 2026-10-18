@@ -20,8 +20,9 @@ public partial class Simulation
     /// <summary>A movement rises in a system at insurgency: it is named for what drives it, and it wants an answer.</summary>
     public void Rise(Colony c)
     {
-        GrievanceTarget(c, out string key, MeanIndustry(c.Civ), WarExhaustionOf(c.Civ));
-        if (key != null) { c.CauseKey = key; c.Cause = CausePhrase[key]; }
+        // the yearly step has just worked out what drives it; a movement raised any other way works it out now
+        if (c.CauseKey == null && GrievanceTarget(c, out string key, MeanIndustry(c.Civ), WarExhaustionOf(c.Civ), CapitalOf(c.Civ)) >= 0 && key != null)
+        { c.CauseKey = key; c.Cause = CausePhrase[key]; }
         string sys = c.Sys.Name;
         c.Movement = c.CauseKey switch
         {
@@ -104,13 +105,15 @@ public partial class Simulation
                 c.Grievance = (float)Math.Max(0, c.Grievance - SD("answers", "crackdown"));
                 c.Unrest = Stage(c.Grievance, c.Unrest);
                 float spread = (float)SD("answers", "crackdownSpread");
-                foreach (var o in civ.Colonies) if (o != c && !o.Home) o.Grievance = Math.Min(100, o.Grievance + spread);
+                // every other system hears of it, once a year however many crackdowns there are
+                foreach (var o in civ.Colonies)
+                    if (o != c && !o.Home && o.HeardCrackdown < Year) { o.HeardCrackdown = Year + 1; o.Grievance = Math.Min(100, o.Grievance + spread); }
+                StrifeCount("crackdowns");
                 if (civ.Ethic == "Reverent") civ.AddMeter("Atrocity", 5);
                 if (civ.Main) Log(c, $"Troops land at {c.Sys.Name}. {Cap(c.Movement ?? "the movement")} are broken up, and every other world hears about it.", "loss", null);
                 break;
-            case Answer.Wait:
-                civ.Policy.AskAfter[key] = Year + 5;
-                break;
         }
+        // whatever the answer, the movement is not taken up again for five years
+        civ.Policy.AskAfter[key] = Year + 5;
     }
 }
