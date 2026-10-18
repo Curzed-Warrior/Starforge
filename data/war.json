@@ -1,0 +1,88 @@
+{
+  "culture": {
+    "start": {
+      "Human":    { "Martial": 0.0,  "Duty": -0.3, "Resolve": 0.1 },
+      "Vessh":    { "Martial": 0.7,  "Duty": 0.8,  "Resolve": 0.5 },
+      "Orun":     { "Martial": -0.4, "Duty": 0.2,  "Resolve": 0.8 },
+      "Tallow":   { "Martial": -0.7, "Duty": -0.5, "Resolve": -0.2 },
+      "Hask":     { "Martial": 0.3,  "Duty": 0.6,  "Resolve": 0.9 },
+      "Ninefold": { "Martial": 0.1,  "Duty": -0.2, "Resolve": -0.4 },
+      "Lattice":  { "Martial": -0.2, "Duty": 0.9,  "Resolve": 0.6 },
+      "default":  { "Martial": 0.0,  "Duty": 0.0,  "Resolve": 0.0 }
+    },
+    "drift": {
+      "warYear":   { "Martial": 0.006, "Resolve": 0.004 },
+      "peaceYear": { "Martial": -0.003 },
+      "victory":   { "Martial": 0.06 },
+      "defeat":    { "Martial": -0.05, "Resolve": 0.04 },
+      "exhausted": { "Martial": -0.08, "Resolve": -0.05 }
+    },
+    "names": {
+      "Martial": ["a pacifist people", "a peaceable people", "", "a martial people", "a warrior people"],
+      "Duty":    ["fiercely free", "volunteers by habit", "", "dutiful", "every citizen a soldier"],
+      "Resolve": ["brittle in defeat", "quick to tire", "", "stubborn", "unbreakable"]
+    }
+  },
+  "mobilisation": [
+    { "id": "peace",   "name": "Peacetime",            "military": 0.04, "manpower": 0.002, "growth": 1.0,  "research": 1.0,  "strain": 0.0 },
+    { "id": "partial", "name": "Partial mobilisation", "military": 0.18, "manpower": 0.010, "growth": 0.95, "research": 0.95, "strain": 1.0 },
+    { "id": "war",     "name": "War economy",          "military": 0.45, "manpower": 0.030, "growth": 0.85, "research": 0.85, "strain": 2.5 },
+    { "id": "total",   "name": "Total war",            "military": 0.75, "manpower": 0.080, "growth": 0.60, "research": 0.70, "strain": 5.0 }
+  ],
+  "economy": {
+    "retoolYears": 3.0,
+    "efficiencyStart": 0.3, "efficiencyPerYear": 0.15,
+    "upkeepPerYear": 0.04,
+    "mandatoryManpower": 1.5, "mandatoryStrain": 0.6,
+    "slipsHome": 1, "slipsPerYard": 2, "slipsMegaYard": 4,
+    "frigateKg": 3.0e7, "frigateLengthKm": 0.3,
+    "buildYearsPerKm": 2.5, "buildYearsMin": 0.5, "buildYearsMax": 40
+  },
+  "armies": {
+    "troopsPerArmy": 0.001,
+    "trainYears": 2.0, "rushedYears": 0.75,
+    "trainedQuality": 1.0, "rushedQuality": 0.6,
+    "kgPerArmy": 2.0e7, "upkeepPerYear": 0.03,
+    "garrisonPerBillion": 0.5
+  },
+  "experience": { "levels": ["Green", "Regular", "Veteran", "Elite"], "at": [0.0, 0.25, 0.5, 0.8] },
+  "stakes": {
+    "limited":   { "concede": 1.0, "ceasefire": true },
+    "principle": { "concede": 0.5, "ceasefire": true },
+    "survival":  { "concede": 0.0, "ceasefire": false }
+  },
+  "terms": [
+    { "id": "status_quo",   "name": "Status quo",                "price": 0,  "core": false },
+    { "id": "ceasefire",    "name": "Ceasefire on the front",    "price": 0,  "core": false },
+    { "id": "reparations",  "name": "Reparations",               "price": 15, "core": false },
+    { "id": "cede_claims",  "name": "Cede the claimed systems",  "price": 30, "core": true },
+    { "id": "cede_occupied","name": "Cede what is occupied",     "price": 45, "core": false },
+    { "id": "tribute",      "name": "Tribute for fifty years",   "price": 20, "core": true },
+    { "id": "humiliation",  "name": "Public humiliation",        "price": 10, "core": true },
+    { "id": "autonomy",     "name": "Autonomy within the union", "price": 25, "core": false },
+    { "id": "independence", "name": "Recognised independence",   "price": 40, "core": true },
+    { "id": "reunion",      "name": "Return to the union",       "price": 50, "core": true },
+    { "id": "partition",    "name": "Partition",                 "price": 30, "core": false },
+    { "id": "vassal",       "name": "Become a subject",          "price": 60, "core": true },
+    { "id": "regime",       "name": "Change of government",      "price": 45, "core": true },
+    { "id": "release",      "name": "Release a subject",         "price": 35, "core": true }
+  ],
+  "reasons": [
+    { "id": "border_claim", "tier": "limited",   "name": "Border claim",          "terms": ["cede_claims", "cede_occupied", "reparations", "ceasefire", "status_quo"] },
+    { "id": "key_system",   "tier": "limited",   "name": "A key system",          "terms": ["cede_claims", "cede_occupied", "reparations", "ceasefire", "status_quo"] },
+    { "id": "revenge",      "tier": "limited",   "name": "Revenge",               "terms": ["humiliation", "reparations", "cede_occupied", "ceasefire", "status_quo"] },
+    { "id": "tribute",      "tier": "limited",   "name": "Tribute",               "terms": ["tribute", "reparations", "ceasefire", "status_quo"] },
+    { "id": "independence", "tier": "principle", "name": "Independence",          "terms": ["independence", "autonomy", "partition", "ceasefire", "reunion"] },
+    { "id": "ideology",     "tier": "principle", "name": "Ideology",              "terms": ["regime", "reparations", "ceasefire", "status_quo"] },
+    { "id": "overlord",     "tier": "principle", "name": "Break the overlord",    "terms": ["release", "autonomy", "ceasefire", "status_quo"] },
+    { "id": "subjugation",  "tier": "principle", "name": "Subjugation",           "terms": ["vassal", "tribute", "cede_occupied", "ceasefire", "status_quo"] },
+    { "id": "liberation",   "tier": "principle", "name": "Liberation of a people","terms": ["cede_occupied", "independence", "ceasefire", "status_quo"] },
+    { "id": "extermination","tier": "survival",  "name": "Extermination",         "terms": [] },
+    { "id": "holy_war",     "tier": "survival",  "name": "Holy war",              "terms": [] },
+    { "id": "purge",        "tier": "survival",  "name": "Purge of a species",    "terms": [] },
+    { "id": "existential",  "tier": "survival",  "name": "An existential threat", "terms": [] }
+  ],
+  "placeholders": {
+    "factory": "#ff8c2e", "shipyard": "#3a7dff", "barracks": "#3fbf5a", "transport": "#7d8a36", "specops": "#9a4fe0", "hull": "#8c8c8c"
+  }
+}

@@ -79,7 +79,13 @@ public partial class Main : Node3D
     {
         // no blocking full collections mid-frame: a gen-2 pause is a visible stutter in a cinematic or a camera glide
         System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
-        System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
+        // test: --selftest[=filter] runs the headless self-tests and quits (exit 1 if any failed)
+        if (Array.Find(OS.GetCmdlineUserArgs(), x => x == "--selftest" || x.StartsWith("--selftest=")) is string st)
+        {
+            int failed = Starforge.Tests.SelfTest.Run(st.Length > 11 ? st[11..] : null);
+            GetTree().Quit(failed > 0 ? 1 : 0);
+            return;
+        }
         int seed = _nextSeed ?? 20610;
         string focus = "Earth", star = null;
         float dist = -1, yaw = float.NaN, pitch = float.NaN;
