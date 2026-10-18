@@ -554,21 +554,9 @@ public partial class Simulation
         else Raise("Milestone", "Dark stars", text, HomeColony);
     }
 
-    public void StartWar(Civ a, Civ b)
-    {
-        a.AtWar.Add(b.Id); b.AtWar.Add(a.Id);
-        var col = (a.Main ? a : b.Main ? b : a).Colonies[0];
-        Log(col, $"War between {Narrative2.Called(a)} and {Narrative2.Called(b)}.", "loss", null);
-        if (a.Main || b.Main) Raise("War", $"War with {Narrative2.Called(a.Main ? b : a)}", $"{Narrative2.Called(a, true)} and {Narrative2.Called(b)} are at war.", col);
-    }
+    public void StartWar(Civ a, Civ b) => DeclareWar(a, b);
 
-    public void EndWar(Civ a, Civ b)
-    {
-        a.AtWar.Remove(b.Id); b.AtWar.Remove(a.Id);
-        var col = (a.Main ? a : b).Colonies.FirstOrDefault();
-        Log(col, $"Peace between {Narrative2.Called(a)} and {Narrative2.Called(b)}. Nobody remembers who asked first.", "era", null);
-        if (a.Main || b.Main) Raise("Contact", $"Peace with {Narrative2.Called(a.Main ? b : a)}", $"The war between {Narrative2.Called(a)} and {Narrative2.Called(b)} is over.", col);
-    }
+    public void EndWar(Civ a, Civ b) { if (WarBetween(a, b) is { } w) EndWarWith(w, true, new() { WarModel.TermById("status_quo") }); }
 
     public void DestroyColony(Colony c, string text)
     {
@@ -635,6 +623,7 @@ public partial class Simulation
             if (i < Colonies.Count && Colonies[i] != c) i--;
         }
         Year += dy;
+        Reconcile();
         if (sw != null) t0 = sw.ElapsedTicks;
         foreach (var civ in Civs.ToList())
         {
