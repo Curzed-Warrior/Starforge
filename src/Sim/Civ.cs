@@ -115,6 +115,8 @@ public class Civ
     /// <summary>War in the field (Wars.cs): no war with a civ before its truce year; tribute owed to a victor, and until when.</summary>
     public Dictionary<int, double> Truce = new();
     public int TributeTo = -1; public double TributeUntil;
+    /// <summary>War id -> year before which this civ's enemy will not hear another peace offer (transient: not saved).</summary>
+    public Dictionary<int, double> ProposeAfter = new();
     /// <summary>How many believe the unseen voice is real (0..1), and how many fear it.</summary>
     public float Faith, Dread;
     public int FaithStage;     // how hungrily this polity spreads: old empires are slow, young ones restless

@@ -323,6 +323,104 @@ public partial class Simulation
         EndWarWith(w, aWins, terms);
     }
 
+    static double UI(string key) => WarData.D("interface", key);
+
+    /// <summary>Which side of a war a civ is on: 0 side A, 1 side B, -1 not in it.</summary>
+    public static int Side(War w, Civ c) => w.A.Contains(c.Id) ? 0 : w.B.Contains(c.Id) ? 1 : -1;
+    /// <summary>The civ that leads a side (and speaks for it in peace talks); null for side -1.</summary>
+    public Civ Lead(War w, int side) => side == 0 ? Civs[w.A[0]] : side == 1 ? Civs[w.B[0]] : null;
+
+    /// <summary>
+    /// The peace the war would end on now, seen from one side: whether that side is winning, and the terms the loser
+    /// would give (the winner's ask, or what the viewer would be asked to give). PeaceCheck's decision without its
+    /// waiting (minimum years, a winner holding out) and without doing anything. Nothing to ask of a dead enemy.
+    /// </summary>
+    public (bool ViewerWins, List<Term> Terms) TermsOnOffer(War w, Civ viewer)
+    {
+        int s = Side(w, viewer);
+        if (s < 0) return (false, new());
+        var enemy = Lead(w, 1 - s);
+        if (enemy.Dead || enemy.Colonies.Count == 0) return (true, new());
+        var mine = Lead(w, s);
+        bool Gone(Civ c) => c.Colonies.All(x => x.OccupiedBy >= 0);
+        if (Gone(enemy)) return (true, new() { new("collapse", "Collapse", 0, true) });
+        if (Gone(mine)) return (false, new() { new("collapse", "Collapse", 0, true) });
+        double be = F("bothExhausted");
+        bool both = w.ExhA >= be && w.ExhB >= be;
+        bool aWins; List<Term> terms;
+        if (Math.Abs(w.Score) < F("stalemateScore"))
+        {
+            bool truce = WarData.P("stakes", WarModel.ReasonById(w.Reason).Tier, "ceasefire").GetBoolean();
+            aWins = w.Score >= 0; terms = new() { WarModel.TermById(truce ? "ceasefire" : "status_quo") };
+        }
+        else if (w.Reason == "independence") (aWins, terms) = IndependenceTerms(w, w.Score, w.ExhA, w.ExhB, both);
+        else
+        {
+            aWins = w.Score > 0;
+            var loser = Lead(w, aWins ? 1 : 0);
+            terms = WarModel.ChooseTerms(w.Reason, WarModel.Concede(loser, w.Reason, aWins ? -w.Score : w.Score, aWins ? w.ExhB : w.ExhA), both);
+        }
+        return (aWins == (s == 0), terms);
+    }
+
+    /// <summary>Can this civ put an offer of peace to the other side now? Only a side's lead may, and not again soon after a refusal.</summary>
+    public bool CanPropose(War w, Civ by, out string why)
+    {
+        why = null;
+        int s = Side(w, by);
+        if (!w.Open) why = "This war is over.";
+        else if (s < 0 || Lead(w, s) != by) why = "Only the leader of a side can make peace for it.";
+        else if (Lead(w, 1 - s) is var other && (other.Dead || other.Colonies.Count == 0)) why = "There is nobody left to make peace with.";
+        else if (Year < by.ProposeAfter.GetValueOrDefault(w.Id))
+            why = $"They will not hear another offer for {Math.Max(1, Math.Ceiling(by.ProposeAfter[w.Id] - Year)):0} years.";
+        return why == null;
+    }
+
+    /// <summary>Would the other lead stop fighting for nothing: worn out, or nobody is winning?</summary>
+    bool WouldStop(War w, int otherSide) =>
+        (otherSide == 0 ? w.ExhA : w.ExhB) >= UI("ceasefireAcceptExhaustion") || Math.Abs(w.Score) < F("stalemateScore");
+
+    /// <summary>
+    /// Put terms to the other side. A side asking terms gets them when they cost no more than the other would concede
+    /// (asking nothing priced needs an enemy willing to stop); a losing side gets peace by giving everything demanded of
+    /// it. A refusal closes the talks for a while.
+    /// </summary>
+    public bool ProposeTerms(War w, Civ by, List<Term> terms, out string why)
+    {
+        if (!CanPropose(w, by, out why)) return false;
+        if (terms == null || terms.Count == 0) { why = "Choose the terms to offer."; return false; }
+        int s = Side(w, by);
+        var other = Lead(w, 1 - s);
+        var (byWins, offer) = TermsOnOffer(w, by);
+        if (!byWins && offer.Count > 0 && offer.All(t => terms.Any(x => x.Id == t.Id)))
+        {
+            EndWarWith(w, s == 1, terms);
+            return true;
+        }
+        double price = terms.Sum(t => t.Price);
+        double otherScore = s == 0 ? -w.Score : w.Score, otherExh = s == 0 ? w.ExhB : w.ExhA;
+        bool accept = price > 0 ? price <= WarModel.Concede(other, w.Reason, otherScore, otherExh) : WouldStop(w, 1 - s);
+        if (accept)
+        {
+            EndWarWith(w, s == 0, terms);
+            return true;
+        }
+        by.ProposeAfter[w.Id] = Year + UI("proposeCooldownYears");
+        why = $"{Narrative2.Called(other, true)} refuses.";
+        return false;
+    }
+
+    /// <summary>Offer a ceasefire on the front: taken when the stakes allow one and the other side is worn out or nobody is winning.</summary>
+    public bool ProposeCeasefire(War w, Civ by, out string why)
+    {
+        if (!CanPropose(w, by, out why)) return false;
+        int s = Side(w, by);
+        if (!WarData.P("stakes", WarModel.ReasonById(w.Reason).Tier, "ceasefire").GetBoolean()) { why = "This war is fought to the end: there is no ceasefire."; return false; }
+        if (!WouldStop(w, 1 - s)) { why = $"{Narrative2.Called(Lead(w, 1 - s), true)} will not stop fighting yet."; return false; }
+        EndWarWith(w, w.Score >= 0, new() { WarModel.TermById("ceasefire") });
+        return true;
+    }
+
     /// <summary>End a war on these terms (aWins: side A is the winner).</summary>
     public void EndWarWith(War w, bool aWins, List<Term> terms)
     {
