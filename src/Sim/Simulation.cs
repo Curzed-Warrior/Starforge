@@ -623,7 +623,7 @@ public partial class Simulation
             if (i < Colonies.Count && Colonies[i] != c) i--;
         }
         Year += dy;
-        Reconcile();
+        FieldStep(dy);
         if (sw != null) t0 = sw.ElapsedTicks;
         foreach (var civ in Civs.ToList())
         {

@@ -5,7 +5,7 @@ using System.Linq;
 namespace Starforge.Sim;
 
 /// <summary>The areas of government a player can hand to the council or take into their own hands.</summary>
-public enum Area { Economy, Research, Construction, Colonisation, Military, Diplomacy, Production }
+public enum Area { Economy, Research, Construction, Colonisation, Military, Diplomacy, Production, Fleets }
 
 /// <summary>
 /// How a civilisation is run. Every area is either left to the council (automatic, leaning on these priorities) or held
@@ -52,6 +52,7 @@ public class Policy
         Area.Colonisation => "Where seed ships go. Manual: each launch waits for your approval.",
         Area.Military => "When to go to war. Manual: the council asks before declaring war.",
         Area.Diplomacy => "When to make peace. Manual: peace offers come to you.",
+        Area.Fleets => "Where fleets go and what they do. Manual: your fleets wait for your orders.",
         Area.Production => "How much of the economy goes to war. Manual: you set the mobilisation level and mandatory service.",
         _ => ""
     };

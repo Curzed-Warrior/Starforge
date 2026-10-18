@@ -32,6 +32,8 @@ public partial class Colony
     public StarSystem Sys;
     public StarInfo Star;
     public bool Home;
+    /// <summary>War in the field: the civ occupying this system (-1 when free).</summary>
+    public int OccupiedBy = -1;
     public double Founded;
     public double L;                       // star luminosity, watts
     public double PlanetPower;             // planet-bound or fleet power, watts
