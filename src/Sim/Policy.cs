@@ -112,6 +112,7 @@ public partial class Simulation
     public void SetManual(Civ civ, Area a, bool manual)
     {
         civ.Policy.Manual[(int)a] = manual;
+        if (manual && a == Area.Production) civ.Policy.Mobilisation = civ.Mobilisation;   // start from the level in force
         if (manual) return;
         string prefix = a switch { Area.Research => "research:", Area.Construction => "build:", Area.Colonisation => "seed:", Area.Military => "war:", Area.Diplomacy => "peace:", _ => null };
         if (prefix != null) foreach (var x in Alerts.Where(x => x.Key != null && x.Key.StartsWith(prefix) && !x.Done)) { x.Done = true; x.Outcome = "Left to the council"; }

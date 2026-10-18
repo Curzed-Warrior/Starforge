@@ -43,7 +43,7 @@
     "trainYears": 2.0, "rushedYears": 0.75,
     "trainedQuality": 1.0, "rushedQuality": 0.6,
     "kgPerArmy": 2.0e7, "upkeepPerYear": 0.03,
-    "garrisonPerBillion": 0.5
+    "garrisonPerBillion": 0.5, "maxArmies": 200
   },
   "experience": { "levels": ["Green", "Regular", "Veteran", "Elite"], "at": [0.0, 0.25, 0.5, 0.8] },
   "stakes": {

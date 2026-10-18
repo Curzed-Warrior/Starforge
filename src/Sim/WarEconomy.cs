@@ -87,7 +87,9 @@ public partial class Simulation
     /// <summary>One colony's slips; the civ's Yard list holds them colony by colony, in colony order.</summary>
     public int SlipsOf(Colony col)
     {
-        int n = col.Home ? (int)WarData.D("economy", "slipsHome") : 0;
+        // the home slip: at the homeworld, or a breakaway's first system
+        bool capital = col.Home || !col.Civ.Colonies.Any(x => x.Home) && col.Civ.Colonies.FirstOrDefault() == col;
+        int n = capital ? (int)WarData.D("economy", "slipsHome") : 0;
         if (col.Done("yard")) n += (int)WarData.D("economy", "slipsPerYard") + (Battleship >= 0 && col.Civ.Hull >= Battleship ? (int)WarData.D("economy", "slipsMegaYard") : 0);
         return n;
     }
@@ -112,8 +114,8 @@ public partial class Simulation
             foreach (var (f, s) in fleets.SelectMany(f => f.Squadrons.Select(s => (f, s))).OrderByDescending(p => p.s.Ships * HullKg(p.s.Hull)).ToList())
             {
                 if (deficit <= 0) break;
-                double kg = HullKg(s.Hull), laid = Math.Min(s.Ships, Math.Ceiling(deficit / kg));
-                s.Ships -= laid; deficit -= laid * kg;
+                double perShip = upk * HullKg(s.Hull), laid = Math.Min(s.Ships, Math.Ceiling(deficit / perShip));   // each ship laid up saves its upkeep
+                s.Ships -= laid; deficit -= laid * perShip;
                 if (s.Ships <= 0) f.Squadrons.Remove(s);
             }
         }
@@ -170,28 +172,32 @@ public partial class Simulation
             Armies.Add(a); armies.Add(a);
         }
 
-        // upkeep, or disband the newest
-        double upk = WarData.D("armies", "upkeepPerYear") * kg * dy;
+        // upkeep by troops, or disband the newest
+        double upk = WarData.D("armies", "upkeepPerYear") * kg / per * dy;
+        double bill = upk * armies.Sum(a => a.Troops);
         foreach (var a in armies.OrderByDescending(a => a.Id).ToList())
         {
-            if (c.Materiel >= upk * armies.Count) break;
-            Armies.Remove(a); armies.Remove(a);
+            if (c.Materiel >= bill) break;
+            Armies.Remove(a); armies.Remove(a); bill -= upk * a.Troops;
         }
-        c.Materiel = Math.Max(0, c.Materiel - upk * armies.Count);
+        c.Materiel = Math.Max(0, c.Materiel - bill);
 
         double pop = c.Pop;
         double underArms = armies.Sum(a => a.Troops) + c.Barracks.Sum(t => t.Troops);
         c.Manpower = Math.Max(0, pop * LevelD(c.Mobilisation, "manpower") * (c.MandatoryService ? WarData.D("economy", "mandatoryManpower") : 1)
                                  * (1 + 0.3 * c.Culture.Duty) - underArms);
 
+        // the garrison wanted, in standard armies; past maxArmies the armies grow bigger instead of more numerous
         double want = WarData.D("armies", "garrisonPerBillion") * pop * (c.Mobilisation >= 2 ? 4 : c.Mobilisation == 1 ? 2 : 1);
+        double size = per * Math.Max(1, Math.Ceiling(want / WarData.D("armies", "maxArmies")));
         var at = c.Colonies.OrderByDescending(col => col.Pop).FirstOrDefault();
         if (at == null) return;
         bool war = c.AtWar.Count > 0;
-        while (armies.Count + c.Barracks.Count < want && c.Manpower >= per && c.Materiel >= kg)
+        int max = (int)WarData.D("armies", "maxArmies");
+        while (underArms + size <= want * per + 1e-12 && armies.Count + c.Barracks.Count < max && c.Manpower >= size && c.Materiel >= kg * size / per)
         {
-            c.Manpower -= per; c.Materiel -= kg;
-            c.Barracks.Add(new Training { Troops = per, Left = WarData.D("armies", war ? "rushedYears" : "trainYears"), Rushed = war, At = at.Star.Id });
+            c.Manpower -= size; c.Materiel -= kg * size / per; underArms += size;
+            c.Barracks.Add(new Training { Troops = size, Left = WarData.D("armies", war ? "rushedYears" : "trainYears"), Rushed = war, At = at.Star.Id });
         }
     }
 }

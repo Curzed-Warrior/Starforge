@@ -132,6 +132,34 @@ public static class WarTests
             h.Culture.Resolve = -1; double soft = WarModel.Concede(h, "border_claim", -40, 50);
             SelfTest.Check(hard < soft, "an unbreakable people concedes less");
         }),
+        ("manual_keeps_level", () => {
+            var sim = SelfTest.NewSim(); var h = sim.Humanity; h.Mobilisation = 2;      // the council had a war economy running
+            sim.SetManual(h, Area.Production, true);
+            SelfTest.Check(h.Policy.Mobilisation == 2, "taking Production by hand keeps the level in force");
+        }),
+        ("armies_bounded", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity;
+            h.M.PopCap = 1e7f; foreach (var col in h.Colonies) col.Pop = 1e6;           // a megastructure population
+            h.Materiel = 1e30; sim.Warp(3);
+            int cap = (int)WarData.D("armies", "maxArmies");
+            SelfTest.Check(sim.ArmiesOf(h).Count() + h.Barracks.Count <= cap, $"army count capped ({sim.ArmiesOf(h).Count()} + {h.Barracks.Count})");
+            SelfTest.Check(sim.ArmiesOf(h).Sum(a => a.Troops) + h.Barracks.Sum(t => t.Troops) > cap * WarData.D("armies", "troopsPerArmy"), "armies grow bigger instead");
+        }),
+        ("mothball_to_affordable", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity;
+            var f = sim.FleetsOf(h).First(); f.Add(Defs.Hulls.Length - 1, 500, 0f); h.Materiel = 0;
+            sim.Warp(1);
+            SelfTest.Check(f.Ships < 450, $"an unaffordable navy is cut to what the economy pays for in one year ({f.Ships:0})");
+        }),
+        ("splinter_builds_navy", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            var cols = h.Colonies.Where(c => !c.Home).Take(2).ToList();
+            SelfTest.Check(cols.Count == 2, "seed has colonies by year 400");
+            foreach (var c in cols) c.Built.Remove("yard");                             // young colonies, no yards yet
+            if (cols.Count < 2) return;
+            var s = sim.SplinterForTest(h, h.Drive, cols);
+            SelfTest.Check(sim.Slips(s) >= 1, "a breakaway's capital has a slip");
+        }),
         ("old_save_defaults", () => {
             var sim = SelfTest.NewSim(); sim.Warp(5);
             SaveGame.Save(sim, 20610, "user://selftest_old.json");
