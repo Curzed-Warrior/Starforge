@@ -73,11 +73,11 @@ public partial class EmpireScreen
         sum.AddThemeConstantOverride("separation", 20);
         for (int i = 0; i < counts.Length; i++) sum.AddChild(Ui.Label($"{counts[i]:#,0} {StageName(i)}", 13, counts[i] > 0 ? StageColor(i) : Ui.Dim));
         _interior.AddChild(sum);
-        _interior.AddChild(Note("Hover a system to see what drives its grievance. Answer a movement with one of the four buttons; the council's own pick is marked.", 12));
+        _interior.AddChild(Note("Hover a system to see what drives its grievance. Answer a movement with one of the four buttons; the council's own pick is marked.", 13));
 
         var sortRow = new HBoxContainer();
         sortRow.AddThemeConstantOverride("separation", 8);
-        sortRow.AddChild(Ui.Label("Sort by", 12, Ui.Dim));
+        sortRow.AddChild(Ui.Label("Sort by", 13, Ui.Text));
         foreach (var k in new[] { "Grievance", "Name", "Stage" })
         {
             var b = Ui.Button(k, "Sort the systems by " + k.ToLower());
@@ -89,9 +89,9 @@ public partial class EmpireScreen
         _interior.AddChild(sortRow);
 
         var head = Line();
-        head.AddChild(Cell("SYSTEM", NameW, Ui.Dim, 12)); head.AddChild(Cell("GRIEVANCE", BarW, Ui.Dim, 12));
-        head.AddChild(Cell("STAGE", StageW, Ui.Dim, 12)); head.AddChild(Cell("MAIN CAUSE", CauseW, Ui.Dim, 12));
-        head.AddChild(Cell("FLAGS", 150, Ui.Dim, 12));
+        head.AddChild(Cell("SYSTEM", NameW, Ui.Text, 13)); head.AddChild(Cell("GRIEVANCE", BarW, Ui.Text, 13));
+        head.AddChild(Cell("STAGE", StageW, Ui.Text, 13)); head.AddChild(Cell("MAIN CAUSE", CauseW, Ui.Text, 13));
+        head.AddChild(Cell("FLAGS", 150, Ui.Text, 13));
         _interior.AddChild(head);
 
         // home system first, its worlds below it
@@ -123,7 +123,6 @@ public partial class EmpireScreen
         _intPage = Math.Clamp(_intPage, 0, pages - 1);
         foreach (var c in list.Skip(_intPage * page).Take(page)) SystemRow(c);
 
-        if (pages > 1)
         {
             var nav = new HBoxContainer();
             nav.AddThemeConstantOverride("separation", 12);
@@ -155,7 +154,7 @@ public partial class EmpireScreen
         if (Sim.Year < c.InvestedUntil) flags.Add($"invested until {(int)c.InvestedUntil}");
         row.AddChild(Cell(string.Join(", ", flags), 150, Ui.Dim));
         holder.AddChild(row);
-        if (c.Movement != null) holder.AddChild(MovementRow(c));
+        if (c.Movement != null) { holder.AddChild(MovementRow(c)); holder.AddChild(new Control { CustomMinimumSize = new Vector2(0, 6), MouseFilter = MouseFilterEnum.Ignore }); }
         _interior.AddChild(holder);
     }
 

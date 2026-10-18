@@ -966,6 +966,22 @@ public partial class Main : Node3D
         // tests: --open=empire|policies|systems|inbox|wars|military|economy|interior opens the empire screen; --manual=all|Research,Colonisation,... takes areas into the player's hands
         if (_frame == 10 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--open=")) is string op && Array.IndexOf(new[] { "empire", "policies", "systems", "inbox", "wars", "military", "economy", "interior" }, op[7..]) is int tab and >= 0)
             _hud.ToggleEmpire(tab);
+        // test: --stageunrest spreads grievance across the stages in four of the player's systems, two with a movement (skipped for a hive)
+        if (_frame == 5 && OS.GetCmdlineUserArgs().Contains("--stageunrest"))
+        {
+            var me = Sim.Humanity;
+            if (me.M.Hive) GD.Print("--stageunrest skipped: humanity is a hive");
+            else
+            {
+                var pick = me.Colonies.Where(x => !x.Home).Take(4).ToList();
+                float[] gv = { 30, 50, 70, 90 }; int[] st = { 1, 2, 3, 4 };
+                for (int i = 0; i < pick.Count; i++)
+                {
+                    var c = pick[i]; c.Grievance = gv[i]; c.Unrest = st[i];
+                    if (i >= 2) { c.CauseKey ??= "poverty"; c.Cause ??= "it is poor beside the core's wealth"; Sim.Rise(c); }
+                }
+            }
+        }
         // test: --scroll=N scrolls the open empire tab down N px
         if (_frame == 30 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--scroll=")) is string scr) _hud.ScrollEmpire(int.Parse(scr[9..]));
         if (_frame == 2 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--manual=")) is string mn)
