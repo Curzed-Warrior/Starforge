@@ -138,7 +138,7 @@ public partial class Simulation
         double mean = MeanIndustry(civ), exh = WarExhaustionOf(civ), pull = Math.Min(1, SD("pull") * dy);
         foreach (var c in civ.Colonies.ToList())
         {
-            if (c.Home) continue;
+            if (c.Home) { HomeWorlds(c, dy); continue; }
             double t = GrievanceTarget(c, out var key, mean, exh);
             c.Grievance = (float)Math.Clamp(c.Grievance + (t - c.Grievance) * pull, 0, 100);
             c.CauseKey = key; c.Cause = key == null ? null : CausePhrase[key];

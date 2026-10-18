@@ -99,5 +99,20 @@ public static class StrifeTests
             sim.EndWarWith(sim.WarBetween(h, s), true, new() { WarModel.TermById("autonomy") });
             SelfTest.Check(!(s.Overlord == h && h.Overlord == s), "never each other's subject");
         }),
+        ("mars_can_rise", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(150); var h = sim.Humanity; var home = h.Colonies.First(c => c.Home);
+            var mars = home.Settled.Keys.FirstOrDefault(b => b.Name == "Mars");
+            if (mars == null) { home.Settled[home.Sys.Find("Mars")] = 1f; mars = home.Sys.Find("Mars"); }
+            home.WorldGrievance[mars] = 95; home.WorldUnrest[mars] = 4; home.Rival = null; home.Crisis = null; h.M.Hive = false;
+            for (int i = 0; i < 40 && home.Rival == null; i++) { home.WorldGrievance[mars] = 95; home.WorldUnrest[mars] = 4; sim.Warp(1); }
+            SelfTest.Check(home.Rival != null && home.Rival.Planet == mars, "a Mars that feels used can rise");
+        }),
+        ("far_worlds_resent_more", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(300); var home = sim.Humanity.Colonies.First(c => c.Home);
+            var moon = home.Sys.Find("Moon"); var titan = home.Sys.Find("Titan");
+            // distance alone: no mining on either, nothing that soothes the whole system, a government that feels it
+            home.Hubs.Remove(moon); home.Hubs.Remove(titan); home.ElevatorP = home.RingP = -1; sim.Humanity.Faith = 0; sim.Humanity.M.Hive = false;
+            SelfTest.Check(sim.WorldTarget(home, titan) > sim.WorldTarget(home, moon), "Titan feels further from Earth than the Moon");
+        }),
     };
 }
