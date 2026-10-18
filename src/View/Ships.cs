@@ -18,17 +18,8 @@ public static class Ships
     /// <summary>How much bigger than a shuttle each class is.</summary>
     public static float[] ClassScale => Defs.HullScale;
     public static int Classes => Defs.Hulls.Length;
-    /// <summary>
-    /// Real hull lengths, nose to tail. Big for the era (a battleship is three kilometres, a worldship a hundred and
-    /// fifty) and still nothing beside a world: Earth is twelve thousand kilometres across.
-    /// </summary>
-    static readonly Dictionary<string, float> LengthsKm = new()
-    {
-        ["Shuttle"] = 0.04f, ["Corvette"] = 0.12f, ["Frigate"] = 0.3f, ["Destroyer"] = 0.6f, ["Cruiser"] = 1.2f, ["Battlecruiser"] = 2f,
-        ["Battleship"] = 3f, ["Carrier"] = 4f, ["Titan"] = 12f, ["Juggernaut"] = 20f, ["Colossus"] = 35f, ["Dreadnought"] = 50f,
-        ["Worldship"] = 150f, ["Leviathan"] = 80f, ["GlyphArk"] = 200f, ["Devourer"] = 400f, ["Seraph"] = 8f,
-    };
-    public static float LengthKm(int cls) => LengthsKm.TryGetValue(ClassNames[cls], out var k) ? k : 0.3f * ClassScale[cls];
+    /// <summary>Real hull lengths, nose to tail (the simulation owns the table).</summary>
+    public static float LengthKm(int cls) => Sim.Simulation.LengthKm(cls);
     /// <summary>Transform scale for a class's hull in system units (the meshes run two units nose to tail).</summary>
     public static float Size(int cls) => LengthKm(cls) * StarSystem.Km * 0.5f;
     /// <summary>The nine hulls modelled before the tech bible, by their old index (Worldship was the old "Colossus").</summary>

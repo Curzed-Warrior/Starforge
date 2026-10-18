@@ -584,6 +584,7 @@ public partial class Simulation
     void Extinct(Civ civ)
     {
         civ.Dead = true;
+        DisbandForces(civ);
         foreach (var o in Civs) { o.AtWar.Remove(civ.Id); }
         Log(Humanity.Colonies.FirstOrDefault(), $"{Narrative2.Called(civ, true)} {(civ.Main ? "are" : "are")} gone. The chronicle keeps their name.", "loss", null);
     }
@@ -649,6 +650,7 @@ public partial class Simulation
                 ActStep(civ, yd);
                 ApoStep(civ, yd);
                 Cultures.Drift(civ, yd, civ.AtWar.Count > 0);
+                NavyStep(civ, yd);
             }
             if (Year >= civ.NextElection) { Election(civ); civ.NextElection = Year + 25; }
             foreach (var k in civ.Inf.Keys.ToList()) civ.Inf[k] = Math.Max(0.02f, civ.Inf[k] + (float)((_r.NextDouble() - 0.5) * 0.004 * dy));
