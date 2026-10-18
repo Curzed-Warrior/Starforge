@@ -92,6 +92,10 @@ public class Civ
     public HashSet<int> AtWar = new();
     public double NextElection, Splintered = -1;
     public float Vigour = 1f;
+    /// <summary>War culture (Culture.cs): set from the species' lore when the civ takes its drive, then drifts.</summary>
+    public Culture Culture;
+    /// <summary>Every citizen serves: more manpower, felt as a burden by a people of low Duty.</summary>
+    public bool MandatoryService;
     /// <summary>How many believe the unseen voice is real (0..1), and how many fear it.</summary>
     public float Faith, Dread;
     public int FaithStage;     // how hungrily this polity spreads: old empires are slow, young ones restless
@@ -110,6 +114,7 @@ public class Civ
     public void SetDrive(string drive, string ethic)
     {
         Drive = drive; Ethic = ethic;
+        if (Culture == null) { Culture = Cultures.Lore(Human ? "Human" : Species); MandatoryService = Culture.Duty > 0.5f; }
         W = new Dictionary<char, float>(Defs.Drives[drive].W);
         Conscience = Defs.Ethics[ethic].Conscience;
         foreach (var k in Defs.Drives.Keys) Inf[k] = k == drive ? 0.5f : 0.25f;

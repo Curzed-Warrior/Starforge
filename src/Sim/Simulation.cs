@@ -281,6 +281,7 @@ public partial class Simulation
         };
         string tmpl = SplinterNames[_r.Next(SplinterNames.Length)];
         civ.Name = string.Format(tmpl, cols[0].Sys.Name);
+        civ.Culture = parent.Culture?.Copy(); civ.MandatoryService = parent.MandatoryService;      // a breakaway takes its culture with it
         civ.SetDrive(drive, parent.Ethic == "Reverent" ? "Pragmatic" : parent.Ethic);
         foreach (var t in parent.Techs) civ.Techs.Add(t);
         civ.ComputeMods();
@@ -610,6 +611,11 @@ public partial class Simulation
         }
     }
 
+    /// <summary>Run the clock forward (tests and warps): half-year steps, so councils and wars keep their order.</summary>
+    public void Warp(double years) { double end = Year + years; while (Year < end - 1e-9) Step(Math.Min(0.5, end - Year)); }
+    /// <summary>Test hook: break colonies away as a new polity.</summary>
+    public Civ SplinterForTest(Civ parent, string drive, List<Colony> cols) => Splinter(parent, drive, cols);
+
     public static bool Profile;
     long _worstT; Colony _worst;
     void StepOnce(double dy)
@@ -642,6 +648,7 @@ public partial class Simulation
                 MeterStep(civ, yd);
                 ActStep(civ, yd);
                 ApoStep(civ, yd);
+                Cultures.Drift(civ, yd, civ.AtWar.Count > 0);
             }
             if (Year >= civ.NextElection) { Election(civ); civ.NextElection = Year + 25; }
             foreach (var k in civ.Inf.Keys.ToList()) civ.Inf[k] = Math.Max(0.02f, civ.Inf[k] + (float)((_r.NextDouble() - 0.5) * 0.004 * dy));
