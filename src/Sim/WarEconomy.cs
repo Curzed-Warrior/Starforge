@@ -88,14 +88,21 @@ public partial class Simulation
     static int Battleship => _battleship != -2 ? _battleship : _battleship = Array.IndexOf(Defs.Hulls, "Battleship");
 
     /// <summary>Building slips: one at home, more per finished yard, and big yards once the civ builds capital ships.</summary>
-    public int Slips(Civ c) => c.Colonies.Sum(SlipsOf);
-    /// <summary>One colony's slips; the civ's Yard list holds them colony by colony, in colony order.</summary>
-    public int SlipsOf(Colony col)
+    public int Slips(Civ c)
     {
-        // the home slip: at the homeworld, or a breakaway's first system
-        bool capital = col.Home || !col.Civ.Colonies.Any(x => x.Home) && col.Civ.Colonies.FirstOrDefault() == col;
+        // the capital and the biggest hull once for the civ, not once per colony (empires reach a thousand systems)
+        var capital = CapitalOf(c); bool mega = Battleship >= 0 && c.Hull >= Battleship;
+        int n = 0;
+        foreach (var col in c.Colonies) n += SlipsOf(col, col == capital, mega);
+        return n;
+    }
+    /// <summary>One colony's slips; the civ's Yard list holds them colony by colony, in colony order.</summary>
+    public int SlipsOf(Colony col) => SlipsOf(col, col == CapitalOf(col.Civ), Battleship >= 0 && col.Civ.Hull >= Battleship);
+    /// <summary>The home slip is at the capital: the homeworld, or a breakaway's first system.</summary>
+    static int SlipsOf(Colony col, bool capital, bool mega)
+    {
         int n = capital ? (int)WarData.D("economy", "slipsHome") : 0;
-        if (col.Done("yard")) n += (int)WarData.D("economy", "slipsPerYard") + (Battleship >= 0 && col.Civ.Hull >= Battleship ? (int)WarData.D("economy", "slipsMegaYard") : 0);
+        if (col.Done("yard")) n += (int)WarData.D("economy", "slipsPerYard") + (mega ? (int)WarData.D("economy", "slipsMegaYard") : 0);
         return n;
     }
 
@@ -119,8 +126,9 @@ public partial class Simulation
         c.Materiel += made;
         double perYr = dy > 1e-9 ? 1 / dy : 0;
         c.MadeKgYr = made * perYr;
+        HashSet<int> besieged = null;
         foreach (var col in c.Colonies)
-            if (col.DefenceLoss > 0 && col.OccupiedBy < 0 && !Fleets.Any(f => !f.Moving && f.At == col.Star.Id && c.AtWar.Contains(f.Civ)))
+            if (col.DefenceLoss > 0 && col.OccupiedBy < 0 && !(besieged ??= Fleets.Where(f => !f.Moving && c.AtWar.Contains(f.Civ)).Select(f => f.At).ToHashSet()).Contains(col.Star.Id))
                 col.DefenceLoss = (float)Math.Max(0, col.DefenceLoss - WarData.D("field", "defenceRegenPerYear") * dy);
 
         var fleets = FleetsOf(c).ToList();
@@ -146,9 +154,10 @@ public partial class Simulation
         while (c.Yard.Count < slips) c.Yard.Add(new Slip { Hull = ChooseHull(c) });
         // which slips belong to a colony whose yards are sabotaged (the Yard list holds slips colony by colony)
         var idle = new HashSet<int>();
+        var capital = CapitalOf(c); bool mega = Battleship >= 0 && c.Hull >= Battleship;
         for (int ci = 0, at = 0; ci < c.Colonies.Count; ci++)
         {
-            int n = SlipsOf(c.Colonies[ci]);
+            int n = SlipsOf(c.Colonies[ci], c.Colonies[ci] == capital, mega);
             if (c.Colonies[ci].YardDownUntil > Year) for (int j = at; j < at + n; j++) idle.Add(j);
             at += n;
         }
@@ -168,7 +177,9 @@ public partial class Simulation
             sl.Paid += kg * step; sl.Progress += step;
             if (sl.Progress >= 1 - 1e-9 && fleets.Count > 0)
             {
-                fleets.OrderBy(f => f.Ships).ThenBy(f => f.Id).First().Add(sl.Hull, 1, 0f);
+                Fleet need = fleets[0];
+                foreach (var f in fleets) if (f.Ships < need.Ships || f.Ships == need.Ships && f.Id < need.Id) need = f;
+                need.Add(sl.Hull, 1, 0f);
                 c.Yard[i] = new Slip { Hull = ChooseHull(c) };
             }
         }

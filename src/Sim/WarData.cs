@@ -15,7 +15,7 @@ public static class WarData
     {
         get
         {
-            _doc ??= JsonDocument.Parse(FileAccess.GetFileAsString(Path));
+            _doc ??= JsonDocument.Parse(DataFiles.Read(Path));
             return _doc.RootElement;
         }
     }
@@ -27,7 +27,15 @@ public static class WarData
         foreach (var p in path) e = e.ValueKind == JsonValueKind.Array ? e[int.Parse(p)] : e.GetProperty(p);
         return e;
     }
-    public static double D(params string[] path) => P(path).GetDouble();
+    static readonly System.Collections.Generic.Dictionary<string, double> _d = new();
+    /// <summary>A number, cached by path: the rules are read thousands of times a simulated year (slips, squadrons,
+    /// every system's grievance), and walking the JSON each time was a third of a long game's run time.</summary>
+    public static double D(params string[] path)
+    {
+        string key = string.Join('/', path);
+        if (!_d.TryGetValue(key, out double v)) _d[key] = v = P(path).GetDouble();
+        return v;
+    }
     public static string S(params string[] path) => P(path).GetString();
 
     /// <summary>A placeholder cube's colour (placeholders.kind, a hex string).</summary>

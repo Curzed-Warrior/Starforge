@@ -5,4 +5,8 @@
     <RootNamespace>Starforge</RootNamespace>
     <Nullable>disable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- the engine-free headless runner is its own project -->
+    <Compile Remove="tools/**" />
+  </ItemGroup>
 </Project>

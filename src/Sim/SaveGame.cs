@@ -137,18 +137,36 @@ public static class SaveGame
             Worlds = sim.Systems.OrderBy(kv => kv.Key.Id).Where(kv => kv.Value.All().Any(b => b.Greening > 0 || b.Ignited || b.Orbit0 >= 0)).ToDictionary(kv => kv.Key.Id,
                 kv => kv.Value.All().Where(b => b.Greening > 0 || b.Ignited || b.Orbit0 >= 0).ToDictionary(b => b.Name, b => new[] { b.Greening, b.Ignited ? 1f : 0f, b.Orbit, b.Period, b.Orbit0 })),
         };
-        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Write);
-        f.StoreString(JsonSerializer.Serialize(d, Opt));
+        // write beside the save and swap it in, keeping the last good one as .bak: a crash or a full disk mid-write
+        // (the autosave runs every five minutes) must never leave the only save half-written
+        string full = ProjectSettings.GlobalizePath(path), tmp = full + ".tmp", bak = full + ".bak";
+        System.IO.File.WriteAllText(tmp, JsonSerializer.Serialize(d, Opt));
+        if (System.IO.File.Exists(full)) System.IO.File.Copy(full, bak, true);
+        System.IO.File.Move(tmp, full, true);
     }
 
+    /// <summary>Load a save; if it is unreadable, its backup (the save before it) instead.</summary>
     public static (Simulation Sim, int Seed) Load(string path)
     {
-        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
-        var d = JsonSerializer.Deserialize<SaveDto>(f.GetAsText(), Opt);
+        try { return LoadFile(path); }
+        catch (Exception e) when (e is JsonException || e is System.IO.IOException || e is NullReferenceException)
+        {
+            string bak = ProjectSettings.GlobalizePath(path) + ".bak";
+            if (!System.IO.File.Exists(bak)) throw;
+            GD.PrintErr($"Save {path} is unreadable ({e.Message}); loading its backup.");
+            return LoadFile(bak);
+        }
+    }
+
+    static (Simulation Sim, int Seed) LoadFile(string path)
+    {
+        var d = JsonSerializer.Deserialize<SaveDto>(System.IO.File.ReadAllText(ProjectSettings.GlobalizePath(path)), Opt);
         float rescale = d.Version < 2 ? StarSystem.AU / 70f : 1f;        // version 1 saved orbits at the old compressed scale (Earth's orbit = 70)
         var gal = new Galaxy(d.Seed);
         gal.PlaceSolAndNeighbours();
-        gal.GenerateStars(d.StarCount);
+        // StarCount includes the stars kindled since the galaxy was made: regenerate only the original ones (an extra
+        // generated star would shift where the Shard, the Vault and the Gates are placed), and the kindled are added back below
+        gal.GenerateStars(d.StarCount - (d.Stars?.Count(x => x.Kindled) ?? 0));
         var sim = Simulation.Blank(gal, d.Seed);
         sim.Year = d.Year; sim.AnsweredAt = d.AnsweredAt; sim.ArkYear = d.ArkYear; sim.TypeIIIAnnounced = d.TypeIII;
         // stars the voice changed: kindled ones are new, the rest are edits of generated stars

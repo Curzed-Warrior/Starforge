@@ -75,13 +75,13 @@ public static class Defs
     public static double CostScaleNonSpine = 0.35;
     public static void LoadTechs()
     {
-        TechData.LoadProgression(Godot.FileAccess.GetFileAsString(TechData.ProgPath));
+        TechData.LoadProgression(DataFiles.Read(TechData.ProgPath));
         CostScaleNonSpine = TechData.D("research", "costScaleNonSpine");
         var args = Godot.OS.GetCmdlineUserArgs();
         if (Array.Find(args, x => x.StartsWith("--costscale=")) is string cs) CostScaleNonSpine = double.Parse(cs[12..], System.Globalization.CultureInfo.InvariantCulture);
         if (TechData.P("research").TryGetProperty("spineBias", out var sb)) Simulation.SpineBias = sb.GetDouble();
         if (Array.Find(args, x => x.StartsWith("--spinebias=")) is string sbs) Simulation.SpineBias = double.Parse(sbs[12..], System.Globalization.CultureInfo.InvariantCulture);
-        _techs = TechData.Load(Godot.FileAccess.GetFileAsString(TechData.TechsPath));
+        _techs = TechData.Load(DataFiles.Read(TechData.TechsPath));
         var mult = TechData.P("research", "nonSpineTierMult").EnumerateArray().Select(e => e.GetDouble()).ToArray();
         foreach (var t in _techs) t.Cost = t.Spine ? TierCost[t.Tier] : Math.Max(1, TierCost[t.Tier] * CostScaleNonSpine * mult[t.Tier]);
         _byId = _techs.ToDictionary(t => t.Id);

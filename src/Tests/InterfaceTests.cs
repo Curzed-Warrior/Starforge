@@ -129,10 +129,12 @@ public static class InterfaceTests
             h.MilShare = 0.3; sim.Warp(1.1);
             SelfTest.Check(h.MadeKgYr > 0 && h.UpkeepKgYr >= 0, "the yard step records its year");
         }),
+#if GODOT   // the drawing code is not in the headless build (tools/headless)
         ("draw_cap", () => {
             SelfTest.Check(Starforge.View.Ships.DrawCount(3e6, 1000) == (int)WarData.D("interface", "squadronDrawMax"), "a million-ship squadron is drawn capped");
             SelfTest.Check(Starforge.View.Ships.DrawCount(0.4, 10) == 1 && Starforge.View.Ships.DrawCount(5, 2) == 2 && Starforge.View.Ships.DrawCount(0, 10) == 0, "partial, budget-limited, empty");
         }),
+#endif
         ("terms_dead_enemy", () => {
             var (sim, h, o, w) = BorderWar();
             o.Dead = true;

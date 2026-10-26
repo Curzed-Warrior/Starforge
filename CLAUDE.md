@@ -19,6 +19,8 @@ are the selling point; autonomous civ with optional micro (Stellaris-like, no fo
 - Blender: live instance via the Blender MCP. Each MCP call gets a fresh Python namespace (re-exec scripts) and calls
   time out at ~60 s while Blender keeps working: poll the output file's mtime instead of re-running.
 - Blueprints: `python tools/blueprints/outpost_set.py [SHEET...]` (no args = full set + DXF + CSV).
+- Without Godot (CI, cloud): `dotnet build -c Release tools/headless`, then `dotnet tools/headless/bin/Release/net8.0/Headless.dll
+  --selftest` / `--warp=939 --trace --seed=N` / `--warp=300 --savetest` (see tools/headless/README.md).
 
 ## Scale and conventions
 - True scale: 1 unit = Earth radius in the game (`View/Frame.cs` floating origin + scaled space). Assets are in metres.

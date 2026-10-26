@@ -1,0 +1,22 @@
+name: Simulation
+
+# The simulation's self-tests and a save round trip, without the engine (tools/headless).
+on:
+  push:
+  pull_request:
+
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build
+        run: dotnet build -c Release tools/headless
+      - name: Self-tests
+        run: dotnet tools/headless/bin/Release/net8.0/Headless.dll --selftest
+      - name: Save round trip after 300 years
+        run: dotnet tools/headless/bin/Release/net8.0/Headless.dll --warp=300 --savetest
