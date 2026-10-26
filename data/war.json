@@ -132,6 +132,11 @@
       "prepare_invasion": { "act": "spy",        "risk": 0.42, "success": 0.7,  "years": 4,  "garrison": 0.5 }
     }
   },
+  "interface": {
+    "battleRecordsMax": 256, "battleShowYears": 0.08, "battleMapYears": 3.0,
+    "proposeCooldownYears": 2.0, "ceasefireAcceptExhaustion": 40,
+    "squadronDrawMax": 24, "fleetDrawMax": 600, "interiorPage": 60
+  },
   "placeholders": {
     "factory": "#ff8c2e", "shipyard": "#3a7dff", "barracks": "#3fbf5a", "transport": "#7d8a36", "specops": "#9a4fe0", "hull": "#8c8c8c"
   }

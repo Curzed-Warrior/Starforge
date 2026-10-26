@@ -39,6 +39,30 @@ public static class Ships
         return 0;
     }
 
+    /// <summary>How many hulls to draw for a squadron of this many ships, with this many draws left in the budget.</summary>
+    public static int DrawCount(double ships, int left)
+    {
+        if (ships <= 0 || left <= 0) return 0;
+        return Math.Max(1, (int)Math.Min(Math.Min(Math.Ceiling(ships), _squadronMax ??= (int)WarData.D("interface", "squadronDrawMax")), left));
+    }
+    static int? _squadronMax;
+
+    static readonly Dictionary<string, ArrayMesh> _named = new();
+    /// <summary>A kit-v2 hull by name (assets/ships/hum/&lt;Name&gt;.glb), cached; null if there is no such file.</summary>
+    public static ArrayMesh Named(string name)
+    {
+        if (!_named.TryGetValue(name, out var m)) _named[name] = m = TrueScale(name);
+        return m;
+    }
+
+    /// <summary>Whether any .glb resolves for this class and style: its own, its named one, or its stand-in's.</summary>
+    public static bool HasModel(int cls, int style)
+    {
+        string n = ClassNames[cls]; int li = LegacyIndex(cls);
+        if (style == 0) return ResourceLoader.Exists($"res://assets/ships/hum/{n}.glb") || ResourceLoader.Exists($"res://assets/ships/ship{n}.glb") || ResourceLoader.Exists($"res://assets/ships/ship{li}.glb");
+        return ResourceLoader.Exists($"res://assets/ships/ship{style}_{n}.glb") || ResourceLoader.Exists($"res://assets/ships/ship{style}_{li}.glb");
+    }
+
     public static int MaxClass(Civ civ) => civ.Hull;
 
     /// <summary>Most traffic is a couple of classes below the best the yards can build; the flagships are rare.</summary>

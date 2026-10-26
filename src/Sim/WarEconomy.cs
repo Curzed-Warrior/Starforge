@@ -117,6 +117,8 @@ public partial class Simulation
         }
         else c.TributeTo = -1;
         c.Materiel += made;
+        double perYr = dy > 1e-9 ? 1 / dy : 0;
+        c.MadeKgYr = made * perYr;
         foreach (var col in c.Colonies)
             if (col.DefenceLoss > 0 && col.OccupiedBy < 0 && !Fleets.Any(f => !f.Moving && f.At == col.Star.Id && c.AtWar.Contains(f.Civ)))
                 col.DefenceLoss = (float)Math.Max(0, col.DefenceLoss - WarData.D("field", "defenceRegenPerYear") * dy);
@@ -124,6 +126,7 @@ public partial class Simulation
         var fleets = FleetsOf(c).ToList();
         double upk = WarData.D("economy", "upkeepPerYear") * dy;
         double due = fleets.Sum(f => f.Squadrons.Sum(s => upk * HullKg(s.Hull) * s.Ships));
+        c.UpkeepKgYr = due * perYr; c.LaidUpYr = 0;
         if (due <= c.Materiel) c.Materiel -= due;
         else
         {
@@ -133,7 +136,7 @@ public partial class Simulation
             {
                 if (deficit <= 0) break;
                 double perShip = upk * HullKg(s.Hull), laid = Math.Min(s.Ships, Math.Ceiling(deficit / perShip));   // each ship laid up saves its upkeep
-                s.Ships -= laid; deficit -= laid * perShip;
+                s.Ships -= laid; c.LaidUpYr += laid * perYr; deficit -= laid * perShip;
                 if (s.Ships <= 0) f.Squadrons.Remove(s);
             }
         }
@@ -149,13 +152,17 @@ public partial class Simulation
             if (c.Colonies[ci].YardDownUntil > Year) for (int j = at; j < at + n; j++) idle.Add(j);
             at += n;
         }
+        c.SlipsSabotaged = idle.Count; c.SlipsWaiting = 0;
         for (int i = 0; i < c.Yard.Count; i++)
         {
+            c.Yard[i].Waiting = false;
             if (idle.Contains(i)) continue;
             var sl = c.Yard[i];
             double kg = HullKg(sl.Hull);
             double step = Math.Min(dy / BuildYears(sl.Hull), 1 - sl.Progress);
+            double want = step;
             step = Math.Min(step, c.Materiel / kg);                  // a slip waits when materiel is short
+            if (step < want - 1e-12) { sl.Waiting = true; c.SlipsWaiting++; }
             if (step <= 0) continue;
             c.Materiel = Math.Max(0, c.Materiel - kg * step);
             sl.Paid += kg * step; sl.Progress += step;
@@ -165,6 +172,39 @@ public partial class Simulation
                 c.Yard[i] = new Slip { Hull = ChooseHull(c) };
             }
         }
+    }
+
+    /// <summary>Plain sentences for what is holding the war economy back right now (the Economy tab's shortages).</summary>
+    public List<string> Shortages(Civ c)
+    {
+        var l = new List<string>();
+        int waiting = c.Yard.Count(s => s.Waiting);
+        if (waiting > 0) l.Add($"{waiting} of {c.Yard.Count} slips {(waiting == 1 ? "is" : "are")} waiting for materiel.");
+        if (c.LaidUpYr > 0) l.Add($"Ships are being laid up: the materiel runs out before the navy's upkeep is paid.");
+        if (c.SlipsSabotaged > 0) l.Add($"{c.SlipsSabotaged} slip{(c.SlipsSabotaged == 1 ? " is" : "s are")} idle, sabotaged.");
+        var seen = new HashSet<string>();
+        var byNeed = new List<(string Need, List<string> Names)>();   // works missing the same resource share one sentence
+        foreach (var col in c.Colonies)
+            foreach (var (id, p) in col.Built)
+                if (p > 0 && p < 1 && Colony.Needs(id) is string need && !c.Strategic.Contains(need) && seen.Add(id))
+                {
+                    string name = WorkName(id);
+                    int i = byNeed.FindIndex(x => x.Need == need);
+                    if (i < 0) byNeed.Add((need, new List<string> { name })); else byNeed[i].Names.Add(name);
+                }
+        foreach (var (need, names) in byNeed)
+        {
+            string list = names.Count == 1 ? names[0] : string.Join(", ", names.Take(names.Count - 1)) + " and " + names[^1];
+            l.Add($"No {need}: the {list} {(names.Count == 1 ? "goes" : "go")} at a quarter pace.");
+        }
+        double per = WarData.D("armies", "troopsPerArmy");
+        double pop = c.Colonies.Where(Free).Sum(col => col.Pop);
+        double want = WarData.D("armies", "garrisonPerBillion") * pop * (c.Mobilisation >= 2 ? 4 : c.Mobilisation == 1 ? 2 : 1);
+        double size = per * Math.Max(1, Math.Ceiling(want / WarData.D("armies", "maxArmies")));
+        double underArms = ArmiesOf(c).Sum(a => a.Troops) + c.Barracks.Sum(t => t.Troops);
+        if (underArms + size <= want * per + 1e-12 && c.Manpower < size)
+            l.Add("Too few people can be called up for the barracks' next intake.");
+        return l;
     }
 
     /// <summary>The council builds its best hull most of the time and a cheaper class the rest; manual Production may fix one.</summary>
@@ -244,4 +284,6 @@ public class Slip
 {
     public int Hull;
     public double Progress, Paid;
+    /// <summary>Could not advance last year for lack of materiel (transient: not saved).</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public bool Waiting;
 }

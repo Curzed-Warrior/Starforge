@@ -106,6 +106,9 @@ public class Civ
     /// <summary>Where the military share stood when the level last changed, and when.</summary>
     public double MilFrom = 0.04, MilSince;
     internal (double, float) WarCacheKey = (double.NaN, 0); internal double WarCacheG, WarCacheR;
+    /// <summary>The war economy's last year, per year (WarEconomy.YardStep; transient, not saved): materiel made, the navy's upkeep bill,
+    /// ships laid up for want of it, slips waiting on materiel, slips idle from sabotage.</summary>
+    public double MadeKgYr, UpkeepKgYr, LaidUpYr; public int SlipsWaiting, SlipsSabotaged;
     /// <summary>The building slips and what is on them (WarEconomy.YardStep).</summary>
     public List<Slip> Yard = new();
     /// <summary>Recruits in training (WarEconomy.BarracksStep).</summary>
@@ -115,6 +118,8 @@ public class Civ
     /// <summary>War in the field (Wars.cs): no war with a civ before its truce year; tribute owed to a victor, and until when.</summary>
     public Dictionary<int, double> Truce = new();
     public int TributeTo = -1; public double TributeUntil;
+    /// <summary>War id -> year before which this civ's enemy will not hear another peace offer (transient: not saved).</summary>
+    public Dictionary<int, double> ProposeAfter = new();
     /// <summary>How many believe the unseen voice is real (0..1), and how many fear it.</summary>
     public float Faith, Dread;
     public int FaithStage;     // how hungrily this polity spreads: old empires are slow, young ones restless

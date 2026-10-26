@@ -8,7 +8,8 @@ namespace Starforge.View;
 
 /// <summary>
 /// The empire screen (E): an overview of the polity, the policies that decide what the council runs by itself and
-/// what waits on you, per-system overrides, and the inbox of news and decisions.
+/// what waits on you, per-system overrides, the inbox of news and decisions, and the wars, military, economy and
+/// interior tabs (each in its own EmpireScreen.*.cs part).
 /// </summary>
 public partial class EmpireScreen : PanelContainer
 {
@@ -18,10 +19,10 @@ public partial class EmpireScreen : PanelContainer
     RichTextLabel _overview;
     readonly ColorRect[] _factionBars = new ColorRect[3];
     Label _legend;
-    VBoxContainer _policies, _systems, _inbox;
+    VBoxContainer _policies, _systems, _inbox, _wars, _military, _economy, _interior;
     int _inboxSig = -1;
 
-    public const int TabOverview = 0, TabPolicies = 1, TabSystems = 2, TabInbox = 3;
+    public const int TabOverview = 0, TabPolicies = 1, TabSystems = 2, TabInbox = 3, TabWars = 4, TabMilitary = 5, TabEconomy = 6, TabInterior = 7;
 
     public void Setup(Main main)
     {
@@ -40,7 +41,7 @@ public partial class EmpireScreen : PanelContainer
         head.AddChild(close);
         v.AddChild(head);
         _tabs = new TabContainer { CustomMinimumSize = new Vector2(930, 590) };
-        _tabs.TabChanged += _ => { _inboxSig = -1; Refresh(); };
+        _tabs.TabChanged += _ => { _inboxSig = -1; _warsSig = -1; Refresh(); };
         v.AddChild(_tabs);
 
         // overview
@@ -59,6 +60,10 @@ public partial class EmpireScreen : PanelContainer
         _policies = Scroll("Policies");
         _systems = Scroll("Ledger");
         _inbox = Scroll("Inbox");
+        _wars = Scroll("Wars");
+        _military = Scroll("Military");
+        _economy = Scroll("Economy");
+        _interior = Scroll("Interior");
     }
 
     VBoxContainer Scroll(string name)
@@ -71,11 +76,14 @@ public partial class EmpireScreen : PanelContainer
         return v;
     }
 
+    public void ScrollTab(int px) { if (_tabs.GetCurrentTabControl() is ScrollContainer sc) sc.ScrollVertical = px; }
+
     public void Open(int tab)
     {
         Visible = true;
         _tabs.CurrentTab = tab;
         _inboxSig = -1;
+        _warsSig = -1;
         Refresh();
     }
 
@@ -85,15 +93,28 @@ public partial class EmpireScreen : PanelContainer
     public void Show(Alert a) { Open(TabInbox); _focus = a; }
     Alert _focus;
 
-    double _t;
+    // the tabs filled by the other parts of this class (Tasks 4-6); a part that is not written yet compiles to nothing
+    partial void RefreshMilitary();
+    partial void RefreshEconomy();
+    partial void BuildInterior();
+
+    double _t, _tSlow;
     public override void _Process(double delta)
     {
         if (!Visible || _main?.Sim == null) return;
         _t += delta;
+        _tSlow += delta;
+        // the economy every second; the interior only on opening and on its own Refresh button
+        if (_tSlow >= 1) { _tSlow = 0; if (_tabs.CurrentTab == TabEconomy) RefreshEconomy(); }
         if (_t < 0.5) return;
         _t = 0;
-        if (_tabs.CurrentTab == TabOverview) RefreshOverview();
-        if (_tabs.CurrentTab == TabInbox) RefreshInbox();
+        switch (_tabs.CurrentTab)
+        {
+            case TabOverview: RefreshOverview(); break;
+            case TabInbox: RefreshInbox(); break;
+            case TabWars: RefreshWars(); break;
+            case TabMilitary: RefreshMilitary(); break;
+        }
     }
 
     void Refresh()
@@ -105,6 +126,10 @@ public partial class EmpireScreen : PanelContainer
             case TabPolicies: BuildPolicies(); break;
             case TabSystems: BuildSystems(); break;
             case TabInbox: RefreshInbox(); break;
+            case TabWars: RefreshWars(); break;
+            case TabMilitary: RefreshMilitary(); break;
+            case TabEconomy: RefreshEconomy(); break;
+            case TabInterior: BuildInterior(); break;
         }
     }
 
@@ -374,9 +399,29 @@ public partial class EmpireScreen : PanelContainer
     // ---------- helpers ----------
     static void Clear(Node n) { foreach (var c in n.GetChildren()) { n.RemoveChild(c); c.QueueFree(); } }
 
-    static Label Note(string text)
+    /// <summary>A horizontal bar filled to v01 (0..1) over an outlined track.</summary>
+    static Control Bar(float v01, Color col, float width = 160)
     {
-        var l = Ui.Label(text, 12, Ui.Dim);
+        var track = new Panel { CustomMinimumSize = new Vector2(width, 10), SizeFlagsVertical = SizeFlags.ShrinkCenter, MouseFilter = MouseFilterEnum.Ignore };
+        var box = new StyleBoxFlat { BgColor = new Color(1, 1, 1, 0.1f), BorderColor = new Color(1, 1, 1, 0.3f) };
+        box.SetBorderWidthAll(1);
+        track.AddThemeStyleboxOverride("panel", box);
+        track.AddChild(new ColorRect { Color = col, Size = new Vector2(width * Math.Clamp(v01, 0, 1), 10), MouseFilter = MouseFilterEnum.Ignore });
+        return track;
+    }
+
+    /// <summary>A grid for caption / value rows, spaced like the ledger.</summary>
+    static GridContainer RowGrid(int columns)
+    {
+        var g = new GridContainer { Columns = columns };
+        g.AddThemeConstantOverride("h_separation", 10);
+        g.AddThemeConstantOverride("v_separation", 4);
+        return g;
+    }
+
+    static Label Note(string text, int size = 12)
+    {
+        var l = Ui.Label(text, size, Ui.Dim);
         l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         l.CustomMinimumSize = new Vector2(880, 0);
         return l;

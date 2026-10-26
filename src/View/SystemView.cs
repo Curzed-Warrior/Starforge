@@ -19,6 +19,8 @@ public partial class SystemView : Node3D
     DirectionalLight3D _light;
     /// <summary>The star's true view-space position this frame, and how much the system node is squashed (see Frame).</summary>
     public Vector3 TrueStar; public float StarScale = 1f;
+    /// <summary>The star's light on this system (not on fleet hulls, which Works lights with a softer copy).</summary>
+    public DirectionalLight3D SunLight => _light;
     public float StarDim = 1f;
     /// <summary>The swarm leaves the planets' plane open (inhabited worlds): they stay lit, and the star shines for anyone in that plane.</summary>
     public bool LaneOpen;
@@ -108,7 +110,8 @@ public partial class SystemView : Node3D
 
         // the star lights what the camera is near: a directional light from the star toward the view's focus
         // (worlds light themselves in their shaders; this is for ships, stations and megastructures)
-        _light = new DirectionalLight3D { LightColor = new Color(sc.R, sc.G, sc.B), LightEnergy = 1.4f, ShadowEnabled = false };
+        // fleet hulls have their own copy of this light (Works.FleetLayer), set softer so their paint keeps its shading
+        _light = new DirectionalLight3D { LightColor = new Color(sc.R, sc.G, sc.B), LightEnergy = 1.4f, ShadowEnabled = false, LightCullMask = 0xFFFFFu & ~Works.FleetLayer };
         AddChild(_light);
 
         Works = new Works();
@@ -198,7 +201,7 @@ public partial class SystemView : Node3D
     public void Sync(Colony c, Simulation sim)
     {
         Colony = c;
-        Works.Sync(c);
+        Works.Sync(c, sim);
         StarDim = c == null ? 1f : (float)Math.Clamp(1 - c.Capture * 0.92, 0.06, 1);
         LaneOpen = c != null && c.EclipticOpen;
         foreach (var bv in Bodies)

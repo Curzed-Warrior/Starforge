@@ -146,7 +146,9 @@ public partial class Simulation
     BattleResult Fight(War w, int star, BattleSide sa, BattleSide sb)
     {
         double navyA = NavyStrength(sa.Civ), navyB = NavyStrength(sb.Civ);
-        var r = Battles.Resolve(this, sa, sb);
+        var r = Starforge.Sim.Battles.Resolve(this, sa, sb);
+        Record(new BattleRecord(star, Year, w.Id, sa.Civ.Id, sb.Civ.Id, r.AWins, r.LostA, r.LostB,
+            Starforge.Sim.Battles.BestFamily(sa.Civ), Starforge.Sim.Battles.BestFamily(sb.Civ)));
         w.Battles++;
         if (r.AWins) w.WonA++; else w.WonB++;
         w.LostKgA += r.KgLostA; w.LostKgB += r.KgLostB; w.YearKgA += r.KgLostA; w.YearKgB += r.KgLostB;
@@ -170,11 +172,15 @@ public partial class Simulation
     /// Where fleets gather before a strike: the enemy system nearest our capital, then our free system nearest that
     /// (two linear passes, not every pair: big empires have a thousand systems).
     /// </summary>
-    Colony Frontier(Civ civ, List<Civ> enemies)
+    Colony Frontier(Civ civ, List<Civ> enemies) => Frontier(civ, enemies, out _);
+
+    /// <summary>Frontier, also giving the enemy system nearest our capital (the strike's target).</summary>
+    Colony Frontier(Civ civ, List<Civ> enemies, out Colony near)
     {
+        near = null;
         var home = civ.Colonies.FirstOrDefault(c => c.Home) ?? civ.Colonies.FirstOrDefault();
         if (home == null) return null;
-        Colony near = null; float bd = float.MaxValue;
+        float bd = float.MaxValue;
         foreach (var e in enemies)
             foreach (var x in e.Colonies)
             {
@@ -190,6 +196,52 @@ public partial class Simulation
             if (d < bd) { bd = d; best = c; }
         }
         return best;
+    }
+
+    /// <summary>
+    /// A war's fronts, as (from, to) star ids: each lead's staging system to the enemy system nearest its capital, and
+    /// for every system occupied in this war, the holder's nearest free system to it. Each pair once.
+    /// </summary>
+    public List<(int From, int To)> Fronts(War w)
+    {
+        var fronts = new List<(int From, int To)>();
+        for (int s = 0; s < 2; s++)
+        {
+            var lead = Lead(w, s);
+            if (lead.Dead) continue;
+            var enemies = (s == 0 ? w.B : w.A).Select(id => Civs[id]).Where(c => !c.Dead).ToList();
+            var stage = Frontier(lead, enemies, out var target);
+            if (stage != null && target != null) fronts.Add((stage.Star.Id, target.Star.Id));
+        }
+        foreach (var id in w.A.Concat(w.B))
+            foreach (var c in Civs[id].Colonies)
+            {
+                if (c.OccupiedBy < 0) continue;
+                var holder = Civs[c.OccupiedBy];
+                int hs = Side(w, holder);
+                if (hs < 0 || hs == Side(w, c.Civ)) continue;
+                Colony best = null; float bd = float.MaxValue;
+                foreach (var x in holder.Colonies)
+                {
+                    if (x.OccupiedBy >= 0) continue;
+                    float d = x.Star.Pos.DistanceSquaredTo(c.Star.Pos);
+                    if (d < bd) { bd = d; best = x; }
+                }
+                if (best != null) fronts.Add((best.Star.Id, c.Star.Id));
+            }
+        return fronts.Distinct().ToList();
+    }
+
+    /// <summary>Test hook: the first fleet of each lead jumps to the star and the two fight there.</summary>
+    internal BattleResult TestFight(War w, int star)
+    {
+        BattleSide SideAt(Civ lead)
+        {
+            var f = FleetsOf(lead).FirstOrDefault();
+            if (f != null) { f.At = star; f.To = -1; f.Target = -1; }
+            return new BattleSide { Civ = lead, Fleets = FleetsOf(lead).Where(x => !x.Moving && x.At == star).ToList() };
+        }
+        return Fight(w, star, SideAt(Lead(w, 0)), SideAt(Lead(w, 1)));
     }
 
     /// <summary>Wrecks teach: salvage toward the Umbral and Vault gates, and the salvage act's stolen techs.</summary>

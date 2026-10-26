@@ -189,6 +189,8 @@ public partial class Hud : CanvasLayer
         _find = new FindBox();
         _find.Setup(main);
         _outliner.OpenTech += ToggleTech;
+        _outliner.OpenWar += ShowWar;
+        _outliner.OpenInterior += () => OpenEmpire(EmpireScreen.TabInterior);
         Simulation.WorkName = id => Megastructures.Catalogue.FirstOrDefault(x => x.Id == id).Name ?? id;
         Sim.Alerted += OnAlert;
         BuildTicker();
@@ -206,7 +208,11 @@ public partial class Hud : CanvasLayer
 
     public bool EmpireOpen => _empire.Visible;
     public void ToggleEmpire(int tab) { _empire.Toggle(tab); if (_empire.Visible) { _chron.Visible = false; } }
+    /// <summary>Open the empire screen at a tab, leaving it open if it already shows that tab (a shortcut, not a toggle).</summary>
+    public void OpenEmpire(int tab) { _empire.Open(tab); _chron.Visible = false; }
+    public void ScrollEmpire(int px) => _empire.ScrollTab(px);
     public void CloseEmpire() => _empire.Visible = false;
+    public void ShowWar(int warId) { _empire.ShowWar(warId); _chron.Visible = false; }
 
     /// <summary>An alert arrives: pause if the player asked to be stopped for this kind of news.</summary>
     void OnAlert(Alert a)

@@ -16,6 +16,26 @@ public class BattleSide
 
 public record BattleResult(bool AWins, double LostA, double LostB, double KgLostA, double KgLostB, int Rounds, bool ARetreats, bool BRetreats);
 
+/// <summary>A battle as the screens remember it: where and when, which war and sides, who won, the hulls each lost and each side's main weapon family.</summary>
+public record BattleRecord(int Star, double Year, int WarId, int CivA, int CivB, bool AWins, double LostA, double LostB, string FamA, string FamB);
+
+public partial class Simulation
+{
+    /// <summary>Recent battles, newest last, at most interface.battleRecordsMax (transient: not saved, rebuilt as the sim runs).
+    /// Inside Simulation this name hides the static class Battles: call that one as Starforge.Sim.Battles.</summary>
+    public readonly List<BattleRecord> Battles = new();
+
+    /// <summary>The battles fought at a star since a year, oldest first.</summary>
+    public IEnumerable<BattleRecord> BattlesAt(int star, double since) => Battles.Where(b => b.Star == star && b.Year >= since && b.Year <= Year);
+
+    void Record(BattleRecord r)
+    {
+        Battles.Add(r);
+        int max = (int)WarData.D("interface", "battleRecordsMax");
+        if (Battles.Count > max) Battles.RemoveRange(0, Battles.Count - max);
+    }
+}
+
 /// <summary>
 /// Battles by the numbers. Each hull's punch is its best weapon family plus a share of its second, each blunted by the
 /// defence that counters it (armour stops kinetics, shields drink beams, point defence swats missiles and strike craft;
@@ -26,6 +46,23 @@ public static class Battles
 {
     static double B(string key) => WarData.D("battle", key);
     static readonly string[] Excluded = { "ground", "doom" };
+
+    static string[] _families;
+
+    /// <summary>The weapon family a civ's fleets mostly fight with: its highest-tier space weapon (ties in war.json's
+    /// family order: the countered families, then exotic), kinetics when it has none.</summary>
+    public static string BestFamily(Civ c)
+    {
+        _families ??= WarData.P("battle", "counters").EnumerateObject().Select(p => p.Name).Append("exotic").ToArray();
+        string best = "kinetic"; int bt = int.MinValue, bi = int.MaxValue;
+        foreach (var (fam, t) in c.M.Arms)
+        {
+            if (Array.IndexOf(Excluded, fam) >= 0) continue;
+            int i = Array.IndexOf(_families, fam); if (i < 0) i = _families.Length;
+            if (t > bt || t == bt && i < bi) { best = fam; bt = t; bi = i; }
+        }
+        return best;
+    }
 
     static double Block(int t, int td) { double p = Simulation.TierPow(t), q = Simulation.TierPow(td); return 2 * p / (p + q); }
 

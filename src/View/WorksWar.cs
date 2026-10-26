@@ -7,8 +7,9 @@ namespace Starforge.View;
 
 /// <summary>
 /// Placeholder cubes for the war economy until the real models exist: factories orange, shipyard slips blue (a grey
-/// hull inside each busy slip), barracks green, parked squadrons grey, armies olive. One face of every cube carries
-/// the owner's empire colour. They sit in a shell 2.2 to 2.8 seat radii out.
+/// hull inside each busy slip), barracks green, armies on the ground olive. One face of every cube carries the owner's
+/// empire colour. They sit in a shell 2.2 to 2.8 seat radii out. Fleets and the armies they carry are drawn with real
+/// hulls (WorksFleets).
 /// </summary>
 public partial class Works
 {
@@ -76,18 +77,14 @@ void fragment() { ALBEDO = mix(COLOR.rgb, v_empire, v_face); EMISSION = ALBEDO *
         var train = civ.Barracks.Where(t => t.At == here).ToList();
         for (int i = 0; i < train.Count; i++) Put(i, train.Count, 2.4f, 2f, WarData.Colour("barracks"));
 
-        // parked squadrons: grey cubes in a group, sized by hull (four times true, so they read at a distance)
-        var sqs = sim.Fleets.Where(f => f.At == here).SelectMany(f => f.Squadrons).Take(24).ToList();
-        for (int i = 0; i < sqs.Count; i++)
-            Put(i, sqs.Count, 3.4f, Ships.Size(sqs[i].Hull) * 4f / StarSystem.Km, WarData.Colour("hull"), 0.4f);
-
         // special forces, purple: courses at the capital, and the player's own teams wherever they are (others' are secret)
         int courses = c.Home ? civ.Academy.Count : 0;
         var me = sim.Humanity;
         var teams = sim.Teams.Where(t => t.Civ == me.Id && t.To < 0 && t.At == here).ToList();
         for (int i = 0; i < courses + teams.Count; i++) Put(i, courses + teams.Count, 5.6f, 1.5f, WarData.Colour("specops"), 0, i < courses ? null : me.Color);
 
-        var armies = sim.Armies.Where(a => a.At == here).ToList();
+        // armies on the ground (those aboard a fleet are drawn as its transports, WorksFleets)
+        var armies = sim.Armies.Where(a => a.At == here && a.Fleet < 0).ToList();
         for (int i = 0; i < armies.Count; i++) Put(i, armies.Count, 4.6f, 1.5f, WarData.Colour("transport"));
 
         mm.VisibleInstanceCount = k;
