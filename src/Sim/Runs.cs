@@ -90,7 +90,7 @@ public static class Runs
                 {
                     next += 10;
                     var h = sim.HomeColony; var hu = sim.Humanity;
-                    GD.Print($"D {sim.Year:0000} P={hu.Power:0.00e0}W K={Defs.Kardashev(hu.Power):0.000} KG={Defs.Kardashev(hu.GalacticPower):0.000} pop={hu.Pop:0.0} cap={h.Capture:0.0e0} stock={h.Stock / h.PFrac:0.00}P fnd={h.Foundries} hubs={string.Join(",", h.Hubs.Select(kv => kv.Key.Name + kv.Value))} set={string.Join(",", h.Settled.Select(kv => kv.Key.Name))} techs={hu.Techs.Count} res={string.Join("/", hu.Slots.Values.Select(sl => sl.Id + ":" + sl.P.ToString("0")))} rp={h.RpRate:0.0} cols={hu.Colonies.Count} ships={sim.Ships.Count} civs={string.Join(" ", sim.Civs.Where(c => !c.Dead).Select(c => c.Name.Split(' ').Last() + ":" + c.Colonies.Count))}");
+                    GD.Print($"D {sim.Year:0000} P={hu.Power:0.00e0}W K={Defs.Kardashev(hu.Power):0.000} KG={Defs.Kardashev(hu.GalacticPower):0.000} pop={hu.Pop:0.0} cap={h.Capture:0.0e0} stock={h.Stock / h.PFrac:0.00}P fnd={h.Foundries} hubs={string.Join(",", h.Hubs.Select(kv => kv.Key.Name + kv.Value))} set={string.Join(",", h.Settled.Select(kv => kv.Key.Name))} techs={hu.Techs.Count} res={string.Join("/", hu.Slots.Values.Select(sl => sl.Id + ":" + sl.P.ToString("0")))} rp={h.RpRate:0.0} cols={hu.Colonies.Count} seedships={sim.Ships.Count} navy={sim.FleetsOf(hu).Sum(f => f.Ships):0} fleets={sim.FleetsOf(hu).Count()} mat={hu.Materiel:0.0e0} slips={hu.Yard.Count} civs={string.Join(" ", sim.Civs.Where(c => !c.Dead).Select(c => c.Name.Split(' ').Last() + ":" + c.Colonies.Count))}");
                 }
             }
         }
