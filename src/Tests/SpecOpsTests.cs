@@ -195,5 +195,21 @@ public static class SpecOpsTests
             SelfTest.Check(!sim.Fits(h, mine, o, "sabotage_yard") && !sim.Fits(h, mine, o, "sabotage_deposit"), "a council does not wreck its own occupied world");
             SelfTest.Check(sim.Fits(h, mine, o, "prepare_invasion"), "but it prepares its liberation");
         }),
+        ("teams_work_from_the_front", () => {
+            var (sim, h, o, t) = Ready();
+            var home = h.Colonies.First(x => x.Home); var fwd = h.Colonies.First(x => !x.Home);
+            double max = WarData.D("specops", "travelYearsMax");
+            // the enemy is far beyond a team's reach from the capital, but one of our systems sits next to it
+            var dir = (o.Colonies[0].Star.Pos - home.Star.Pos).Normalized();
+            float d = 1;
+            while (sim.TravelYears(h, home.Star, o.Colonies[0].Star) < 3 * max && d < 1e5f) { d *= 2; for (int i = 0; i < o.Colonies.Count; i++) sim.MoveStar(o.Colonies[i].Star, home.Star.Pos + dir * (d + i * 0.5f), o); }
+            var x = o.Colonies[0];
+            sim.MoveStar(fwd.Star, x.Star.Pos - dir * 0.3f, h);
+            sim.DeclareWar(h, o);
+            SelfTest.Check(sim.TravelYears(h, home.Star, x.Star) > max, "the enemy is out of reach from the capital");
+            SelfTest.Check(sim.CanTarget(h, x, "prepare_invasion"), "a team at war works from the front");
+            sim.Dispatch(t, x, "prepare_invasion");
+            SelfTest.Check(t.Arrive - sim.Year < max, "and gets there in time to matter");
+        }),
     };
 }

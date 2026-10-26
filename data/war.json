@@ -136,7 +136,7 @@
   "specops": {
     "teamsBase": 1, "teamsMax": 8, "kgPerTeam": 4.0e8, "manpowerPerTeam": 1.0e-6, "upkeepPerYear": 0.05,
     "trainYears": 6.0, "rushedYears": 1.5, "trainedQuality": 1.0, "rushedQuality": 0.5, "xpPerMission": 0.15,
-    "onSiteYears": 1.0, "travelYearsMax": 15, "captureMin": 0.02, "captureMax": 0.9, "guardPerTeam": 0.4,
+    "onSiteYears": 1.0, "travelYearsMax": 15, "deployYears": 0.5, "captureMin": 0.02, "captureMax": 0.9, "guardPerTeam": 0.4,
     "incidentRelation": -25, "spyMeterOnCapture": 10,
     "missions": {
       "sabotage_yard":    { "act": "sabotage",   "risk": 0.35, "success": 0.7,  "years": 6 },

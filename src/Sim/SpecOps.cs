@@ -85,16 +85,32 @@ public partial class Simulation
 
     /// <summary>
     /// Can this civ's teams work on this colony? Only in systems it does not control, held by a civ it has met; the
-    /// mission's act must be known; the colony must be within reach of its capital; and there must be something to work on.
+    /// mission's act must be known; the colony must be within reach of where the teams work from (Staging); and there
+    /// must be something to work on.
     /// </summary>
     public bool CanTarget(Civ att, Colony c, string mission)
     {
         if (c == null || c.Civ == null || c.Civ.Dead || !c.Civ.Colonies.Contains(c)) return false;
         var holder = Holder(c);
         if (holder == att || holder.Dead || !att.Met.Contains(holder.Id)) return false;
-        var home = Home(att);
-        if (home == null || TravelYears(att, home.Star, c.Star) > S("travelYearsMax")) return false;
+        var from = Staging(att, holder);
+        if (from == null || TravelYears(att, from.Star, c.Star) > S("travelYearsMax")) return false;
         return Fits(att, c, holder, mission);
+    }
+
+    readonly Dictionary<(int, int), (double Year, Colony At)> _staging = new();
+    /// <summary>
+    /// Where a civ's teams work from against a holder: at war, the system facing them across the front (Frontier), which
+    /// they reach through their own space in specops.deployYears; in peace, the capital. Worked out once a step per pair.
+    /// </summary>
+    public Colony Staging(Civ att, Civ holder)
+    {
+        if (!att.AtWar.Contains(holder.Id)) return Home(att);
+        var key = (att.Id, holder.Id);
+        if (_staging.TryGetValue(key, out var s) && s.Year == Year && s.At?.Civ == att) return s.At;
+        var at = Frontier(att, new() { holder }) ?? Home(att);
+        _staging[key] = (Year, at);
+        return at;
     }
 
     /// <summary>CanTarget past the reach and ownership checks: the act is known and there is something to work on.</summary>
@@ -124,12 +140,27 @@ public partial class Simulation
         bool guard = mission == "guard" || target == null;
         var dest = guard ? Home(civ)?.Star : target.Star;
         if (dest == null) return;
+        int was = t.TargetCiv;
         t.Mission = guard ? "guard" : mission;
         t.Target = guard ? -1 : target.Star.Id;
         t.TargetCiv = guard ? -1 : Holder(target).Id;
         t.Due = 0;
         if (t.At == dest.Id) { t.To = -1; t.Arrive = Year; if (!guard) t.Due = Year + S("onSiteYears"); return; }
-        t.To = dest.Id; t.Arrive = Year + TravelYears(civ, Gal.Stars[t.At], dest);
+        // out through our own space to where we work from (Staging), then across; home the same way back
+        var from = Gal.Stars[t.At];
+        bool inOwn = ColonyAtAny(t.At)?.Civ == civ;
+        double years;
+        if (!guard)
+        {
+            var front = Staging(civ, Holder(target));
+            years = inOwn && front != null && front.Star != from ? S("deployYears") + TravelYears(civ, front.Star, dest) : TravelYears(civ, from, dest);
+        }
+        else
+        {
+            var back = !inOwn && was >= 0 && was < Civs.Count ? Frontier(civ, new() { Civs[was] }) : null;
+            years = back != null && back.Star != dest ? TravelYears(civ, from, back.Star) + S("deployYears") : TravelYears(civ, from, dest);
+        }
+        t.To = dest.Id; t.Arrive = Year + years;
     }
 
     /// <summary>A civ's defence against spies: its own espionage skill, raised by the teams it keeps at home on guard.</summary>

@@ -11,7 +11,7 @@ namespace Starforge.Sim;
 /// </summary>
 public partial class Simulation
 {
-    /// <summary>How many of a civ's colonies a council looks at as targets: the nearest to its capital, plus its fleets' targets.</summary>
+    /// <summary>How many of a civ's colonies a council looks at as targets: the nearest to where its teams work from, plus its fleets' targets.</summary>
     const int TargetsPerCiv = 12;
 
     /// <summary>
@@ -29,12 +29,14 @@ public partial class Simulation
         var ci = new Dictionary<int, double>();
         foreach (var o in Known(c))
         {
+            // at war, teams work from the front facing this enemy; otherwise from the capital
+            var from = Staging(c, o) ?? home;
             var near = o.Colonies.Concat(c.Colonies.Where(x => x.OccupiedBy == o.Id))
-                .OrderByDescending(x => aims.Contains(x.Star.Id)).ThenBy(x => x.Star.Pos.DistanceSquaredTo(home.Star.Pos)).Take(TargetsPerCiv);
+                .OrderByDescending(x => aims.Contains(x.Star.Id)).ThenBy(x => x.Star.Pos.DistanceSquaredTo(from.Star.Pos)).Take(TargetsPerCiv);
             foreach (var col in near)
             {
                 var def = Holder(col);
-                if (def == c || def.Dead || !c.Met.Contains(def.Id) || TravelYears(c, home.Star, col.Star) > reach) continue;
+                if (def == c || def.Dead || !c.Met.Contains(def.Id) || TravelYears(c, Staging(c, def).Star, col.Star) > reach) continue;
                 if (!ci.TryGetValue(def.Id, out double d)) ci[def.Id] = d = CounterIntel(def);
                 bool war = c.AtWar.Contains(def.Id), rival = c.Relations.GetValueOrDefault(def.Id) < 0;
                 foreach (var m in Missions)
