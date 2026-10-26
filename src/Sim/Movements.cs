@@ -27,11 +27,12 @@ public partial class Simulation
         c.Movement = c.CauseKey switch
         {
             "distance" or "distanceSlow" or "occupied" => $"the Free Worlds of {sys}",
+            "hive" => $"the Flesh of {sys}",
             "levy" or "deposits" or "poverty" or "crowding" => $"the {sys} Compact",
             _ => $"the {c.Civ.Faction(Leaning(c))} of {sys}",
         };
         StrifeCount("movements");
-        if (c.Civ.Main)
+        if (c.Civ.Main && c.Crackdowns == 0 && !c.Holdout)      // a movement broken up and back again, or a holdout in arms, is no longer news
         {
             string why = c.Cause ?? "nobody listens to it";
             Log(c, $"{Cap(c.Movement)} take up arms at {sys}: {why}.", "loss", null);
@@ -102,7 +103,8 @@ public partial class Simulation
                 if (civ.Main) Log(c, $"The council pours money into {c.Sys.Name}: new yards, new homes, a seat at the table.", "council", null);
                 break;
             case Answer.Crackdown:
-                c.Grievance = (float)Math.Max(0, c.Grievance - SD("answers", "crackdown"));
+                // troops can break a movement up once or twice; after that they only harden it
+                c.Grievance = (float)Math.Max(0, c.Grievance - SD("answers", "crackdown") * Math.Pow(SD("answers", "crackdownFade"), c.Crackdowns++));
                 c.Unrest = Stage(c.Grievance, c.Unrest);
                 float spread = (float)SD("answers", "crackdownSpread");
                 // every other system hears of it, once a year however many crackdowns there are
@@ -110,7 +112,7 @@ public partial class Simulation
                     if (o != c && !o.Home && o.HeardCrackdown < Year) { o.HeardCrackdown = Year + 1; o.Grievance = Math.Min(100, o.Grievance + spread); }
                 StrifeCount("crackdowns");
                 if (civ.Ethic == "Reverent") civ.AddMeter("Atrocity", 5);
-                if (civ.Main) Log(c, $"Troops land at {c.Sys.Name}. {Cap(c.Movement ?? "the movement")} are broken up, and every other world hears about it.", "loss", null);
+                if (civ.Main && c.Crackdowns == 1) Log(c, $"Troops land at {c.Sys.Name}. {Cap(c.Movement ?? "the movement")} are broken up, and every other world hears about it.", "loss", null);
                 break;
         }
         // whatever the answer, the movement is not taken up again for five years

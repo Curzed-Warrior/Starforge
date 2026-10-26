@@ -241,6 +241,7 @@ public partial class Simulation
             else Log(HomeColony, $"Research: {t.Name}. {t.Fx}.", "research", null);
         }
         GateConsequence(civ, t);
+        if (civ.M.Hive && civ.Colonies.Count > 1) HiveAdopted(civ);
         TechCompleted?.Invoke(civ, t);
         if (civ.Main && t.Id == "E9") Milestone(HomeColony, "The Core Ignites", $"Year {Year:0}. {t.LogText}", "galaxy");
         if (civ.Main && t.Id == "X10") ArkYear = Year;

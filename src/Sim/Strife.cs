@@ -98,6 +98,7 @@ public partial class Simulation
         ["deposits"] = "its rare deposits feed other worlds' projects", ["occupied"] = "it is under enemy occupation",
         ["poverty"] = "it is poor beside the core's wealth", ["dread"] = "it lives in fear of the voice",
         ["mandatory"] = "its young are called up against their will", ["incited"] = "agitators from abroad are stirring it up",
+        ["hive"] = "it will not be joined to the hive",
     };
 
     /// <summary>Where this system's grievance is heading (0..100), and its biggest cause as a phrase.</summary>
@@ -146,6 +147,8 @@ public partial class Simulation
         Add("dread", civ.Dread);
         if (civ.MandatoryService && civ.Culture != null && civ.Culture.Duty < 0) Add("mandatory", 1);
         if (c.IncitedUntil > Year) Add("incited", 1);
+        bool holdout = c.Holdout && civ.M.Hive;
+        if (holdout) Add("hive", 1);
         double relief = SD("relief", "base") + SD("relief", "megaOrder") * c.MegaOrder + SD("relief", "faith") * civ.Faith
                         + (c.Autonomy ? SD("relief", "autonomy") : 0) + (Year < c.InvestedUntil ? SD("relief", "invested") : 0);
         causeKey = top;
@@ -154,30 +157,40 @@ public partial class Simulation
             causes.Sort((a, b) => b.Item3.CompareTo(a.Item3));
             causes.Add(("relief", "what eases it: its own order, faith, and investment", -relief));
         }
-        return Math.Clamp(sum * GovFactor(civ) - relief, 0, 100);
+        return Math.Clamp(sum * (holdout ? SD("gov", "holdout") : GovFactor(civ)) - relief, 0, 100);
     }
 
     /// <summary>
     /// Yearly per civ: every system's grievance moves toward its target, the ladder is climbed or descended, and a
     /// system on strike stops shipping its industry (Colony.LocalWorksShipped). A hive feels its people's grievances
-    /// at strife.gov.hive of the strength (at 0 it feels nothing, and nothing climbs the ladder).
+    /// at strife.gov.hive of the strength (at 0 it feels nothing, and nothing climbs the ladder), except in the systems
+    /// that refused to join it (Colony.Holdout), which feel everything.
     /// </summary>
     void StrifeStep(Civ civ, double dy)
     {
-        if (civ.M.Hive && SD("gov", "hive") <= 0)
+        bool linkedOnly = civ.M.Hive && SD("gov", "hive") <= 0;
+        if (linkedOnly)
         {
-            foreach (var c in civ.Colonies) { c.Grievance = 0; c.Unrest = 0; c.Movement = null; }
-            return;
+            bool any = false;
+            foreach (var c in civ.Colonies)
+                if (c.Holdout) any = true;
+                else { c.Grievance = 0; c.Unrest = 0; c.Movement = null; }
+            HiveFray(civ, dy);
+            if (!any) return;
         }
-        // the council's fate is judged on the year as it began: who was in arms, how tired the people were
-        JuntaStep(civ);
-        Coup(civ, dy);
-        Revolution(civ, dy);
+        else
+        {
+            // the council's fate is judged on the year as it began: who was in arms, how tired the people were
+            JuntaStep(civ);
+            Coup(civ, dy);
+            Revolution(civ, dy);
+        }
         double mean = MeanIndustry(civ), exh = WarExhaustionOf(civ), pull = Math.Min(1, SD("pull") * dy);
         var capital = CapitalOf(civ);
         foreach (var c in civ.Colonies.ToList())
         {
-            if (c.Home) { HomeWorlds(c, dy); continue; }
+            if (c.Home) { if (!linkedOnly) HomeWorlds(c, dy); continue; }
+            if (linkedOnly && !c.Holdout) continue;
             double t = GrievanceTarget(c, out var key, mean, exh, capital);
             c.Grievance = (float)Math.Clamp(c.Grievance + (t - c.Grievance) * pull, 0, 100);
             c.CauseKey = key; c.Cause = key == null ? null : CausePhrase[key];

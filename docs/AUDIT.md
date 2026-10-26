@@ -67,7 +67,12 @@ Fix: the save is written to a `.tmp` file beside the real one and then moved int
 as `.bak`. Loading an unreadable save falls back to its `.bak`. If neither can be read, a new game starts with a message
 instead of a broken scene. Test: `corrupt_save_falls_back`.
 
-### 3. Humanity can never fall apart: Hive Consensus ends infighting in every game (decision needed)
+### 3. Humanity can never fall apart: Hive Consensus ends infighting in every game (fixed: a contested vote and holdouts)
+
+*Fixed after the merge (src/Sim/Fracture.cs): researching Hive Consensus puts it to a vote of every system, with a
+random swing for the civ. Enough refusers leave at once (in peace, by war, or as a civil war); fewer stay as holdouts,
+unlinked and resentful, and while the swing was strong far systems keep falling out of the link. Holdouts can rise and
+leave; a hive lets them go half the time. Across the six seeds humanity fractures in three and stays whole in three.*
 
 In all six seeds, humanity's own council researches **S8 Hive Consensus** between 2327 and 2436:
 
@@ -105,7 +110,12 @@ Options, smallest change first:
 - **Research weights.** Lower the S path's weight for the council's autopilot, so a hive is one outcome among several.
   Today it is the outcome every time.
 
-### 4. Civil wars cannot happen in practice (proposal)
+### 4. Civil wars cannot happen in practice (fixed: risings pull in insurgents, crackdowns fade)
+
+*Fixed after the merge (src/Sim/Secession.cs, Movements.cs): a rising takes insurgent systems that share its cause
+within ten years' travel; it is a civil war when it holds most of the restless systems and 12% of the empire; each
+crackdown in the same system relieves half as much as the last; a new polity has 60 years' grace and any civ 50
+years between risings.*
 
 There were zero civil wars in all six seeds, including alien empires with 900 to 1,100 systems, half of them in
 insurgency. `RevoltStep` makes a bloc only from systems *in open revolt within supply range* (3 galaxy units) of the most

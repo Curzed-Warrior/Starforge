@@ -13,7 +13,7 @@ public static class SaveGame
     public class CivDto
     {
         public int Id; public string Name, Species, Drive, Ethic, ResearchId; public float[] Color; public bool Human, Alien, Main, Dead;
-        public float Conscience, Vigour = 1, Faith, Dread; public int FaithStage; public Dictionary<string, float> Inf; public Dictionary<string, float> W; public List<string> Techs, Used;
+        public float Conscience, Vigour = 1, Faith, Dread; public double HiveSwing, NextRising; public int FaithStage; public Dictionary<string, float> Inf; public Dictionary<string, float> W; public List<string> Techs, Used;
         public double ResearchP, Digital, Founded, NextElection; public int Gen; public LeaderDto Leader;
         public Dictionary<int, float> Relations; public List<int> Met, AtWar;
         // the tech bible's state
@@ -51,7 +51,7 @@ public static class SaveGame
         public double? WorksOverride;
         public int OccupiedBy = -1; public double BlockadedUntil; public float DefenceLoss;
         // infighting (zero in older saves); the home system's worlds by body name
-        public float Grievance; public int Unrest; public string Cause, CauseKey, Movement; public bool Autonomy; public double InvestedUntil;
+        public float Grievance; public int Unrest; public string Cause, CauseKey, Movement; public bool Autonomy, Holdout; public int Crackdowns; public double InvestedUntil;
         public Dictionary<string, float> WorldGrievance; public Dictionary<string, int> WorldUnrest;
         // special forces' work (zero in older saves)
         public double YardDownUntil, DepositsDownUntil, IncitedUntil, PreparedUntil; public int PreparedBy = -1;
@@ -86,7 +86,7 @@ public static class SaveGame
             {
                 Id = c.Id, Name = c.Name, Species = c.Species, Drive = c.Drive, Ethic = c.Ethic,
                 Color = new[] { c.Color.R, c.Color.G, c.Color.B }, Human = c.Human, Alien = c.Alien, Main = c.Main, Dead = c.Dead,
-                Conscience = c.Conscience, Vigour = c.Vigour, Faith = c.Faith, Dread = c.Dread, FaithStage = c.FaithStage, Inf = new(c.Inf), W = c.W.ToDictionary(k => k.Key.ToString(), k => k.Value), Techs = c.Techs.ToList(), Used = c.Used.ToList(),
+                Conscience = c.Conscience, HiveSwing = c.HiveSwing, NextRising = c.NextRising, Vigour = c.Vigour, Faith = c.Faith, Dread = c.Dread, FaithStage = c.FaithStage, Inf = new(c.Inf), W = c.W.ToDictionary(k => k.Key.ToString(), k => k.Value), Techs = c.Techs.ToList(), Used = c.Used.ToList(),
                 Digital = c.Digital, Founded = c.Founded, NextElection = c.NextElection, Gen = c.Gen,
                 Leader = c.Leader == null ? null : new LeaderDto { Name = c.Leader.Name, Drive = c.Leader.Drive, Since = c.Leader.Since, Born = c.Leader.Born, Eternal = c.Leader.Eternal },
                 Relations = new(c.Relations), Met = c.Met.ToList(), AtWar = c.AtWar.ToList(),
@@ -118,7 +118,7 @@ public static class SaveGame
                 CrisisId = c.Crisis?.Id, CrisisTarget = c.Crisis?.Target?.Name, CrisisT0 = c.Crisis?.T0 ?? 0, CrisisAcc = c.Crisis?.Acc ?? 0,
                 RivalName = c.Rival?.Name, RivalPlanet = c.Rival?.Planet?.Name, RivalStance = c.Rival?.Stance, RivalPop = c.Rival?.Pop ?? 0, RivalT0 = c.Rival?.T0 ?? 0, RivalShips = c.Rival?.Ships ?? 0,
                 WorksOverride = c.WorksOverride, OccupiedBy = c.OccupiedBy, BlockadedUntil = c.BlockadedUntil, DefenceLoss = c.DefenceLoss,
-                Grievance = c.Grievance, Unrest = c.Unrest, Cause = c.Cause, CauseKey = c.CauseKey, Movement = c.Movement, Autonomy = c.Autonomy, InvestedUntil = c.InvestedUntil,
+                Grievance = c.Grievance, Unrest = c.Unrest, Cause = c.Cause, CauseKey = c.CauseKey, Movement = c.Movement, Autonomy = c.Autonomy, Holdout = c.Holdout, Crackdowns = c.Crackdowns, InvestedUntil = c.InvestedUntil,
                 YardDownUntil = c.YardDownUntil, DepositsDownUntil = c.DepositsDownUntil, IncitedUntil = c.IncitedUntil, PreparedUntil = c.PreparedUntil, PreparedBy = c.PreparedBy,
                 WorldGrievance = c.WorldGrievance.Count == 0 ? null : c.WorldGrievance.ToDictionary(k => k.Key.Name, k => k.Value),
                 WorldUnrest = c.WorldUnrest.Count == 0 ? null : c.WorldUnrest.ToDictionary(k => k.Key.Name, k => k.Value),
@@ -205,7 +205,7 @@ public static class SaveGame
             {
                 Name = cd.Name, Species = cd.Species, Drive = cd.Drive, Ethic = cd.Ethic, Age = cd.Age,
                 Color = new Color(cd.Color[0], cd.Color[1], cd.Color[2]), Human = cd.Human, Alien = cd.Alien, Main = cd.Main, Dead = cd.Dead,
-                Conscience = cd.Conscience, Vigour = cd.Vigour, Faith = cd.Faith, Dread = cd.Dread, FaithStage = cd.FaithStage, Digital = cd.Digital, Founded = cd.Founded, NextElection = cd.NextElection, Gen = cd.Gen,
+                Conscience = cd.Conscience, HiveSwing = cd.HiveSwing, NextRising = cd.NextRising, Vigour = cd.Vigour, Faith = cd.Faith, Dread = cd.Dread, FaithStage = cd.FaithStage, Digital = cd.Digital, Founded = cd.Founded, NextElection = cd.NextElection, Gen = cd.Gen,
             };
             c.Inf = new(cd.Inf);
             c.W = cd.W.ToDictionary(k => k.Key[0], k => k.Value);
@@ -288,7 +288,7 @@ public static class SaveGame
             if (cd.CrisisId != null) c.Crisis = new Crisis { Id = cd.CrisisId, T0 = cd.CrisisT0, Acc = cd.CrisisAcc, Target = cd.CrisisTarget == null ? null : sys.Find(cd.CrisisTarget) };
             if (cd.RivalName != null) c.Rival = new Rival { Name = cd.RivalName, Pop = cd.RivalPop, Ships = cd.RivalShips, Planet = sys.Find(cd.RivalPlanet ?? ""), T0 = cd.RivalT0, Stance = cd.RivalStance };
             c.WorksOverride = cd.WorksOverride; c.OccupiedBy = cd.OccupiedBy; c.BlockadedUntil = cd.BlockadedUntil; c.DefenceLoss = cd.DefenceLoss;
-            c.Grievance = cd.Grievance; c.Unrest = cd.Unrest; c.Cause = cd.Cause; c.CauseKey = cd.CauseKey; c.Movement = cd.Movement; c.Autonomy = cd.Autonomy; c.InvestedUntil = cd.InvestedUntil;
+            c.Grievance = cd.Grievance; c.Unrest = cd.Unrest; c.Cause = cd.Cause; c.CauseKey = cd.CauseKey; c.Movement = cd.Movement; c.Autonomy = cd.Autonomy; c.Holdout = cd.Holdout; c.Crackdowns = cd.Crackdowns; c.InvestedUntil = cd.InvestedUntil;
             c.YardDownUntil = cd.YardDownUntil; c.DepositsDownUntil = cd.DepositsDownUntil; c.IncitedUntil = cd.IncitedUntil; c.PreparedUntil = cd.PreparedUntil; c.PreparedBy = cd.PreparedBy;
             foreach (var (n, v) in cd.WorldGrievance ?? new()) if (sys.Find(n) is { } b) c.WorldGrievance[b] = v;
             foreach (var (n, v) in cd.WorldUnrest ?? new()) if (sys.Find(n) is { } b) c.WorldUnrest[b] = v;

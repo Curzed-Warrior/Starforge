@@ -48,6 +48,8 @@ public static class Runs
         GD.Print($"STRIFESTATS movements={N("movements")} revolts={N("revolts")} peaceful={N("peaceful")} civilwars={N("civilwars")} coups={N("coups")} " +
                  $"revolutions={N("revolutions")} uprisings={N("uprisings")} firstSolUprising={(sim.FirstSolUprising > 0 ? sim.FirstSolUprising.ToString("0") : "none")} " +
                  $"humanity={humans} fractured={(humans >= 2 ? "yes" : "no")} chronicle={logLines * 100 / Math.Max(years, 1):0}");
+        GD.Print($"FRACTURESTATS humanPeaceful={N("humanPeaceful")} humanWar={N("humanWar")} humanCivil={N("humanCivil")} hiveVotes={N("hiveVotes")} " +
+                 $"votes=[{string.Join(" ", sim.HiveVotes)}] humanSystems=[{string.Join(",", sim.Civs.Where(c => c.Human && !c.Dead && c.Colonies.Count > 0).Select(c => c.Colonies.Count))}]");
     }
 
     /// <summary>One line of special-forces statistics at the end of a traced warp (docs/superpowers/plans/2026-10-20-special-forces.md, Task 5).</summary>

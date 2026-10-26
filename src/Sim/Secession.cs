@@ -13,24 +13,39 @@ public partial class Simulation
     /// <summary>
     /// Yearly per civ: when systems are in open revolt, a rising may come (one roll for the civ, so a vast empire does
     /// not shed a system every year); it starts in the most aggrieved system and takes every system in revolt within
-    /// supply range of it. Never the capital, and the parent always keeps at least one system.
+    /// supply range of it, and every insurgent system with the same cause within reach (strife.revolt.reachYears).
+    /// It is a civil war when it takes a big share of the empire, or most of the empire's restless systems and a fair
+    /// share of the whole. Never the capital, and the parent always keeps at least one system. In a hive only holdouts
+    /// can rise. Returns the new civ, or null.
     /// </summary>
-    void RevoltStep(Civ civ, double dy)
+    Civ RevoltStep(Civ civ, double dy)
     {
+        // a polity just born has its own founding to get through before it can split again
+        if (Year - civ.Founded < SD("revolt", "graceYears") || Year < civ.NextRising) return null;
         var cap = CapitalOf(civ);
-        var revolting = civ.Colonies.Where(c => c != cap && !c.Home && c.OccupiedBy < 0 && c.Unrest >= 4).OrderByDescending(c => c.Grievance).ToList();
-        if (revolting.Count == 0 || _r.NextDouble() >= SD("revolt", "chancePerYear") * dy) return;
+        bool hive = civ.M.Hive && SD("gov", "hive") <= 0;
+        bool Can(Colony c) => c != cap && !c.Home && c.OccupiedBy < 0 && (!hive || c.Holdout);
+        var revolting = civ.Colonies.Where(c => c.Unrest >= 4 && Can(c)).OrderByDescending(c => c.Grievance).ToList();
+        if (revolting.Count == 0 || _r.NextDouble() >= SD("revolt", "chancePerYear") * dy) return null;
         var first = revolting[0];
         float range = (float)(F("supplyRangeGu") * civ.M.Range);
-        var bloc = revolting.Where(c => c.Star.Pos.DistanceSquaredTo(first.Star.Pos) <= range * range).ToList();
-        int systems = civ.Colonies.Count;
+        double reach = SD("revolt", "reachYears");
+        var bloc = civ.Colonies.Where(c => c.Unrest >= 3 && Can(c) && (c == first
+            || c.Unrest >= 4 && c.Star.Pos.DistanceSquaredTo(first.Star.Pos) <= range * range
+            || c.CauseKey != null && c.CauseKey == first.CauseKey && TravelYears(civ, first.Star, c.Star) <= reach)).ToList();
+        int systems = civ.Colonies.Count, restless = civ.Colonies.Count(c => c.Unrest >= 3 && Can(c));
         double pop = civ.Pop;
-        bool civilWar = bloc.Count >= SD("revolt", "civilWarShare") * systems || bloc.Sum(c => c.Pop) >= SD("revolt", "civilWarPopShare") * pop;
-        bool peaceful = !civilWar && bloc.Count <= SD("revolt", "letGoMax") && (civ.Ethic == "Reverent" || civ.Ethic == "Pragmatic" && civ.AtWar.Count == 0);
+        bool civilWar = bloc.Count >= SD("revolt", "civilWarShare") * systems || bloc.Sum(c => c.Pop) >= SD("revolt", "civilWarPopShare") * pop
+                        || bloc.Count >= SD("revolt", "civilWarRestlessShare") * restless && bloc.Count >= SD("revolt", "civilWarMinShare") * systems;
+        civilWar &= bloc.Count >= SD("revolt", "civilWarMinSystems");
+        // a hive has no conscience to consult: it weighs what holding the flesh would cost, and often lets them go
+        bool peaceful = !civilWar && (hive ? _r.NextDouble() < SD("hive", "letGo")
+            : bloc.Count <= SD("revolt", "letGoMax") && (civ.Ethic == "Reverent" || civ.Ethic == "Pragmatic" && civ.AtWar.Count == 0));
         string drive = bloc.GroupBy(Leaning).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First().Key;
         StrifeCount("revolts");
         if (civilWar) StrifeCount("civilwars");
-        Separate(civ, bloc, drive, peaceful, civilWar: civilWar);
+        civ.NextRising = Year + SD("revolt", "cooldownYears");
+        return Separate(civ, bloc, drive, peaceful, civilWar: civilWar);
     }
 
     /// <summary>
@@ -49,6 +64,8 @@ public partial class Simulation
         double share = Math.Min(0.5, bloc.Sum(c => c.Pop) / Math.Max(parent.Pop, 1e-9));
         var s = Splinter(parent, drive, bloc);
         if (name != null) s.Name = name;
+        if (parent.M.Hive) LeaveHive(s);
+        if (parent.Human) StrifeCount(peaceful ? "humanPeaceful" : civilWar ? "humanCivil" : "humanWar");
         var stars = bloc.Select(c => c.Star.Id).ToHashSet();
         double loyal = SD("revolt", "defectLoyalty");
         foreach (var f in Fleets.Where(f => f.Civ == parent.Id && !f.Moving && stars.Contains(f.At) && (f.Admiral?.Loyalty ?? 1) < loyal).ToList())
@@ -71,7 +88,7 @@ public partial class Simulation
         if (free.Squadrons.Count > 0) Fleets.Add(free);
         foreach (var c in bloc)
         {
-            c.Grievance = 20; c.Unrest = 0; c.Cause = null; c.CauseKey = null; c.Movement = null; c.Autonomy = false; c.InvestedUntil = 0; c.OccupiedBy = -1;
+            c.Grievance = 20; c.Unrest = 0; c.Cause = null; c.CauseKey = null; c.Movement = null; c.Autonomy = false; c.InvestedUntil = 0; c.OccupiedBy = -1; c.Crackdowns = 0;
             Withdraw("interior:" + c.Star.Id);
         }
         string where = bloc.Count == 1 ? bloc[0].Sys.Name : $"{bloc.Count} systems";

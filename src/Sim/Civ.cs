@@ -70,6 +70,10 @@ public class Civ
     public float VoiceRelation;                                           // an Exalted civ's feelings toward the voice
     public Leader Leader;
     public double Digital;
+    /// <summary>How hard this civ's systems resisted Hive Consensus at its vote (Simulation.HiveVote); 0 before one.</summary>
+    public double HiveSwing;
+    /// <summary>No rising splits this civ again before this year (strife.revolt.cooldownYears after the last).</summary>
+    public double NextRising;
     public List<string> Used = new();
     public List<Colony> Colonies = new();
     /// <summary>Logistics between this civ's systems, replanned yearly (see Colony.PlanLevies): where each system's
