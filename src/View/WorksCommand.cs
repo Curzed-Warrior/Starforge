@@ -22,6 +22,14 @@ public partial class Works
     readonly Dictionary<int, int> _cmdDrawn = new();
     readonly List<(D3 At, float R, float T0, int Seed)> _cmdKills = new();
     bool _cmdOn;
+    D3 _cmdCentre; Vector3 _cmdAxis; float _cmdGap;
+
+    /// <summary>The commanded battle's plane for picking: its centre (view space), the axis from side A to side B, and the gap between the lines.</summary>
+    public bool CmdFrame(out Vector3 centreView, out Vector3 axis, out float gap)
+    {
+        centreView = _cmdOn ? ViewPos(_cmdCentre) : Vector3.Zero; axis = _cmdAxis; gap = Math.Max(_cmdGap, 1e-12f);
+        return _cmdOn;
+    }
 
     /// <summary>Where a true system position is drawn this frame, in view space (for projecting markers to the screen).</summary>
     public Vector3 ViewPos(D3 at) => Drawn(at, out _, out _);
@@ -67,6 +75,7 @@ public partial class Works
         foreach (var side in new[] { s.A, s.B })
             foreach (var u in side.Units)
                 _unitOff[u.Id] = ((float)u.Lateral * gap * 0.8f, (float)u.Depth * gap * 0.6f);
+        _cmdCentre = centre; _cmdAxis = axis; _cmdGap = gap;
         _sideHulls[0].Clear(); _sideHulls[1].Clear(); _hulls.Clear();
         float depthA = Formation(ca, centre - axis * (gap * 0.5f), axis, dcam, false, 0);
         float depthB = Formation(cb, centre + axis * (gap * 0.5f), -axis, dcam, false, 1);

@@ -14,6 +14,7 @@ public partial class CameraRig : Node3D
 {
     public Camera3D Cam;
     public Func<D3> Target = () => D3.Zero;
+    public float MaxDist = 1e15f;              // a battle keeps the camera within reach of the fight
     public float MinDist = 0.02f;               // set per target (e.g. planet radius * 1.15)
     public float Yaw = 0.6f, Pitch = -0.35f;
     public float LogDist = Mathf.Log(60f);
@@ -189,7 +190,7 @@ public partial class CameraRig : Node3D
             if (Input.IsKeyPressed(Key.E) || Input.IsKeyPressed(Key.Pagedown)) _logT += 2.5f * dt;
         }
         if (AutoOrbit) _yawT += dt * 0.02f;
-        _logT = Mathf.Clamp(_logT, Mathf.Log(MinDist), Mathf.Log(1e15f));
+        _logT = Mathf.Clamp(_logT, Mathf.Log(MinDist), Mathf.Log(Mathf.Max(MaxDist, MinDist * 2f)));
 
         var tgt = Target();
         if (FlyT < 1f)

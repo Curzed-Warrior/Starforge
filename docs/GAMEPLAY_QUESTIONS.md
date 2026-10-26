@@ -37,7 +37,7 @@ Answer however suits you. One word is fine, "skip" is fine, and you can just wri
 ## Military
 21. **Fleet control:** do you command fleets directly (move, attack, retreat, stances), or set war goals and let admirals execute? → Both. Strategic orders by default, direct control on demand.
 22. **Ship design:** a Stellaris-style ship designer (slots, weapons, components) using the new true-scale hulls? → Yes, with auto-design on by default.
-23. **Combat view:** watch battles in 3D at true scale, as cinematic auto-resolve? → Battles play out in the system view and get a cinematic camera; the outcome is simulated.
+23. **Combat view:** watch battles in 3D at true scale, as cinematic auto-resolve? → Battles play out in the system view and get a cinematic camera; the outcome is simulated. The player may take command (stage 6): pause, order squadrons or single ships, same numbers as auto-resolve; setting under Policies > Battles.
 24. **Ground combat and invasion:** needed? → Light: transport armies, siege, occupation.
 25. **War score and peace:** Stellaris-style war goals, exhaustion and peace deals? → Yes.
 

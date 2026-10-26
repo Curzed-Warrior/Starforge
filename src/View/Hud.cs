@@ -194,6 +194,7 @@ public partial class Hud : CanvasLayer
         Simulation.WorkName = id => Megastructures.Catalogue.FirstOrDefault(x => x.Id == id).Name ?? id;
         Sim.Alerted += OnAlert;
         BuildTicker();
+        _chrome.Add(_ticker);
         BuildControls();
         BuildPowers();
         BuildFocus();
@@ -201,11 +202,15 @@ public partial class Hud : CanvasLayer
         BuildChronicle();
         BuildTech();
         _root.AddChild(_empire);
+        Battle = new BattleCommandPanel();
+        Battle.Setup(main);
+        _root.AddChild(Battle);
         _root.AddChild(_find);
         Sim.Logged += OnLog;
 
     }
 
+    public BattleCommandPanel Battle { get; private set; }
     public bool EmpireOpen => _empire.Visible;
     public void ToggleEmpire(int tab) { _empire.Toggle(tab); if (_empire.Visible) { _chron.Visible = false; } }
     /// <summary>Open the empire screen at a tab, leaving it open if it already shows that tab (a shortcut, not a toggle).</summary>
@@ -496,7 +501,7 @@ public partial class Hud : CanvasLayer
         _barTop.Position = Vector2.Zero; _barTop.Size = new Vector2(vp.X, h);
         _barBot.Position = new Vector2(0, vp.Y - h); _barBot.Size = new Vector2(vp.X, h);
         _barTop.Visible = _barBot.Visible = h > 0.5f;
-        _ticker.Visible = _cinema < 0.05f;
+        _ticker.Visible = _cinema < 0.05f && !Battle.Active;
         // titles sit in the lower third during a cinematic, like a film's, and centre-screen otherwise
         Ui.Pin(_msBox, 0.5f, _cinemaT > 0 ? 0.76f : 0.4f, Vector2.Zero);
     }
@@ -636,7 +641,7 @@ public partial class Hud : CanvasLayer
         var c = _main.ViewColony;
         var sys = _main.ViewSystem;
         if (sys == null) { _focusPanel.Visible = false; return; }
-        _focusPanel.Visible = !_main.InGalaxyView && !(MenuOpen && _labels.Visible == false) && _cinemaT <= 0;
+        _focusPanel.Visible = !Battle.Active && !_main.InGalaxyView && !(MenuOpen && _labels.Visible == false) && _cinemaT <= 0;
         string dim = Ui.Hex(Ui.Dim);
         if (b == null)
         {

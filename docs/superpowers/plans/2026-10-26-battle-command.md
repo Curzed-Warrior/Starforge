@@ -117,3 +117,14 @@
 3. **Late game:** millions of ships and 64 units a side — unit cap, draw cap, per-frame cost.
 4. **Player becomes a non-party mid-session** (peace signed by council, civ extinct, `SwitchPlayer`): the session closes cleanly and books nothing twice.
 5. **Save/load and skip paths:** save blocked mid-battle; `--warp` and fast speeds never open a session (warping resolves auto).
+
+## Status (built)
+
+Tasks 1-7 built on `stage6-command`; the stepper, units, orders, modes and session are covered by `CommandTests` (142 self-tests pass; `SAVETEST equal=True` at warp 300 and 700). Differences from the plan as written:
+
+- A round's exchange is worked out when it **begins** and its losses play out over the round (`CmdUnit.Prev` -> `Ships`); orders given now apply from the next round.
+- Units move after the exchange, so pulling out of range does not dodge the round it is ordered in; a retreating unit stays exposed for its leaving round.
+- `rangeBand` 0.4 (a move of 0.5 per round takes a unit out after one round).
+- Select-all is `B` (not `A`, which turns the camera). Camera work reused `CameraRig` (`MaxDist`, `FlyTo` follow); no separate `BattleCamera.cs`. Input and UI live in `BattleCommandPanel.cs` (no separate `BattleInput.cs`).
+- Test flags: `--stagecommand` (opens a commanded battle), `--commandgo` (clock at 4x), `--commandorders` (one of each order).
+- Not done: gamepad input; headless input-event tests of the panel (the order API is tested; the panel was checked by screenshots: `shots/cmd_open.png`, `cmd_go.png`, `cmd_orders.png`).
