@@ -298,7 +298,7 @@ public partial class Main : Node3D
         GetTree().ReloadCurrentScene();
     }
 
-    public void SaveNow() { SaveGame.Save(Sim, _seed, SavePath); _hud.Toast("Saved"); }
+    public void SaveNow() { if (Sim.Holding) { _hud.Toast("Finish the battle first."); return; } SaveGame.Save(Sim, _seed, SavePath); _hud.Toast("Saved"); }
 
     public void MenuClosed() { if (SpeedIdx == 0) SpeedIdx = _speedBeforeMenu; }
 
@@ -540,6 +540,7 @@ public partial class Main : Node3D
             if (c.Era <= 0 || Defs.Eras[c.Era].Name == "Type I") return;      // Type I has its own milestone
             _cine.Request(new Cinematics.Moment { Title = Defs.Eras[c.Era].Name, Text = $"Year {Sim.Year:0}. {Defs.Eras[c.Era].Text}", Focus = "starbase", Colony = c, Priority = 3 });
         };
+        Sim.CommandOpened += OnCommandOpened;
         Sim.BattleFought += (source, target, att) =>
         {
             if (!(source.Civ.Main || target.Civ.Main) || Sim.Year < _nextBattleCine) return;
@@ -606,6 +607,49 @@ public partial class Main : Node3D
         _pendingBattle = star; _pendingBattleT = 0;
     }
 
+    /// <summary>The player has a battle to command: go to it, stop the game's clock, and put the controls up.</summary>
+    void OnCommandOpened(CommandSession s)
+    {
+        _nextBattleCine = Sim.Year + 40;
+        GoToBattle(s.Star);
+        _hud.CloseEmpire();
+        _hud.Battle.Open(s);
+        // test: --commandgo starts the battle clock at 4x as soon as it opens
+        if (OS.GetCmdlineUserArgs().Contains("--commandgo")) { s.Paused = false; s.Speed = 4; }
+        // test: --commandorders gives one of each order, then runs the clock
+        if (OS.GetCmdlineUserArgs().Contains("--commandorders"))
+        {
+            var m = s.Mine.Units; var t = s.Theirs.Units;
+            var big = m.OrderByDescending(u => u.Ships).First();
+            var piece = s.Split(big, Math.Floor(big.Ships / 3));
+            s.Focus(new[] { big }, t[0]); s.SetFormation(m.Take(2).ToList(), "wedge");
+            if (piece != null) s.Move(new[] { piece }, 0, 1);
+            s.Retreat(new[] { m.Last() });
+            s.Paused = false; s.Speed = 4;
+        }
+    }
+
+    /// <summary>See the whole of the commanded battle.</summary>
+    public void FrameBattle()
+    {
+        if (SysView?.Works == null || !SysView.Works.BattleHere(out var centre, out float r)) return;
+        _rig.FlyTo(BattleTarget(centre), r * Works.BattleFrame, r * 0.02f);
+        var v = SysView.Works.BattleView;
+        _rig.YawT = Mathf.Atan2(v.X, v.Z); _rig.PitchT = Works.BattlePitch;
+    }
+
+    /// <summary>Fly in on one unit and keep it in the middle of the view.</summary>
+    public void FollowUnit(int id)
+    {
+        var w = SysView?.Works; if (w == null || !w.CmdAnchors.TryGetValue(id, out var a)) return;
+        D3 last = a.At;
+        D3 Track() { if (IsInstanceValid(w) && w.CmdAnchors.TryGetValue(id, out var x)) last = x.At; return last; }
+        _rig.FlyTo(Track, Math.Max(a.Radius * 3f, 1e-6f), Math.Max(a.Radius * 0.15f, 1e-7f));
+    }
+
+    /// <summary>The battle is over: the camera may go anywhere again.</summary>
+    public void EndBattleCamera() => _rig.MaxDist = 1e15f;
+
     void FlyToPendingBattle(float dt)
     {
         if (_pendingBattle < 0 || _traveling) return;
@@ -670,7 +714,9 @@ public partial class Main : Node3D
         if (w == null) { GD.Print($"--stagebattle: no war possible with {foe.Name}"); return; }
         Sim.SetManual(me, Area.Fleets, true); Sim.SetManual(foe, Area.Fleets, true);
         _nextBattleCine = Sim.Year + 40;            // no cinematic flying off to film it: the view stays on this battle
+        if (OS.GetCmdlineUserArgs().Contains("--stagecommand")) me.Policy.Battle = BattleMode.Command;
         var r = Sim.TestFight(w, star);
+        if (r == null) { GD.Print($"STAGECOMMAND {me.Name} vs {foe.Name} at {ViewStar.Name}: ships {mine.Ships:0}/{theirs.Ships:0}"); return; }
         // whoever lost stays to be seen
         foreach (var f in new[] { mine, theirs }) if (Sim.Fleets.Contains(f)) { f.At = star; f.To = -1; f.Target = -1; }
         // --battlerun=S: time runs at a week a second for S real seconds, then pauses, so the staged fight's losses blow up
@@ -980,7 +1026,12 @@ public partial class Main : Node3D
     {
         if (SysView == null) return;
         float dt = (float)delta;
-        double speed = Speeds[SpeedIdx];
+        Sim.CommandEnabled = !Warping;
+        var cmd = Sim.Command;
+        cmd?.Tick(dt);
+        bool battleLive = cmd != null && !cmd.Paused && !cmd.Over;
+        if (cmd != null && SysView.Works != null && SysView.Works.BattleHere(out _, out float battleR)) _rig.MaxDist = battleR * Works.BattleFrame * 2.5f;
+        double speed = Sim.Holding ? 0 : Speeds[SpeedIdx];
         // keep a frame budget: huge speeds are sliced, never stall the render loop
         double want = speed * dt;
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -992,12 +1043,12 @@ public partial class Main : Node3D
             done += step;
         }
         long tSim = sw.ElapsedTicks;
-        VisYear += Math.Min(speed, 0.25) * dt;
+        if (!Sim.Holding) VisYear += Math.Min(speed, 0.25) * dt;
         if (Math.Abs(VisYear - Sim.Year) > 50) VisYear = Sim.Year;
 
         // animation runs on the game's clock: when time stops, so does everything but the camera
-        float vdt = SpeedIdx == 0 ? 0f : dt;
-        Anim = SpeedIdx == 0 ? 0f : 1f;
+        float vdt = SpeedIdx == 0 && !battleLive ? 0f : dt;
+        Anim = SpeedIdx == 0 && !battleLive ? 0f : 1f;
         SysView.Sync(ViewColony, Sim);
         SysView.VisYear = VisYear;
         SysView.Prepare(vdt);
@@ -1039,7 +1090,7 @@ public partial class Main : Node3D
         _post.Update(_rig.Cam, SysView, dt);
         _moodT += dt;
         _autosaveT += dt;
-        if (_autosaveT > 300f && _shot == null && _seqN == 0) { _autosaveT = 0; SaveGame.Save(Sim, _seed, AutoPath); _hud.Toast("Autosaved"); }
+        if (_autosaveT > 300f && !Sim.Holding && _shot == null && _seqN == 0) { _autosaveT = 0; SaveGame.Save(Sim, _seed, AutoPath); _hud.Toast("Autosaved"); }
         if (_music != null && _moodT > 5f) { _moodT = 0; _music.Mood = Music.MoodFor(Sim); }
 
         if (_following != null && !IsInstanceValid(_following)) { _following = null; SelectStar(); }
@@ -1081,7 +1132,7 @@ public partial class Main : Node3D
             }
         }
         // test: --stagebattle puts Humanity's Home Fleet and the nearest alien fleet at the view star, at war, fights once and pauses
-        if (_frame == 5 && OS.GetCmdlineUserArgs().Contains("--stagebattle")) StageBattle();
+        if (_frame == 5 && (OS.GetCmdlineUserArgs().Contains("--stagebattle") || OS.GetCmdlineUserArgs().Contains("--stagecommand"))) StageBattle();
         if (_battleRunT >= 0 && (_battleRunT += dt) >= BattleRunTo()) { SpeedIdx = 0; _battleRunT = -1; }
         // test: --focus=battle frames the battle here (once the fleets have been drawn)
         if (_frame == 8 && OS.GetCmdlineUserArgs().Contains("--focus=battle"))

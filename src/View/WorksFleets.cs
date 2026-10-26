@@ -287,6 +287,8 @@ void fragment(){
     void LayOut(Simulation sim, Colony c)
     {
         int star = Sys.Star.Id;
+        _cmdOn = false;
+        if (sim.Command is { } cmd && cmd.Star == star) { LayOutCommand(sim, c, cmd); return; }
         _fleetsHere.Clear(); _civsHere.Clear();
         foreach (var f in sim.Fleets)
             if (f.At == star && !f.Moving && f.Civ < sim.Civs.Count)
@@ -451,7 +453,7 @@ void fragment(){
     /// </summary>
     float Formation(int civId, D3 front, Vector3 fwd, float dcam, bool centred, int side)
     {
-        _local.Clear();
+        _local.Clear(); _spanFleet.Clear();
         float width = 0, depth = 0;
         int start = 0;
         int lastFleet = int.MinValue;
@@ -464,7 +466,7 @@ void fragment(){
             if (e.Civ != civId) continue;
             if (e.Fleet != lastFleet)
             {
-                if (lastFleet != int.MinValue) spans.Add((start, _local.Count, fwidth));
+                if (lastFleet != int.MinValue) { spans.Add((start, _local.Count, fwidth)); _spanFleet.Add(lastFleet); }
                 lastFleet = e.Fleet; start = _local.Count; fz = 0; fwidth = 0; row = 0;
             }
             float half = Half(e.LenKm, dcam);
@@ -488,7 +490,7 @@ void fragment(){
             }
             depth = Math.Max(depth, -fz);
         }
-        if (lastFleet != int.MinValue) spans.Add((start, _local.Count, fwidth));
+        if (lastFleet != int.MinValue) { spans.Add((start, _local.Count, fwidth)); _spanFleet.Add(lastFleet); }
         if (_local.Count == 0) return 0;
         // second pass: wedges side by side, the whole line centred on the station
         foreach (var s in spans) width += s.W;
@@ -499,9 +501,14 @@ void fragment(){
         var up = right.Cross(fwd);
         float shift = centred ? depth * 0.5f : 0;
         var empire = _sim.Civs[civId].Color;
+        int spanNo = -1;
         foreach (var (from, to, w) in spans)
         {
+            spanNo++;
             float cx = x0 + w * 0.5f;
+            // a commanded unit sits where its orders put it: sideways across the line, and back from it
+            Vector3 uoff = Vector3.Zero; int unitId = _spanFleet[spanNo];
+            if (_cmdOn && _unitOff.TryGetValue(unitId, out var uo)) uoff = right * uo.Lat - fwd * uo.Dep;
             for (int i = from; i < to; i++)
             {
                 var (key, l, half, ghost) = _local[i];
@@ -513,9 +520,10 @@ void fragment(){
                 float js = 0.33f * 3f * half * Spread(key);
                 var jit = right * (J(41) * js) + up * (J(42) * js * 0.7f) + fwd * (J(43) * js);
                 var hfwd = fwd.Rotated(up, J(44) * 0.22f).Rotated(right, J(45) * 0.1f);
-                var at = front + right * (cx + l.X) + up * (l.Y + bob) + fwd * (l.Z + shift) + jit;
+                var at = front + right * (cx + l.X) + up * (l.Y + bob) + fwd * (l.Z + shift) + jit + uoff;
                 AddHull(key, at, hfwd, half, empire, ghost);
                 if (side >= 0) _sideHulls[side].Add(_hulls.Count - 1);
+                if (_cmdOn) { if (!_unitHulls.TryGetValue(unitId, out var uh)) _unitHulls[unitId] = uh = new List<int>(); uh.Add(_hulls.Count - 1); }
             }
             x0 += w + between;
         }
@@ -632,12 +640,16 @@ void fragment(){
 
     /// <summary>One side's fire at the other, by its main weapon family: every shot runs from a live hull of this side
     /// to a live hull of the other.</summary>
-    void Fire(int side, string fam, Color col)
+    void Fire(int side, string fam, Color col) => FireAt(_sideHulls[side], _sideHulls[1 - side], side, fam, col, 16);
+
+    /// <summary>Fire from the hulls in `mine` at the hulls in `theirs` (indices into _hulls). `side` also seeds the shot pattern,
+    /// so give a different one to each stream; at most `maxSlots` shots are in the air at once.</summary>
+    void FireAt(List<int> mine, List<int> theirs, int side, string fam, Color col, int maxSlots)
     {
-        var mine = _sideHulls[side]; var theirs = _sideHulls[1 - side];
         if (mine.Count == 0 || theirs.Count == 0) return;
         int slots = Math.Clamp(mine.Count, 4, 16);
         if (fam == "kinetic") slots = Math.Clamp(mine.Count / 2, 3, 7);     // a few streams, so the hulls and hits stay the picture
+        slots = Math.Min(slots, maxSlots);
         // each side gets its share of the beam pool, so one family's many pieces can't starve the other side or the explosions
         _beamLimit = Math.Min(BeamMax, _nBeam + BeamsPerSide);
         var bright = col.Lerp(Colors.White, 0.35f);

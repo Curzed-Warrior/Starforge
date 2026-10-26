@@ -11,7 +11,12 @@ public class BattleSide
     public List<Fleet> Fleets = new();
     public double StationHulls;
     public int StationHull = 2;
-    internal double Hp(Func<int, double> hp) => Fleets.Sum(f => f.Squadrons.Sum(s => s.Ships * hp(s.Hull))) + StationHulls * hp(StationHull);
+    /// <summary>Battle command: the side's squadrons as units (null in auto-resolve), and the enemy units this side's focus orders aim at.</summary>
+    public List<CmdUnit> Units;
+    internal readonly List<(CmdUnit T, double Phi)> Concentrate = new();
+    internal double Hp(Func<int, double> hp) => (Units == null
+        ? Fleets.Sum(f => f.Squadrons.Sum(s => s.Ships * hp(s.Hull)))
+        : Fleets.Sum(f => Units.Sum(u => u.Fleet == f && !u.Gone ? u.Ships * hp(u.Hull) : 0))) + StationHulls * hp(StationHull);
 }
 
 public record BattleResult(bool AWins, double LostA, double LostB, double KgLostA, double KgLostB, int Rounds, bool ARetreats, bool BRetreats);
@@ -99,63 +104,126 @@ public static class Battles
     /// <summary>Fight it out: up to `rounds` exchanges, stopping when a side breaks or is gone. Survivors learn; the loser's fleets head home.</summary>
     public static BattleResult Resolve(Simulation sim, BattleSide a, BattleSide b)
     {
-        double hpA0 = a.Hp(HullHp), hpB0 = b.Hp(HullHp);
-        double kgA0 = Kg(a), kgB0 = Kg(b), shipsA0 = Ships(a), shipsB0 = Ships(b);
-        double da = HullDamage(a.Civ, b.Civ), db = HullDamage(b.Civ, a.Civ), mean = Math.Max((da + db) / 2, 1e-300);
-        double relA = da / mean, relB = db / mean;
-        double kill = B("roundKill"), cap = B("roundCap"), moraleLoss = B("moraleLossPerLossShare");
-        int rounds = 0; bool aBreaks = false, bBreaks = false;
-        for (int r = 0; r < (int)B("rounds"); r++)
+        var st = new BattleState(a, b);
+        while (st.Step()) { }
+        return st.Finish(sim);
+    }
+
+    /// <summary>
+    /// A battle in progress, one exchange at a time. Resolve runs it to the end; battle command (BattleCommand.cs) steps
+    /// the same object round by round, so a commanded battle is worked out by exactly these numbers.
+    /// </summary>
+    public sealed class BattleState
+    {
+        public readonly BattleSide A, B;
+        public int Rounds { get; private set; }
+        public bool ABreaks { get; private set; }
+        public bool BBreaks { get; private set; }
+        public bool Over { get; private set; }
+        readonly double _hpA0, _hpB0, _kgA0, _kgB0, _shipsA0, _shipsB0, _relA, _relB, _kill, _cap, _moraleLoss;
+        readonly int _max;
+
+        public BattleState(BattleSide a, BattleSide b)
         {
-            double outA = Output(a, relA) * kill, outB = Output(b, relB) * kill;
-            if (outA <= 0 && outB <= 0) break;
-            rounds++;
-            double shareB = Hit(b, outA, cap), shareA = Hit(a, outB, cap);
-            Shake(a, shareA, moraleLoss); Shake(b, shareB, moraleLoss);
-            aBreaks = Broken(a); bBreaks = Broken(b);
-            if (aBreaks || bBreaks || a.Hp(HullHp) <= 0 || b.Hp(HullHp) <= 0) break;
+            A = a; B = b;
+            _hpA0 = a.Hp(HullHp); _hpB0 = b.Hp(HullHp);
+            _kgA0 = Kg(a); _kgB0 = Kg(b); _shipsA0 = Ships(a); _shipsB0 = Ships(b);
+            double da = HullDamage(a.Civ, b.Civ), db = HullDamage(b.Civ, a.Civ), mean = Math.Max((da + db) / 2, 1e-300);
+            _relA = da / mean; _relB = db / mean;
+            _kill = Battles.B("roundKill"); _cap = Battles.B("roundCap"); _moraleLoss = Battles.B("moraleLossPerLossShare");
+            _max = (int)Battles.B("rounds");
         }
-        double hpA = a.Hp(HullHp), hpB = b.Hp(HullHp);
-        bool aWins = bBreaks && !aBreaks || hpB <= 0 && hpA > 0
-                     || !(aBreaks && !bBreaks) && !(hpA <= 0 && hpB > 0) && (1 - hpA / Math.Max(hpA0, 1e-300)) < (1 - hpB / Math.Max(hpB0, 1e-300));
-        double xp = B("xpPerBattle");
-        foreach (var side in new[] { a, b })
-            foreach (var f in side.Fleets)
-            {
-                f.Squadrons.RemoveAll(s => s.Ships <= 1e-9);
-                foreach (var s in f.Squadrons) s.Xp = Math.Min(1f, s.Xp + (float)xp);
-                if (f.Admiral != null) { if (side == a == aWins) f.Admiral.Wins++; else f.Admiral.Losses++; }
-            }
-        // the loser's fleets go home to refit
-        var loser = aWins ? b : a;
-        var home = loser.Civ.Colonies.FirstOrDefault(c => c.Home) ?? loser.Civ.Colonies.FirstOrDefault();
-        // (when Fleets is in the player's hands, their fleets go home only if broken)
-        bool manual = loser.Civ.Policy.IsManual(Area.Fleets);
-        if (home != null)
-            foreach (var f in loser.Fleets)
-                if (!manual || f.Morale < B("moraleBreak")) sim.Order(f, home.Star.Id, f.Mission == "blockade" ? "raid" : f.Mission);
-        return new BattleResult(aWins, shipsA0 - Ships(a), shipsB0 - Ships(b), kgA0 - Kg(a), kgB0 - Kg(b), rounds, aBreaks, bBreaks);
+
+        /// <summary>One exchange. Returns true while the battle goes on.</summary>
+        public bool Step()
+        {
+            if (Over) return false;
+            if (Rounds >= _max) { Over = true; return false; }
+            Tactics.Prepare(A, B); Tactics.Prepare(B, A);
+            double outA = Output(A, _relA) * _kill, outB = Output(B, _relB) * _kill;
+            if (outA <= 0 && outB <= 0) { Over = true; return false; }
+            Rounds++;
+            double shareB = Hit(B, A, outA, _cap), shareA = Hit(A, B, outB, _cap);
+            Shake(A, shareA, _moraleLoss); Shake(B, shareB, _moraleLoss);
+            Tactics.After(A); Tactics.After(B);
+            ABreaks = Broken(A); BBreaks = Broken(B);
+            if (ABreaks || BBreaks || A.Hp(HullHp) <= 0 || B.Hp(HullHp) <= 0 || Rounds >= _max) Over = true;
+            return !Over;
+        }
+
+        /// <summary>Settle it: who won, experience, admirals' records, and the loser's fleets going home.</summary>
+        public BattleResult Finish(Simulation sim)
+        {
+            var a = A; var b = B;
+            if (a.Units != null) Units.WriteBack(a);
+            if (b.Units != null) Units.WriteBack(b);
+            double hpA = a.Hp(HullHp), hpB = b.Hp(HullHp);
+            bool aBreaks = ABreaks, bBreaks = BBreaks;
+            bool aWins = bBreaks && !aBreaks || hpB <= 0 && hpA > 0
+                         || !(aBreaks && !bBreaks) && !(hpA <= 0 && hpB > 0) && (1 - hpA / Math.Max(_hpA0, 1e-300)) < (1 - hpB / Math.Max(_hpB0, 1e-300));
+            double xp = Battles.B("xpPerBattle");
+            foreach (var side in new[] { a, b })
+                foreach (var f in side.Fleets)
+                {
+                    f.Squadrons.RemoveAll(s => s.Ships <= 1e-9);
+                    foreach (var s in f.Squadrons) s.Xp = Math.Min(1f, s.Xp + (float)xp);
+                    if (f.Admiral != null) { if (side == a == aWins) f.Admiral.Wins++; else f.Admiral.Losses++; }
+                }
+            // the loser's fleets go home to refit
+            var loser = aWins ? b : a;
+            var home = loser.Civ.Colonies.FirstOrDefault(c => c.Home) ?? loser.Civ.Colonies.FirstOrDefault();
+            // (when Fleets is in the player's hands, their fleets go home only if broken)
+            bool manual = loser.Civ.Policy.IsManual(Area.Fleets);
+            if (home != null)
+                foreach (var f in loser.Fleets)
+                    if (!manual || f.Morale < Battles.B("moraleBreak")) sim.Order(f, home.Star.Id, f.Mission == "blockade" ? "raid" : f.Mission);
+            return new BattleResult(aWins, _shipsA0 - Ships(a), _shipsB0 - Ships(b), _kgA0 - Kg(a), _kgB0 - Kg(b), Rounds, aBreaks, bBreaks);
+        }
     }
 
     static double Ships(BattleSide s) => s.Fleets.Sum(f => f.Ships);
     static double Kg(BattleSide s) => s.Fleets.Sum(f => f.Squadrons.Sum(q => q.Ships * Simulation.HullKg(q.Hull)));
 
     static double Output(BattleSide s, double rel) =>
-        s.Fleets.Sum(f => f.Squadrons.Sum(q => q.Ships * HullHp(q.Hull) * (1 + q.Xp)) * rel * Trait(f, "dmg") * (f.Admiral?.Skill ?? 1) * f.Supply)
+        s.Fleets.Sum(f => (s.Units == null
+            ? f.Squadrons.Sum(q => q.Ships * HullHp(q.Hull) * (1 + q.Xp))
+            : s.Units.Sum(u => u.Fleet == f && u.Live ? u.Ships * HullHp(u.Hull) * (1 + u.Xp) * u.Mult : 0)) * rel * Trait(f, "dmg") * (f.Admiral?.Skill ?? 1) * f.Supply)
         + s.StationHulls * HullHp(s.StationHull) * rel;
 
-    /// <summary>Spread incoming damage over a side by toughness; returns the share of its hit points lost.</summary>
-    static double Hit(BattleSide s, double dmg, double cap)
+    /// <summary>Spread incoming damage over a side by toughness; returns the share of its hit points lost. With orders in play
+    /// (focus, screens, formations, units out of the line) the same hit points are shared out by exposure instead.</summary>
+    static double Hit(BattleSide s, BattleSide att, double dmg, double cap)
     {
         double hp = s.Hp(HullHp);
         if (hp <= 0 || dmg <= 0) return 0;
         double lost = Math.Min(dmg, cap * hp), share = lost / hp;
-        foreach (var f in s.Fleets)
+        if (Tactics.Neutral(s, att))
         {
-            double fs = Math.Min(1, share * Trait(f, "loss"));
-            foreach (var q in f.Squadrons) q.Ships = Math.Max(0, q.Ships * (1 - fs));
+            foreach (var f in s.Fleets)
+            {
+                double fs = Math.Min(1, share * Trait(f, "loss"));
+                if (s.Units == null) foreach (var q in f.Squadrons) q.Ships = Math.Max(0, q.Ships * (1 - fs));
+                else foreach (var u in s.Units) if (u.Fleet == f) u.Ships = Math.Max(0, u.Ships * (1 - fs));
+            }
+            s.StationHulls = Math.Max(0, s.StationHulls * (1 - share));
+            return share;
         }
-        s.StationHulls = Math.Max(0, s.StationHulls * (1 - share));
+        // exposure-weighted: the hit-point-weighted mean exposure is 1 after normalising, so the spread removes `lost` in all
+        double w = s.StationHulls * HullHp(s.StationHull);
+        foreach (var u in s.Units) w += u.Gone ? 0 : u.Ships * HullHp(u.Hull) * u.Exp;
+        double mean = w / hp, phiSum = 0;
+        foreach (var (_, phi) in att.Concentrate) phiSum += phi;
+        var focus = new Dictionary<CmdUnit, double>();
+        foreach (var (t, phi) in att.Concentrate) focus[t] = focus.GetValueOrDefault(t) + phi;
+        foreach (var u in s.Units)
+        {
+            if (u.Gone || u.Ships <= 0) continue;
+            double uhp = u.Ships * HullHp(u.Hull);
+            double frac = mean > 0 ? (1 - phiSum) * share * u.Exp / mean : 0;
+            if (focus.TryGetValue(u, out var ph)) frac += ph * lost / uhp;
+            u.Ships = Math.Max(0, u.Ships * (1 - Math.Min(1, frac * Trait(u.Fleet, "loss"))));
+        }
+        s.StationHulls = Math.Max(0, s.StationHulls * (1 - (mean > 0 ? (1 - phiSum) * share / mean : 0)));
         return share;
     }
 
@@ -170,10 +238,11 @@ public static class Battles
         double total = 0, broken = 0, at = B("moraleBreak");
         foreach (var f in s.Fleets)
         {
-            double hp = f.Squadrons.Sum(q => q.Ships * HullHp(q.Hull));
+            double hp = s.Units == null ? f.Squadrons.Sum(q => q.Ships * HullHp(q.Hull)) : s.Units.Sum(u => u.Fleet == f && !u.Gone ? u.Ships * HullHp(u.Hull) : 0);
             total += hp;
             if (f.Morale < (f.Admiral?.Trait == "Cautious" ? Trait(f, "break") : at)) broken += hp;
         }
+        if (s.Units != null && s.Units.Count > 0 && s.Units.All(u => u.Gone || u.Ships <= 0) && s.Units.Any(u => u.Gone && u.Ships > 0)) return true;     // the whole line has left the field
         return total > 0 && broken > total / 2;
     }
 }

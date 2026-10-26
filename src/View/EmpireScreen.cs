@@ -196,6 +196,20 @@ public partial class EmpireScreen : PanelContainer
         }
         _policies.AddChild(grid);
 
+        // battles: how much of the fighting the player takes in hand (spec 4.4)
+        _policies.AddChild(Ui.Label("BATTLES", 14, Ui.Accent, true));
+        _policies.AddChild(Note("When your fleets meet an enemy's you can take command: pause, give orders to squadrons (or single ships), and watch it at true scale. Anything you leave alone follows the admiral's doctrine, and the sums are the same as when the admirals fight it out."));
+        var brow = new HBoxContainer(); brow.AddThemeConstantOverride("separation", 8);
+        foreach (var (mode, label, tip) in new[] { (BattleMode.Auto, "Always auto-resolve", "The admirals fight every battle."), (BattleMode.Ask, "Ask each time", "A prompt at the start of each battle: take command or leave it."), (BattleMode.Command, "Always command", "Every battle opens in command mode.") })
+        {
+            var bb = Ui.Button(label, tip); bb.CustomMinimumSize = new Vector2(170, 28);
+            bb.Modulate = pol.Battle == mode ? Ui.Warm : Colors.White;
+            var m = mode;
+            bb.Pressed += () => { pol.Battle = m; BuildPolicies(); };
+            brow.AddChild(bb);
+        }
+        _policies.AddChild(brow);
+
         // the human polities that broke away: the player can go and lead one instead
         var splinters = Sim.Civs.Where(c => c != civ && c.Human && !c.Dead && c.Colonies.Count > 0).ToList();
         if (splinters.Count > 0)

@@ -574,7 +574,7 @@ public partial class Simulation
     // ---------- The clock ----------
     public void Step(double dy)
     {
-        if (dy <= 0) return;
+        if (dy <= 0 || Holding) return;
         for (int i = Thawing.Count - 1; i >= 0; i--)
         {
             var tb = Thawing[i];
@@ -585,7 +585,7 @@ public partial class Simulation
         double target = Year + dy;
         // big jumps are cut into chunks so ships, research and councils keep their order
         double chunk = Math.Max(dy / Math.Ceiling(dy / 2.0), 1e-6);
-        while (Year < target - 1e-9)
+        while (Year < target - 1e-9 && !Holding)
         {
             double d = Math.Min(chunk, target - Year);
             StepOnce(d);

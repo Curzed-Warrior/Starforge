@@ -143,10 +143,11 @@ public partial class Simulation
     }
 
     /// <summary>Resolve a battle at a star and book it to its war: score, losses, the chronicle and the cinematic hook.</summary>
-    BattleResult Fight(War w, int star, BattleSide sa, BattleSide sb)
+    BattleResult Fight(War w, int star, BattleSide sa, BattleSide sb) => Dispatch(w, star, sa, sb);
+
+    /// <summary>Book a fought battle (auto-resolved or commanded) to its war: records, score, losses, chronicle, cinematic hook.</summary>
+    BattleResult Book(War w, int star, BattleSide sa, BattleSide sb, BattleResult r, double navyA, double navyB)
     {
-        double navyA = NavyStrength(sa.Civ), navyB = NavyStrength(sb.Civ);
-        var r = Starforge.Sim.Battles.Resolve(this, sa, sb);
         Record(new BattleRecord(star, Year, w.Id, sa.Civ.Id, sb.Civ.Id, r.AWins, r.LostA, r.LostB,
             Starforge.Sim.Battles.BestFamily(sa.Civ), Starforge.Sim.Battles.BestFamily(sb.Civ)));
         w.Battles++;
