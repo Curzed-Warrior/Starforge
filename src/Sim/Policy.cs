@@ -35,6 +35,9 @@ public class Policy
     /// <summary>Construction in manual: great works the player has approved, and ones turned down (never proposed again).</summary>
     public HashSet<string> Approved = new(), Declined = new();
 
+    /// <summary>Battles the player fights: leave them to the admirals, be asked each time, or always take command (spec 4.4).</summary>
+    public BattleMode Battle = BattleMode.Auto;
+
     /// <summary>Alert categories that pause the game when they arrive.</summary>
     public HashSet<string> PauseOn = new() { "War", "Contact", "Decision", "Crisis" };
 

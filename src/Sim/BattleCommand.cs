@@ -16,6 +16,8 @@ public class CmdUnit
     public Squadron Sq;
     public int Hull;
     public double Ships;
+    /// <summary>Ships before the round now playing out (the view draws Prev falling to Ships over the round).</summary>
+    public double Prev;
     public float Xp;
     public double Depth, Lateral;
     /// <summary>Orders: where to go (HasMove), the enemy unit to focus (-1 none), the own unit to screen (-1 none), the formation, and retreat.</summary>
@@ -48,7 +50,7 @@ public static class Units
         side.Units = new List<CmdUnit>();
         foreach (var f in side.Fleets)
             foreach (var q in f.Squadrons)
-                side.Units.Add(new CmdUnit { Id = nextId++, Fleet = f, Sq = q, Hull = q.Hull, Ships = q.Ships, Xp = q.Xp });
+                side.Units.Add(new CmdUnit { Id = nextId++, Fleet = f, Sq = q, Hull = q.Hull, Ships = q.Ships, Prev = q.Ships, Xp = q.Xp });
     }
 
     /// <summary>Split `ships` off a unit into a new one right after it, carrying its orders. Null if it cannot (too few ships, the cap, or the unit is gone).</summary>

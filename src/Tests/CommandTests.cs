@@ -51,6 +51,17 @@ public static class CommandTests
         return new BattleSide { Civ = c, Fleets = { f } };
     }
 
+    static void Arm(Simulation sim, Civ c) { var f = sim.FleetsOf(c).First(); if (f.Ships < 30) f.Add(c.Hull, 30, 0); }
+
+    /// <summary>A war between the player and an alien empire, both with a fleet to fight with, the player in the given battle mode.</summary>
+    static (Simulation, War, int) Stage(BattleMode mode)
+    {
+        var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity; var o = sim.Civs.First(c => c.Alien);
+        var w = sim.DeclareWar(h, o, "border_claim"); Arm(sim, h); Arm(sim, o);
+        sim.CommandEnabled = true; h.Policy.Battle = mode;
+        return (sim, w, h.Colonies[0].Star.Id);
+    }
+
     static void Even(Civ a, Civ b) { foreach (var c in new[] { a, b }) { c.M.Arms.Clear(); c.M.Guard.Clear(); c.M.Fleet = 1; c.M.Arms["kinetic"] = 2; } }
 
     static void Close(double x, double y, string what)
@@ -65,6 +76,70 @@ public static class CommandTests
 
     public static readonly List<(string Name, Action Body)> All = new()
     {
+        ("mode_auto_never_commands", () => {
+            var (sim, w, star) = Stage(BattleMode.Auto);
+            var r = sim.TestFight(w, star);
+            SelfTest.Check(r != null && sim.Command == null && !sim.Holding && w.Battles == 1, "auto-resolves at once");
+        }),
+        ("mode_command_opens", () => {
+            var (sim, w, star) = Stage(BattleMode.Command);
+            var r = sim.TestFight(w, star);
+            SelfTest.Check(r == null && sim.Command != null && sim.Holding && w.Battles == 0, "the battle waits for the player");
+            double y = sim.Year; sim.Step(1);
+            SelfTest.Check(sim.Year == y, "the game year is held meanwhile");
+            sim.Command.AutoFinish(); sim.CloseCommand();
+            SelfTest.Check(sim.Command == null && !sim.Holding && w.Battles == 1 && sim.Battles.Count > 0, "closing books it to the war");
+            sim.Step(1);
+            SelfTest.Check(sim.Year > y, "and time runs again");
+        }),
+        ("mode_ask_holds_and_resumes", () => {
+            var (sim, w, star) = Stage(BattleMode.Ask);
+            sim.TestFight(w, star);
+            SelfTest.Check(sim.Command == null && sim.Holding && sim.Alerts.Any(a => a.Cat == "Battle" && a.Decision && !a.Done), "asks first, and holds");
+            sim.TestAnswer(0);
+            SelfTest.Check(sim.Command != null, "taking command opens the battle");
+            sim.CloseCommand();
+            var (sim2, w2, star2) = Stage(BattleMode.Ask);
+            sim2.TestFight(w2, star2); sim2.TestAnswer(1);
+            SelfTest.Check(sim2.Command == null && !sim2.Holding && w2.Battles == 1, "leaving it to the admirals resolves it");
+        }),
+        ("ai_never_commands", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(2); sim.CommandEnabled = true; sim.Humanity.Policy.Battle = BattleMode.Command;
+            var al = sim.Civs.Where(c => c.Alien && c.Colonies.Count > 0).Take(2).ToList();
+            if (al.Count < 2) return;
+            var w = sim.DeclareWar(al[0], al[1], "border_claim"); if (w == null) return;
+            Arm(sim, al[0]); Arm(sim, al[1]);
+            var r = sim.TestFight(w, al[0].Colonies[0].Star.Id);
+            SelfTest.Check(r != null && sim.Command == null, "a battle between others is never the player's to command");
+        }),
+        ("command_matches_auto", () => {
+            var (s1, w1, st1) = Stage(BattleMode.Auto); var auto = s1.TestFight(w1, st1);
+            var (s2, w2, st2) = Stage(BattleMode.Command); s2.TestFight(w2, st2);
+            var cmd = s2.Command.AutoFinish(); s2.CloseCommand();
+            SelfTest.Check(auto.AWins == cmd.AWins && auto.LostA == cmd.LostA && auto.LostB == cmd.LostB && auto.Rounds == cmd.Rounds, $"same numbers: {auto} vs {cmd}");
+            SelfTest.Check(w1.WonA == w2.WonA && w1.LostKgA == w2.LostKgA && w1.LostKgB == w2.LostKgB, "and the same score for the war");
+        }),
+        ("session_clock", () => {
+            var (sim, w, star) = Stage(BattleMode.Command); sim.TestFight(w, star);
+            var s = sim.Command; double rs = CommandSession.RoundSeconds;
+            s.Tick(rs * 3); SelfTest.Check(s.Round == 0, "paused until the player says go");
+            s.Paused = false; s.Tick(rs * 0.5);
+            SelfTest.Check(s.Round == 1 && Math.Abs(s.Progress - 0.5) < 1e-9, "a round is worked out as it begins and plays out over roundSeconds");
+            s.Tick(rs * 0.6);
+            SelfTest.Check(s.Round == 2 && Math.Abs(s.Progress - 0.1) < 1e-9, "the next begins when it ends");
+            int r0 = s.Round; s.Speed = 4; s.Tick(rs * 0.5);
+            SelfTest.Check(s.Round >= r0 + 1 || s.Over, "speed scales it");
+            for (int i = 0; i < 20 && !s.Over; i++) s.Tick(rs);
+            SelfTest.Check(s.Over && s.Result != null, "and it ends");
+        }),
+        ("policy_roundtrip_old_save_defaults_auto", () => {
+            var opt = new System.Text.Json.JsonSerializerOptions { IncludeFields = true };
+            var p = new Policy { Battle = BattleMode.Ask };
+            var back = System.Text.Json.JsonSerializer.Deserialize<Policy>(System.Text.Json.JsonSerializer.Serialize(p, opt), opt);
+            SelfTest.Check(back.Battle == BattleMode.Ask, "the setting saves");
+            var old = System.Text.Json.JsonSerializer.Deserialize<Policy>("{\"WorksShare\":0.3}", opt);
+            SelfTest.Check(old.Battle == BattleMode.Auto, "a save from before it loads as auto");
+        }),
         ("units_neutral_exact", () => {
             var sim = SelfTest.NewSim(); var ca = sim.Humanity; var cb = sim.Civs.First(c => c.Alien);
             for (int seed = 0; seed < 100; seed++)
