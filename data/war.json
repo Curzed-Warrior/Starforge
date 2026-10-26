@@ -101,6 +101,18 @@
       "Aggressive": { "dmg": 1.15, "loss": 1.15 }, "Cautious": { "dmg": 0.95, "loss": 0.85, "break": 0.45 },
       "Tactician": { "dmg": 1.1 }, "Logistician": { "supply": 0.5 }, "Raider": { "raid": 1.3 },
       "Beloved": { "morale": 1.2 }, "Ambitious": {}, "Butcher": { "dmg": 1.1, "pop": 2.0 }
+    },
+    "command": {
+      "roundSeconds": 20, "maxUnitsPerSide": 64, "rangeBand": 0.4, "moveSpeed": 0.5,
+      "flankAt": 0.8, "flankBonus": 0.12, "flankExposure": 0.1,
+      "screenK": 0.8, "screenCoverMax": 0.6, "screenPenalty": 0.15,
+      "focusShare": 0.5, "focusMax": 0.6, "retreatRounds": 1,
+      "formations": {
+        "line":   { "dmg": 1.0,  "exp": 1.0 },
+        "wedge":  { "dmg": 1.08, "exp": 1.06 },
+        "sphere": { "dmg": 0.92, "exp": 0.88 },
+        "column": { "dmg": 0.9,  "exp": 1.1 }
+      }
     }
   },
   "strife": {

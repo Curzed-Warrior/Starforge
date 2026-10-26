@@ -11,7 +11,12 @@ public class BattleSide
     public List<Fleet> Fleets = new();
     public double StationHulls;
     public int StationHull = 2;
-    internal double Hp(Func<int, double> hp) => Fleets.Sum(f => f.Squadrons.Sum(s => s.Ships * hp(s.Hull))) + StationHulls * hp(StationHull);
+    /// <summary>Battle command: the side's squadrons as units (null in auto-resolve), and the enemy units this side's focus orders aim at.</summary>
+    public List<CmdUnit> Units;
+    internal readonly List<(CmdUnit T, double Phi)> Concentrate = new();
+    internal double Hp(Func<int, double> hp) => (Units == null
+        ? Fleets.Sum(f => f.Squadrons.Sum(s => s.Ships * hp(s.Hull)))
+        : Fleets.Sum(f => Units.Sum(u => u.Fleet == f && !u.Gone ? u.Ships * hp(u.Hull) : 0))) + StationHulls * hp(StationHull);
 }
 
 public record BattleResult(bool AWins, double LostA, double LostB, double KgLostA, double KgLostB, int Rounds, bool ARetreats, bool BRetreats);
@@ -134,11 +139,13 @@ public static class Battles
         {
             if (Over) return false;
             if (Rounds >= _max) { Over = true; return false; }
+            Tactics.Prepare(A, B); Tactics.Prepare(B, A);
             double outA = Output(A, _relA) * _kill, outB = Output(B, _relB) * _kill;
             if (outA <= 0 && outB <= 0) { Over = true; return false; }
             Rounds++;
-            double shareB = Hit(B, outA, _cap), shareA = Hit(A, outB, _cap);
+            double shareB = Hit(B, A, outA, _cap), shareA = Hit(A, B, outB, _cap);
             Shake(A, shareA, _moraleLoss); Shake(B, shareB, _moraleLoss);
+            Tactics.After(A); Tactics.After(B);
             ABreaks = Broken(A); BBreaks = Broken(B);
             if (ABreaks || BBreaks || A.Hp(HullHp) <= 0 || B.Hp(HullHp) <= 0 || Rounds >= _max) Over = true;
             return !Over;
@@ -148,6 +155,8 @@ public static class Battles
         public BattleResult Finish(Simulation sim)
         {
             var a = A; var b = B;
+            if (a.Units != null) Units.WriteBack(a);
+            if (b.Units != null) Units.WriteBack(b);
             double hpA = a.Hp(HullHp), hpB = b.Hp(HullHp);
             bool aBreaks = ABreaks, bBreaks = BBreaks;
             bool aWins = bBreaks && !aBreaks || hpB <= 0 && hpA > 0
@@ -176,21 +185,45 @@ public static class Battles
     static double Kg(BattleSide s) => s.Fleets.Sum(f => f.Squadrons.Sum(q => q.Ships * Simulation.HullKg(q.Hull)));
 
     static double Output(BattleSide s, double rel) =>
-        s.Fleets.Sum(f => f.Squadrons.Sum(q => q.Ships * HullHp(q.Hull) * (1 + q.Xp)) * rel * Trait(f, "dmg") * (f.Admiral?.Skill ?? 1) * f.Supply)
+        s.Fleets.Sum(f => (s.Units == null
+            ? f.Squadrons.Sum(q => q.Ships * HullHp(q.Hull) * (1 + q.Xp))
+            : s.Units.Sum(u => u.Fleet == f && u.Live ? u.Ships * HullHp(u.Hull) * (1 + u.Xp) * u.Mult : 0)) * rel * Trait(f, "dmg") * (f.Admiral?.Skill ?? 1) * f.Supply)
         + s.StationHulls * HullHp(s.StationHull) * rel;
 
-    /// <summary>Spread incoming damage over a side by toughness; returns the share of its hit points lost.</summary>
-    static double Hit(BattleSide s, double dmg, double cap)
+    /// <summary>Spread incoming damage over a side by toughness; returns the share of its hit points lost. With orders in play
+    /// (focus, screens, formations, units out of the line) the same hit points are shared out by exposure instead.</summary>
+    static double Hit(BattleSide s, BattleSide att, double dmg, double cap)
     {
         double hp = s.Hp(HullHp);
         if (hp <= 0 || dmg <= 0) return 0;
         double lost = Math.Min(dmg, cap * hp), share = lost / hp;
-        foreach (var f in s.Fleets)
+        if (Tactics.Neutral(s, att))
         {
-            double fs = Math.Min(1, share * Trait(f, "loss"));
-            foreach (var q in f.Squadrons) q.Ships = Math.Max(0, q.Ships * (1 - fs));
+            foreach (var f in s.Fleets)
+            {
+                double fs = Math.Min(1, share * Trait(f, "loss"));
+                if (s.Units == null) foreach (var q in f.Squadrons) q.Ships = Math.Max(0, q.Ships * (1 - fs));
+                else foreach (var u in s.Units) if (u.Fleet == f) u.Ships = Math.Max(0, u.Ships * (1 - fs));
+            }
+            s.StationHulls = Math.Max(0, s.StationHulls * (1 - share));
+            return share;
         }
-        s.StationHulls = Math.Max(0, s.StationHulls * (1 - share));
+        // exposure-weighted: the hit-point-weighted mean exposure is 1 after normalising, so the spread removes `lost` in all
+        double w = s.StationHulls * HullHp(s.StationHull);
+        foreach (var u in s.Units) w += u.Gone ? 0 : u.Ships * HullHp(u.Hull) * u.Exp;
+        double mean = w / hp, phiSum = 0;
+        foreach (var (_, phi) in att.Concentrate) phiSum += phi;
+        var focus = new Dictionary<CmdUnit, double>();
+        foreach (var (t, phi) in att.Concentrate) focus[t] = focus.GetValueOrDefault(t) + phi;
+        foreach (var u in s.Units)
+        {
+            if (u.Gone || u.Ships <= 0) continue;
+            double uhp = u.Ships * HullHp(u.Hull);
+            double frac = mean > 0 ? (1 - phiSum) * share * u.Exp / mean : 0;
+            if (focus.TryGetValue(u, out var ph)) frac += ph * lost / uhp;
+            u.Ships = Math.Max(0, u.Ships * (1 - Math.Min(1, frac * Trait(u.Fleet, "loss"))));
+        }
+        s.StationHulls = Math.Max(0, s.StationHulls * (1 - (mean > 0 ? (1 - phiSum) * share / mean : 0)));
         return share;
     }
 
@@ -205,10 +238,11 @@ public static class Battles
         double total = 0, broken = 0, at = B("moraleBreak");
         foreach (var f in s.Fleets)
         {
-            double hp = f.Squadrons.Sum(q => q.Ships * HullHp(q.Hull));
+            double hp = s.Units == null ? f.Squadrons.Sum(q => q.Ships * HullHp(q.Hull)) : s.Units.Sum(u => u.Fleet == f && !u.Gone ? u.Ships * HullHp(u.Hull) : 0);
             total += hp;
             if (f.Morale < (f.Admiral?.Trait == "Cautious" ? Trait(f, "break") : at)) broken += hp;
         }
+        if (s.Units != null && s.Units.Count > 0 && s.Units.All(u => u.Gone || u.Ships <= 0) && s.Units.Any(u => u.Gone && u.Ships > 0)) return true;     // the whole line has left the field
         return total > 0 && broken > total / 2;
     }
 }
