@@ -270,7 +270,7 @@ void fragment(){
         _warIm.ClearSurfaces();
         _frontIm.ClearSurfaces();
         var wm = _warMarkers.Multimesh;
-        if (Works.Hide.Contains("warmap")) { wm.VisibleInstanceCount = 0; return; }
+        if (Works.HiddenParts.Contains("warmap")) { wm.VisibleInstanceCount = 0; return; }
         var buf = _warBuf;
         int k = 0;
         double year = _sim.Year;

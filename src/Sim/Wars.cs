@@ -196,7 +196,7 @@ public partial class Simulation
 
     void PeaceCheck(War w, Civ a, Civ b)
     {
-        var collapse = new List<Term> { new("collapse", "Collapse", 0, true) };
+        var collapse = new List<Term> { WarModel.Collapse };
         bool Gone(Civ c) => c.Colonies.All(x => x.OccupiedBy >= 0);
         if (Gone(b)) { Offer(w, true, collapse); return; }
         if (Gone(a)) { Offer(w, false, collapse); return; }
@@ -284,7 +284,8 @@ public partial class Simulation
                     loser.Relations[winner.Id] = loser.Relations.GetValueOrDefault(winner.Id) - 20; winner.Relations[loser.Id] = winner.Relations.GetValueOrDefault(loser.Id) - 20; break;
                 case "vassal": case "autonomy": Subject(loser, winner); break;
                 case "release": foreach (var c in Civs) if (c.Overlord == loser) c.Overlord = null; break;
-                case "regime": loser.SetDrive(winner.Drive, loser.Ethic); loser.Leader = loser.NewLeader(winner.Drive, Year); break;
+                case "regime": { float conscience = loser.Conscience; loser.SetDrive(winner.Drive, loser.Ethic); loser.Conscience = conscience; }      // a new government, the same people: its conscience keeps its drift
+                    loser.Leader = loser.NewLeader(winner.Drive, Year); break;
                 case "ceasefire": w.Ceasefire = true; break;
             }
         if (!w.Ceasefire) ReturnOccupied(w);
@@ -323,7 +324,8 @@ public partial class Simulation
         EndWarWith(w, aWins, terms);
     }
 
-    static double UI(string key) => WarData.D("interface", key);
+    /// <summary>A number from war.json's interface section (proposal cooldowns, ceasefire thresholds).</summary>
+    static double InterfaceD(string key) => WarData.D("interface", key);
 
     /// <summary>Which side of a war a civ is on: 0 side A, 1 side B, -1 not in it.</summary>
     public static int Side(War w, Civ c) => w.A.Contains(c.Id) ? 0 : w.B.Contains(c.Id) ? 1 : -1;
@@ -343,8 +345,8 @@ public partial class Simulation
         if (enemy.Dead || enemy.Colonies.Count == 0) return (true, new());
         var mine = Lead(w, s);
         bool Gone(Civ c) => c.Colonies.All(x => x.OccupiedBy >= 0);
-        if (Gone(enemy)) return (true, new() { new("collapse", "Collapse", 0, true) });
-        if (Gone(mine)) return (false, new() { new("collapse", "Collapse", 0, true) });
+        if (Gone(enemy)) return (true, new() { WarModel.Collapse });
+        if (Gone(mine)) return (false, new() { WarModel.Collapse });
         double be = F("bothExhausted");
         bool both = w.ExhA >= be && w.ExhB >= be;
         bool aWins; List<Term> terms;
@@ -379,7 +381,7 @@ public partial class Simulation
 
     /// <summary>Would the other lead stop fighting for nothing: worn out, or nobody is winning?</summary>
     bool WouldStop(War w, int otherSide) =>
-        (otherSide == 0 ? w.ExhA : w.ExhB) >= UI("ceasefireAcceptExhaustion") || Math.Abs(w.Score) < F("stalemateScore");
+        (otherSide == 0 ? w.ExhA : w.ExhB) >= InterfaceD("ceasefireAcceptExhaustion") || Math.Abs(w.Score) < F("stalemateScore");
 
     /// <summary>
     /// Put terms to the other side. A side asking terms gets them when they cost no more than the other would concede
@@ -401,6 +403,12 @@ public partial class Simulation
             why = "Those terms are not on the table.";
             return false;
         }
+        // a civ that holds nothing any more cannot refuse its own collapse
+        if (byWins && collapseOnOffer && terms.Count == 1)
+        {
+            EndWarWith(w, s == 0, terms);
+            return true;
+        }
         if (!byWins && offer.Count > 0 && offer.All(t => terms.Any(x => x.Id == t.Id)))
         {
             EndWarWith(w, s == 1, terms);
@@ -414,7 +422,7 @@ public partial class Simulation
             EndWarWith(w, s == 0, terms);
             return true;
         }
-        by.ProposeAfter[w.Id] = Year + UI("proposeCooldownYears");
+        by.ProposeAfter[w.Id] = Year + InterfaceD("proposeCooldownYears");
         why = $"{Narrative2.Called(other, true)} refuses.";
         return false;
     }

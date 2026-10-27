@@ -326,7 +326,7 @@ public partial class Megastructures
     {
         var mm = pc.Convoys.Multimesh;
         var front = pc.Front[k];
-        if (front == null || front.Length == 0 || pc.Sources == null || Works.Hide.Contains("crew")) { mm.VisibleInstanceCount = 0; return; }
+        if (front == null || front.Length == 0 || pc.Sources == null || Works.HiddenParts.Contains("crew")) { mm.VisibleInstanceCount = 0; return; }
         int n = 0, per = Convoy / pc.Sources.Length;
         float size = pc.Reach * 0.006f;
         for (int si = 0; si < pc.Sources.Length; si++)
@@ -379,7 +379,7 @@ public partial class Megastructures
         var here = pc.Front[k];
         var next = pc.Front[Mathf.Min(k + 1, Slices - 1)];
         int ng = 0, nd = 0;
-        if (here.Length + next.Length > 0 && !Works.Hide.Contains("crew"))
+        if (here.Length + next.Length > 0 && !Works.HiddenParts.Contains("crew"))
         {
             float g = pc.Reach * 0.1f / 40f, d = pc.Reach * 0.03f / 18f;     // kit units are metres: gantry 40 m, drone 18 m
             Vector3 Pick(int i) => i % 2 == 0 && here.Length > 0 || next.Length == 0 ? here[i * 7 % here.Length] : next[i * 5 % next.Length];

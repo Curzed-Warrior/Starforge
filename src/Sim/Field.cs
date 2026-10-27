@@ -57,7 +57,7 @@ public partial class Simulation
         c.OccupiedBy = -1;
         if (from == to) return;
         // a new owner starts the books afresh: grievance is judged by them from the next year
-        c.Grievance = 0; c.Unrest = 0; c.Cause = null; c.Movement = null; c.Autonomy = false; c.InvestedUntil = 0; c.Holdout = false; c.Crackdowns = 0;
+        c.Grievance = 0; c.Unrest = 0; c.Cause = null; c.Movement = null; c.QuietSince = double.MinValue; c.Autonomy = false; c.InvestedUntil = 0; c.Holdout = false; c.Crackdowns = 0;
         c.YardDownUntil = c.DepositsDownUntil = c.IncitedUntil = c.PreparedUntil = 0; c.PreparedBy = -1;
         from.Colonies.Remove(c);
         to.Colonies.Add(c);

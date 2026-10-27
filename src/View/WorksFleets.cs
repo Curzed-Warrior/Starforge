@@ -266,7 +266,7 @@ void fragment(){
         _nBeam = _nSpark = _nDrive = _nLight = _nRing = 0;
         _hulls.Clear(); _sideHulls[0].Clear(); _sideHulls[1].Clear();
         var sim = _sim;
-        if (sim != null && !Hide.Contains("fleets")) LayOut(sim, c);
+        if (sim != null && !HiddenParts.Contains("fleets")) LayOut(sim, c);
         foreach (var p in _hullPools.Values)
         {
             if (p.N > 0) p.Mi.Multimesh.Buffer = p.Buf;

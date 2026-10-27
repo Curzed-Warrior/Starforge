@@ -47,7 +47,7 @@ public partial class SystemView : Node3D
         return t;
     }
 
-    static Shader _planetShader, _atmoShader, _cloudShader, _ringShader, _orbitShader;
+    static Shader _planetShader, _atmoShader, _cloudShader, _ringShader;
     static Shader S(ref Shader s, string path) => s ??= GD.Load<Shader>(path);
 
     public void Build(StarSystem sys)

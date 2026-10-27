@@ -50,6 +50,11 @@ public static class Runs
                  $"humanity={humans} fractured={(humans >= 2 ? "yes" : "no")} chronicle={logLines * 100 / Math.Max(years, 1):0}");
         GD.Print($"FRACTURESTATS humanPeaceful={N("humanPeaceful")} humanWar={N("humanWar")} humanCivil={N("humanCivil")} hiveVotes={N("hiveVotes")} " +
                  $"votes=[{string.Join(" ", sim.HiveVotes)}] humanSystems=[{string.Join(",", sim.Civs.Where(c => c.Human && !c.Dead && c.Colonies.Count > 0).Select(c => c.Colonies.Count))}]");
+        // the biggest empires the game ever saw, and how often each one split: peak/now/splits
+        GD.Print("EMPIRESTATS " + string.Join(" ", sim.PeakSystems.OrderByDescending(kv => kv.Value).Take(5)
+            .Select(kv => $"{sim.Civs[kv.Key].Name.Split(' ').Last()}={kv.Value}/{sim.Civs[kv.Key].Colonies.Count}/{sim.SplitsOf.GetValueOrDefault(kv.Key)}{(sim.Civs[kv.Key].M.Hive ? "h" + sim.Civs[kv.Key].HiveSwing.ToString("0.00") : "")}")));
+        // every split this game by what caused it, H for human parents and A for alien ones (Separate's caller)
+        GD.Print("SPLITSTATS " + string.Join(" ", sim.StrifeStats.Where(kv => kv.Key.StartsWith("split:")).Select(kv => kv.Key + "=" + kv.Value)));
     }
 
     /// <summary>One line of special-forces statistics at the end of a traced warp (docs/superpowers/plans/2026-10-20-special-forces.md, Task 5).</summary>

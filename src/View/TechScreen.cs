@@ -188,8 +188,8 @@ public partial class TechScreen : PanelContainer
         return b;
     }
 
-    string ReqText(Tech t) => t.Req.Length == 0 ? "nothing" : string.Join(" and ", t.Req.Select(g => g.Length == 1 ? Name(g[0]) : "one of (" + string.Join(", ", g.Select(Name)) + ")"));
-    static string Name(string id) => Defs.TryTech(id)?.Name ?? id;
+    string ReqText(Tech t) => t.Req.Length == 0 ? "nothing" : string.Join(" and ", t.Req.Select(g => g.Length == 1 ? TechName(g[0]) : "one of (" + string.Join(", ", g.Select(TechName)) + ")"));
+    static string TechName(string id) => Defs.TryTech(id)?.Name ?? id;
 
     string Tooltip(Tech t)
     {
@@ -197,7 +197,7 @@ public partial class TechScreen : PanelContainer
         var eff = t.Effects.Select(Describe).Where(x => x != null).ToList();
         if (eff.Count > 0) lines.Add("Effects: " + string.Join("; ", eff));
         lines.Add("Needs: " + ReqText(t));
-        if (t.Exclusive != null) lines.Add("Exclusive with: " + string.Join(", ", Defs.ExclusiveGroups[t.Exclusive].Where(x => x != t.Id).Select(Name)));
+        if (t.Exclusive != null) lines.Add("Exclusive with: " + string.Join(", ", Defs.ExclusiveGroups[t.Exclusive].Where(x => x != t.Id).Select(TechName)));
         if (t.Gate != null) lines.Add($"Opens only through the {TechData.P("gateEvents", t.Gate, "name").GetString()} event");
         if (t.Log != null) lines.Add("“" + t.Log + "”");
         return string.Join("\n", lines);

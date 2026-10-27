@@ -60,13 +60,15 @@ public partial class Simulation
 
     /// <summary>
     /// Yearly in a hive: the link frays. Each linked system may slip out of the consensus and become a holdout, the more
-    /// likely the further it is and the stronger the civ's swing was at the vote.
+    /// likely the further it is, the stronger the civ's swing was at the vote, and the more overstretched the hive is.
     /// </summary>
     void HiveFray(Civ civ, double dy)
     {
-        if (civ.HiveSwing < SD("hive", "frayMinSwing")) return;     // a weak refusal: the link holds for good
+        // a weak refusal: the link holds for good, unless the hive outgrows it (Sprawl)
+        double sprawl = Sprawl(civ);
+        if (civ.HiveSwing < SD("hive", "frayMinSwing") && sprawl <= 0) return;
         var capital = CapitalOf(civ);
-        double k = SD("hive", "frayPerYear") * civ.HiveSwing * dy;
+        double k = SD("hive", "frayPerYear") * (civ.HiveSwing + SD("hive", "sprawlFray") * sprawl) * dy;
         bool first = civ.Main && !civ.Colonies.Any(c => c.Holdout);      // the chronicle tells of the first crack in the link
         foreach (var c in civ.Colonies)
             if (!c.Holdout && c != capital && !c.Home && c.OccupiedBy < 0 && _r.NextDouble() < k * Refusal(c, capital))

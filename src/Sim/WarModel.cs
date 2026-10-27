@@ -18,7 +18,8 @@ public static class WarModel
 {
     static List<Reason> _reasons;
     static Dictionary<string, Term> _terms;
-    static readonly Term Collapse = new("collapse", "Collapse", 0, true);
+    /// <summary>The one term of a war of survival, and what a war against a civ that is gone ends in.</summary>
+    public static readonly Term Collapse = new("collapse", "Collapse", 0, true);
 
     public static IEnumerable<Reason> Reasons
     {

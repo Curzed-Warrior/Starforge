@@ -17,9 +17,13 @@ public partial class Simulation
         Answer.SelfRule => "Grant self-rule", Answer.Invest => "Invest", Answer.Crackdown => "Crack down", _ => "Wait"
     };
 
-    /// <summary>A movement rises in a system at insurgency: it is named for what drives it, and it wants an answer.</summary>
+    /// <summary>A movement rises in a system at insurgency: it is named for what drives it, and it wants an answer. One
+    /// broken up by troops, or laid down within strife.movementMemoryYears, that climbs back is the same movement: it is
+    /// not counted again, and it is not news.</summary>
     public void Rise(Colony c)
     {
+        bool fresh = c.Movement == null && Year - c.QuietSince >= SD("movementMemoryYears");
+        if (fresh) StrifeCount("movements");
         // the yearly step has just worked out what drives it; a movement raised any other way works it out now
         if (c.CauseKey == null && GrievanceTarget(c, out string key, MeanIndustry(c.Civ), WarExhaustionOf(c.Civ), CapitalOf(c.Civ)) >= 0 && key != null)
         { c.CauseKey = key; c.Cause = CausePhrase[key]; }
@@ -31,11 +35,11 @@ public partial class Simulation
             "levy" or "deposits" or "poverty" or "crowding" => $"the {sys} Compact",
             _ => $"the {c.Civ.Faction(Leaning(c))} of {sys}",
         };
-        StrifeCount("movements");
-        if (c.Civ.Main && c.Crackdowns == 0 && !c.Holdout)      // a movement broken up and back again, or a holdout in arms, is no longer news
+        if (c.Civ.Main && fresh && c.Crackdowns == 0 && !c.Holdout       // a movement broken up and back again, or a holdout in arms, is no longer news
+            && News("risings", "movementNewsYears") is var untold && untold >= 0)
         {
             string why = c.Cause ?? "nobody listens to it";
-            Log(c, $"{Cap(c.Movement)} take up arms at {sys}: {why}.", "loss", null);
+            Log(c, $"{Cap(c.Movement)} take up arms at {sys}: {why}.{Untold(untold, "other movement has", "other movements have", "taken up arms")}", "loss", null);
         }
         AnswerMovement(c);
     }
@@ -112,7 +116,8 @@ public partial class Simulation
                     if (o != c && !o.Home && o.HeardCrackdown < Year) { o.HeardCrackdown = Year + 1; o.Grievance = Math.Min(100, o.Grievance + spread); }
                 StrifeCount("crackdowns");
                 if (civ.Ethic == "Reverent") civ.AddMeter("Atrocity", 5);
-                if (civ.Main && c.Crackdowns == 1) Log(c, $"Troops land at {c.Sys.Name}. {Cap(c.Movement ?? "the movement")} are broken up, and every other world hears about it.", "loss", null);
+                if (civ.Main && c.Crackdowns == 1 && News("crackdowns", "movementNewsYears") is var untold && untold >= 0)
+                    Log(c, $"Troops land at {c.Sys.Name}. {Cap(c.Movement ?? "the movement")} are broken up, and every other world hears about it.{Untold(untold, "other movement has", "other movements have", "been broken up by troops")}", "loss", null);
                 break;
         }
         // whatever the answer, the movement is not taken up again for five years

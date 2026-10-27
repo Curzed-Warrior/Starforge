@@ -32,6 +32,8 @@ public partial class Main : Node3D
     public static float TitleYaw = -0.6f;
     int _speedBeforeMenu = 2;
     float _autosaveT;
+    /// <summary>The autosave being written on a worker (SaveGame.SaveInBackground), until it is finished and reported.</summary>
+    System.Threading.Tasks.Task _autosave;
     /// <summary>The simulation threw (SimCrashed): time stays stopped and nothing is saved over the good saves until one is loaded.</summary>
     bool _simFaulted;
     public const string SavePath = "user://starforge_save.json", AutoPath = "user://starforge_autosave.json";
@@ -114,7 +116,7 @@ public partial class Main : Node3D
             else if (a == "--auto") Autoplay = true;
             else if (a.StartsWith("--tyaw=")) TitleYaw = F(a[7..]);
             else if (a.StartsWith("--sky=")) { var q = a[6..].Split(','); GalaxyView.SkyOverride = q.Select(F).ToArray(); }
-            else if (a.StartsWith("--hide=")) Works.Hide = a[7..];
+            else if (a.StartsWith("--hide=")) Works.HiddenParts = a[7..];
             else if (a.StartsWith("--fx=")) _fx = a[5..];
             else if (a.StartsWith("--project=")) _forceProject = a[10..];
             else if (a.StartsWith("--terraform=")) _forceTerraform = F(a[12..]);
@@ -186,13 +188,13 @@ public partial class Main : Node3D
         Sim.Effect += (c, kind, b) =>
         {
             if (Warping || c == null) return;
-            if (kind == "arrival" && c.Civ.Main && Autoplay && !_cine.Busy && !_rig.Free && _directorT > 20f && c.Star != ViewStar) { TravelTo(c.Star); _pendingArrival = c; _directorT = 0; return; }
+            if (kind == "arrival" && c.Civ.Main && Autoplay && !_cine.Busy && !_rig.FreeFlight && _directorT > 20f && c.Star != ViewStar) { TravelTo(c.Star); _pendingArrival = c; _directorT = 0; return; }
             if (c.Star != ViewStar) return;
             SysView.Spectacle.Play(kind, c, b);
             if (kind is "flare" or "battle") _music?.Sfx("boom");
             if (kind is "arrival" or "comet") _music?.Sfx("shimmer");
             if (kind == "seedlaunch") _music?.Sfx("whoosh");
-            if (kind == "seedlaunch" && Autoplay && !_rig.Free) FollowLaunch();
+            if (kind == "seedlaunch" && Autoplay && !_rig.FreeFlight) FollowLaunch();
         };
         if (_shot == null) { _music = new Music(); AddChild(_music); Sim.Logged += e => { if (!Warping && (e.Civ.Main || e.Colony == Sim.Focus)) _music.Chime(e.Kind); }; }
 
@@ -835,7 +837,7 @@ public partial class Main : Node3D
                 case Key.Equal: case Key.KpAdd: SetSpeed(SpeedIdx + 1); break;
                 case Key.Minus: case Key.KpSubtract: SetSpeed(SpeedIdx - 1); break;
                 case Key.G: ToGalaxy(); break;
-                case Key.Tab: _rig.ToggleFree(); _hud.Toast(_rig.Free ? "Free flight · WASD fly · Q/E down/up · right-drag look · wheel speed · Shift ×10 · Ctrl ×0.1 · Tab to orbit" : "Orbit camera"); break;
+                case Key.Tab: _rig.ToggleFree(); _hud.Toast(_rig.FreeFlight ? "Free flight · WASD fly · Q/E down/up · right-drag look · wheel speed · Shift ×10 · Ctrl ×0.1 · Tab to orbit" : "Orbit camera"); break;
                 case Key.X: ToCore(); break;
                 case Key.V: _hud.Visible = !_hud.Visible; break;
                 case Key.M: ToggleMusic(); break;
@@ -845,7 +847,7 @@ public partial class Main : Node3D
                 case Key.N: _hud.ToggleBuild(); break;
                 case Key.H: if (ViewStar != _gal.Sol) TravelTo(_gal.Sol); else SelectBody(SysView.Sys.Find("Earth")); break;
                 case Key.C: _hud.ToggleChronicle(); break;
-                case Key.E when !_rig.Free: _hud.ToggleEmpire(EmpireScreen.TabOverview); break;
+                case Key.E when !_rig.FreeFlight: _hud.ToggleEmpire(EmpireScreen.TabOverview); break;
                 case Key.I: _hud.ToggleEmpire(EmpireScreen.TabInbox); break;
                 // Paradox-style: F1-F4, F6-F8 and F10 open the empire screen's tabs, Ctrl+F or / finds a system
                 case Key.F1: _hud.ToggleEmpire(EmpireScreen.TabOverview); break;
@@ -929,7 +931,7 @@ public partial class Main : Node3D
     /// <summary>When nothing has happened for a while, the director finds something worth looking at.</summary>
     void IdleTour()
     {
-        if (_rig.Free) return;                 // the director never takes the camera from someone flying it
+        if (_rig.FreeFlight) return;                 // the director never takes the camera from someone flying it
         var mine = Sim.Humanity.Colonies;
         int pick = _tour.Next(10);
         if (pick < 3 && mine.Count > 1)
@@ -976,7 +978,7 @@ public partial class Main : Node3D
             if (Autoplay) { ToGalaxy(); _rig.PitchT = -1.25f; _directorT = -40f; }
             return;
         }
-        if (!Autoplay || Warping || _cine.Busy || _rig.Free) return;
+        if (!Autoplay || Warping || _cine.Busy || _rig.FreeFlight) return;
         if (e.Where is string w && w == "visitor" && e.Colony?.Star == ViewStar) { OnLabelClicked("visitor"); _directorT = -15f; return; }
         if (e.Text.StartsWith("Breakthrough: Galactic Core Tap")) { ToCore(); _directorT = -40f; return; }
         if (e.Text.StartsWith("Breakthrough: Andromeda Ark") || e.Text.StartsWith("Type III")) { ToGalaxy(); _directorT = -40f; return; }
@@ -1064,7 +1066,15 @@ public partial class Main : Node3D
         _post.Update(_rig.Cam, SysView, dt);
         _moodT += dt;
         _autosaveT += dt;
-        if (_autosaveT > 300f && !Sim.Holding && !_simFaulted && _shot == null && _seqN == 0) { _autosaveT = 0; SaveGame.Save(Sim, _seed, AutoPath); _hud.Toast("Autosaved"); }
+        // the autosave takes its snapshot here and writes it on a worker (one at a time); never in the middle of a
+        // cinematic, which waits for it to end
+        if (_autosave is { IsCompleted: true })
+        {
+            if (_autosave.IsFaulted) GD.PrintErr("autosave failed: " + _autosave.Exception?.GetBaseException().Message); else _hud.Toast("Autosaved");
+            _autosave = null;
+        }
+        if (_autosaveT > 300f && _autosave == null && !_cine.Busy && !Sim.Holding && !_simFaulted && _shot == null && _seqN == 0)
+        { _autosaveT = 0; _autosave = SaveGame.SaveInBackground(Sim, _seed, AutoPath); }
         if (_music != null && _moodT > 5f) { _moodT = 0; _music.Mood = Music.MoodFor(Sim); }
 
         if (_following != null && !IsInstanceValid(_following)) { _following = null; SelectStar(); }

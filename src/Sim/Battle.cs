@@ -52,6 +52,7 @@ public static class Battles
     static double B(string key) => WarData.D("battle", key);
     static readonly string[] Excluded = { "ground", "doom" };
 
+    // war.json is read once per process (WarData keeps the parsed document too), so this never goes stale
     static string[] _families;
 
     /// <summary>The weapon family a civ's fleets mostly fight with: its highest-tier space weapon (ties in war.json's

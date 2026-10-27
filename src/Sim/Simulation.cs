@@ -191,10 +191,14 @@ public partial class Simulation
 
     // ---------- Logging ----------
     double _foreignNewsAt;
-    /// <summary>A chronicle line. `party`: humanity is one side of it (its battle, its peace), whoever's system it is in.</summary>
-    public void Log(Colony c, string text, string kind, object where, bool party = false)
+    /// <summary>A turning point (a new era, a breakthrough, an omen, the voice's work): kept for the whole game, in
+    /// memory and in saves, where routine lines are capped.</summary>
+    public static bool Lasting(string kind) => kind is "era" or "break" or "omen" or "god";
+    /// <summary>A chronicle line. `party`: humanity is one side of it (its battle, its peace), whoever's system it is in.
+    /// `about`: whose line it is when not the system's owner (a split is told for the civ the system has just left).</summary>
+    public void Log(Colony c, string text, string kind, object where, bool party = false, Civ about = null)
     {
-        var civ = c?.Civ ?? Humanity;
+        var civ = about ?? c?.Civ ?? Humanity;
         // the chronicle follows humanity, the watched system, and anyone humanity has met
         // (a met empire's own losses only when humanity is part of them: a big empire at war loses dozens of worlds a year,
         // and every one of those lines would bury humanity's history)
@@ -211,9 +215,31 @@ public partial class Simulation
         }
         var e = new LogEntry { Year = Year, Civ = civ, Colony = c, System = c?.Sys.Name ?? "", Text = text, Kind = kind, Where = where, StarId = c?.Star.Id ?? -1 };
         Chronicle.Add(e);
-        if (Chronicle.Count > 4000) Chronicle.RemoveRange(0, 1000);
+        // memory holds 4000 lines: the oldest routine ones go first, turning points stay (Lasting)
+        if (Chronicle.Count > 4000)
+        {
+            int drop = 1000;
+            if (Chronicle.RemoveAll(x => !Lasting(x.Kind) && drop-- > 0) == 0) Chronicle.RemoveRange(0, 1000);
+        }
         Logged?.Invoke(e);
     }
+    // news of a kind humanity has dozens of a decade in a vast empire (its risings, crackdowns, captured teams) makes the
+    // chronicle a line every interface.<years key> at most, and that line counts the ones not told since (only the
+    // chronicle reads it: not saved)
+    readonly Dictionary<string, (double At, int Untold)> _news = new();
+
+    /// <summary>-1 when the news slot of `kind` is taken (the event is counted for the next line), else how many went untold before it.</summary>
+    int News(string kind, string yearsKey)
+    {
+        var (at, untold) = _news.GetValueOrDefault(kind);
+        if (Year < at) { _news[kind] = (at, untold + 1); return -1; }
+        _news[kind] = (Year + WarData.D("interface", yearsKey), 0);
+        return untold;
+    }
+
+    /// <summary>" One other X has done it since the last word." for the line that ends a quiet spell, or "".</summary>
+    static string Untold(int n, string one, string many, string what) => n == 0 ? "" : n == 1 ? $" One {one} {what} since the last word." : $" {n} {many} {what} since the last word.";
+
     public void Fx(Colony c, string kind, Body b) => Effect?.Invoke(c, kind, b);
     public void Milestone(Colony c, string title, string text, string focus = "seat")
     {
@@ -249,9 +275,10 @@ public partial class Simulation
         {
             string leaving = top == civ.Drive ? second : top;
             civ.Inf[leaving] *= 0.4f; civ.ShiftInf(civ.Drive, 0);
-            // with an interstellar presence, the far colonies break away as a new polity
-            var frontier = civ.Colonies.Where(c => !c.Home).OrderByDescending(c => c.Star.Pos.DistanceTo(home.Star.Pos)).Take(Math.Max(0, (int)(civ.Colonies.Count / (3 * civ.M.Admin)))).ToList();
-            if (frontier.Count >= 2)
+            // with an interstellar presence, the far colonies break away as a new polity: those already restless (strikes
+            // or worse), and not within the cooldown of the last split. Otherwise the faction leaves as emigrants instead.
+            var frontier = civ.Colonies.Where(c => !c.Home).OrderByDescending(c => c.Star.Pos.DistanceTo(home.Star.Pos)).Take(Math.Max(0, (int)(civ.Colonies.Count / (3 * civ.M.Admin)))).Where(c => c.Unrest >= 2).ToList();
+            if (frontier.Count >= 2 && Year >= civ.NextRising)
             {
                 var split = Separate(civ, frontier, leaving, peaceful: civ.Ethic != "Ruthless");
                 Log(home, $"Schism. {frontier.Count} colonies of the {civ.Faction(leaving)} declare themselves {split.Name}, and close their borders.", "loss", null);
@@ -575,7 +602,7 @@ public partial class Simulation
         // a player whose polity is gone goes on leading the largest human polity left
         if (civ.Main && Civs.Where(c => c.Human && !c.Dead && c.Colonies.Count > 0).OrderByDescending(c => c.Colonies.Count).FirstOrDefault() is { } heir)
             SwitchPlayer(heir);
-        Log(Humanity.Colonies.FirstOrDefault(), $"{Narrative2.Called(civ, true)} {(civ.Main ? "are" : "are")} gone. The chronicle keeps their name.", "loss", null);
+        Log(Humanity.Colonies.FirstOrDefault(), $"{Narrative2.Called(civ, true)} are gone. The chronicle keeps their name.", "loss", null);
     }
 
     public void Completed(Colony c) { c.Star.Capture = 1; }
