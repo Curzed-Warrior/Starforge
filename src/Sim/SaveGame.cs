@@ -78,7 +78,7 @@ public static class SaveGame
     static readonly JsonSerializerOptions Opt = new() { IncludeFields = true, WriteIndented = false, NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
     /// <summary>Save now, on this thread.</summary>
-    public static void Save(Simulation sim, int seed, string path) => Write(Snapshot(sim, seed), ProjectSettings.GlobalizePath(path));
+    public static void Save(Simulation sim, int seed, string path) { WaitForWrite(); Write(Snapshot(sim, seed), ProjectSettings.GlobalizePath(path)); }
 
     /// <summary>
     /// Save in two halves (the autosave): the snapshot is taken here, on the main thread, and is cheap; serialising it
@@ -89,8 +89,14 @@ public static class SaveGame
     {
         var d = Snapshot(sim, seed);
         string full = ProjectSettings.GlobalizePath(path);
-        return System.Threading.Tasks.Task.Run(() => Write(d, full));
+        WaitForWrite();
+        return _writing = System.Threading.Tasks.Task.Run(() => Write(d, full));
     }
+
+    /// <summary>The save being written on a worker, if any: loads and other saves wait for it, so none reads or swaps a
+    /// file it is still moving into place.</summary>
+    static System.Threading.Tasks.Task _writing;
+    static void WaitForWrite() { try { _writing?.Wait(); } catch (AggregateException) { } _writing = null; }
 
     // copies of the live objects the simulation goes on changing, so a save being written elsewhere shares nothing with
     // it: member-wise, with every nested list and dictionary copied too (each of these classes holds values otherwise)
@@ -192,6 +198,7 @@ public static class SaveGame
     /// <summary>Load a save; if it is unreadable, its backup (the save before it) instead.</summary>
     public static (Simulation Sim, int Seed) Load(string path)
     {
+        WaitForWrite();
         try { return LoadFile(path); }
         catch (Exception e) when (e is JsonException || e is System.IO.IOException || e is NullReferenceException)
         {

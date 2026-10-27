@@ -404,7 +404,7 @@ public partial class Simulation
             return false;
         }
         // a civ that holds nothing any more cannot refuse its own collapse
-        if (byWins && collapseOnOffer && terms.Count == 1)
+        if (byWins && collapseOnOffer && terms.Count == 1 && terms[0].Id == "collapse")
         {
             EndWarWith(w, s == 0, terms);
             return true;

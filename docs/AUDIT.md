@@ -161,7 +161,10 @@ identical before and after. A run of seed 20610 now takes **35.9 s**, inside the
 step. Caching the ordered `want` list per colony until its civ's `Megas`, `Sites` or emergency state changes is the
 obvious next step. It touches the construction rules, so it is left for a reviewed pass.
 
-### 6. An autosave stalls a late game for 120 to 210 ms (proposal)
+### 6. An autosave stalls a late game for 120 to 210 ms (fixed)
+
+*Fixed on fracture-followup: `SaveGame.Snapshot` copies the game on the main thread (19 to 30 ms late game) and
+`Write` serialises it on a worker; the autosave skips cinematics and keeps the atomic write and `.bak`.*
 
 A late-game save is about 6 MB of JSON and takes 120 to 210 ms on the main thread, every five minutes. Loading takes
 650 to 750 ms. The design brief cares about camera glides and cinematics, and this is a visible hitch in the middle of
@@ -169,14 +172,20 @@ one. The DTO shares live lists (fleets, wars, yards and so on) with the simulati
 another thread. The fix is to build the DTO with copied lists on the main thread, which is cheap, then serialise and
 write it on a worker. Skip the autosave while a cinematic is running.
 
-### 7. History is lost on reload (part addressed)
+### 7. History is lost on reload (fixed)
+
+*Fixed on fracture-followup: era, breakthrough, omen and voice lines (`Simulation.Lasting`) are kept for the whole
+game, in memory and in saves; only routine lines are capped.*
 
 Memory holds the last 4,000 chronicle lines, but a save keeps only the last **800**. A long game reloaded keeps about
 five centuries at most, and in a busy one only a few decades. The new **Shift+F6 history export** (below) writes the whole
 in-memory chronicle out. A real fix would keep milestones and era lines indefinitely in the save, and cap only the
 routine lines.
 
-### 8. Smaller items
+### 8. Smaller items (fixed)
+
+*Fixed on fracture-followup: `FreeFlight`, `Works.HiddenParts`, `TechScreen.TechName`, the `Extinct` text, `regime`
+keeps the conscience, movements counted once; the outliner no longer measured distances (ebef67f).*
 
 - `Simulation.Extinct` logs `{(civ.Main ? "are" : "are")}`, a leftover branch with the same text on both sides.
 - `regime` peace terms call `SetDrive`, which resets the loser's conscience to its ethic's default. Its drift history is

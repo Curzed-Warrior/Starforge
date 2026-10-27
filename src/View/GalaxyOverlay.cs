@@ -281,7 +281,7 @@ void fragment(){
     {
         _warIm.ClearSurfaces();
         var wm = _warMarkers.Multimesh;
-        if (Works.HiddenParts.Contains("warmap")) { wm.VisibleInstanceCount = 0; _frontDraw.Clear(); return; }
+        if (Works.HiddenParts.Contains("warmap")) { wm.VisibleInstanceCount = 0; _frontDraw.Clear(); _frontVersion++; return; }
         var buf = _warBuf;
         int k = 0;
         double year = _sim.Year;
@@ -324,7 +324,7 @@ void fragment(){
         // fronts: open wars, and ceasefires (a closed war whose front stays frozen) unless a later war between the two
         // leads replaced it. Gathered here with the markers; DrawFronts draws them every frame.
         if (any) _warIm.SurfaceEnd();
-        _frontDraw.Clear();
+        _frontDraw.Clear(); _frontVersion++;
         var superseded = SupersededWars();
         foreach (var w in _sim.Wars)
         {
@@ -345,6 +345,9 @@ void fragment(){
     }
 
     readonly List<(int From, int To, bool Mine, bool Ceasefire, bool Both)> _frontDraw = new();
+    // what the drawn front geometry was built for: rebuilt only when the fronts or the camera change
+    int _frontVersion, _frontDrawnVersion = -1;
+    Transform3D _frontCam; float _frontFov, _frontH;
     readonly HashSet<(int, int)> _pairs = new();
     readonly HashSet<(int, int)> _livePairs = new();
     readonly HashSet<int> _superseded = new();
@@ -377,10 +380,13 @@ void fragment(){
     /// </summary>
     void DrawFronts()
     {
+        var cam = _main.Cam;
+        float h = GetViewport().GetVisibleRect().Size.Y;
+        if (_frontDrawnVersion == _frontVersion && cam.GlobalTransform == _frontCam && cam.Fov == _frontFov && h == _frontH) return;
+        _frontDrawnVersion = _frontVersion; _frontCam = cam.GlobalTransform; _frontFov = cam.Fov; _frontH = h;
         _frontIm.ClearSurfaces();
         if (_frontDraw.Count == 0 || Works.HiddenParts.Contains("warmap")) return;
-        var cam = _main.Cam;
-        float pxAngle = Mathf.DegToRad(cam.Fov) / Mathf.Max(GetViewport().GetVisibleRect().Size.Y, 1f);
+        float pxAngle = Mathf.DegToRad(cam.Fov) / Mathf.Max(h, 1f);
         var camPos = cam.GlobalPosition;
         var red = Ui.Danger.SrgbToLinear();      // the shader writes linear colour; the HUD red is sRGB
         _frontIm.SurfaceBegin(Mesh.PrimitiveType.Lines);
@@ -441,12 +447,12 @@ void fragment(){
             int o = k++ * 20;
             buf[o] = 0;                                                // basis x column = course (the shader turns the chevron along it)
             if (!f.Moving) continue;
+            if (_carrying.Contains(f.Id) && k < MaxWarMarkers) Put(buf, k++, p, col.Lerp(Colors.White, 0.4f), 1f, ArmyAboardSize, 4f, 0f, 0f);
             var to = _main.StarWorld(_sim.Gal.Stars[f.To]);
-            // arrived, or setting out for where it is: no course to turn the chevron along
+            // arrived, or setting out for where it is: no course to turn the chevron along, and no course line
             if ((to - p).LengthSquared() < 1e-12f) continue;
             var course = (to - p).Normalized();
             buf[o] = course.X; buf[o + 4] = course.Y; buf[o + 8] = course.Z;
-            if (_carrying.Contains(f.Id) && k < MaxWarMarkers) Put(buf, k++, p, col.Lerp(Colors.White, 0.4f), 1f, ArmyAboardSize, 4f, 0f, 0f);
             if (!any) { _warIm.SurfaceBegin(Mesh.PrimitiveType.Lines); any = true; }
             _warIm.SurfaceSetColor(new Color(col.R, col.G, col.B, CourseAlpha)); _warIm.SurfaceAddVertex(p);
             _warIm.SurfaceSetColor(new Color(col.R, col.G, col.B, 0.0f)); _warIm.SurfaceAddVertex(to);

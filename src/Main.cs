@@ -1073,7 +1073,12 @@ public partial class Main : Node3D
         // cinematic, which waits for it to end
         if (_autosave is { IsCompleted: true })
         {
-            if (_autosave.IsFaulted) GD.PrintErr("autosave failed: " + _autosave.Exception?.GetBaseException().Message); else _hud.Toast("Autosaved");
+            if (_autosave.IsFaulted)
+            {
+                string why = _autosave.Exception?.GetBaseException().Message;
+                GD.PrintErr("autosave failed: " + why); _hud.Toast("Autosave failed: " + why);
+            }
+            else _hud.Toast("Autosaved");
             _autosave = null;
         }
         if (_autosaveT > 300f && _autosave == null && !_cine.Busy && !Sim.Holding && !_simFaulted && _shot == null && _seqN == 0)

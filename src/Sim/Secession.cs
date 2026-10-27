@@ -55,12 +55,12 @@ public partial class Simulation
     /// </summary>
     public Civ Separate(Civ parent, List<Colony> bloc, string drive, bool peaceful, string name = null, bool civilWar = false, [System.Runtime.CompilerServices.CallerMemberName] string caller = "")
     {
-        StrifeCount("split:" + (parent.Human ? "H" : "A") + caller);
         // never the capital (a splinter's is its first system), and never a system an enemy occupies
         var capital = CapitalOf(parent);
         bloc = bloc.Where(c => c.Civ == parent && c != capital && !c.Home && c.OccupiedBy < 0).Distinct().ToList();
         if (bloc.Count >= parent.Colonies.Count) bloc = bloc.Take(parent.Colonies.Count - 1).ToList();
         if (bloc.Count == 0) return null;
+        StrifeCount("split:" + (parent.Human ? "H" : "A") + caller);
         double share = Math.Min(0.5, bloc.Sum(c => c.Pop) / Math.Max(parent.Pop, 1e-9));
         var s = Splinter(parent, drive, bloc);
         if (name != null) s.Name = name;

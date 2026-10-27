@@ -54,6 +54,9 @@ public static class AuditTests
             foreach (var w in sim.Wars) { w.Claims.Add(12345); w.Battles += 9; }
             foreach (var a in sim.Armies) a.Troops += 5;
             h.Policy.Weight["x"] = 3; h.Policy.AskAfter["y"] = 9; h.Truce[o.Id] = 9999;
+            h.Yard.Add(new Slip { Hull = 0, Progress = 0.5 }); foreach (var s in h.Yard) s.Progress += 0.1;
+            h.Barracks.Add(new Training { Troops = 1, Left = 2 }); h.Academy.Add(new Training { Troops = 0, Left = 3 });
+            h.Culture.Martial += 0.1f; h.Colonies[0].Stock *= 2; h.Colonies[0].Raised.Add("snapshot-test");
             sim.Warp(5);
             SaveGame.Write(snap, Godot.ProjectSettings.GlobalizePath("user://selftest_snap_b.json"));
             string Read(string p) => System.IO.File.ReadAllText(Godot.ProjectSettings.GlobalizePath(p));

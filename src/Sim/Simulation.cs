@@ -191,6 +191,7 @@ public partial class Simulation
 
     // ---------- Logging ----------
     double _foreignNewsAt;
+    int _chronicleCap = 4000;
     /// <summary>A turning point (a new era, a breakthrough, an omen, the voice's work): kept for the whole game, in
     /// memory and in saves, where routine lines are capped.</summary>
     public static bool Lasting(string kind) => kind is "era" or "break" or "omen" or "god";
@@ -215,11 +216,12 @@ public partial class Simulation
         }
         var e = new LogEntry { Year = Year, Civ = civ, Colony = c, System = c?.Sys.Name ?? "", Text = text, Kind = kind, Where = where, StarId = c?.Star.Id ?? -1 };
         Chronicle.Add(e);
-        // memory holds 4000 lines: the oldest routine ones go first, turning points stay (Lasting)
-        if (Chronicle.Count > 4000)
+        // memory holds 4000 lines and more turning points: the oldest routine ones go first, turning points stay
+        // (Lasting); a chronicle of nothing but turning points raises the cap instead of losing any
+        if (Chronicle.Count > _chronicleCap)
         {
             int drop = 1000;
-            if (Chronicle.RemoveAll(x => !Lasting(x.Kind) && drop-- > 0) == 0) Chronicle.RemoveRange(0, 1000);
+            if (Chronicle.RemoveAll(x => !Lasting(x.Kind) && drop-- > 0) == 0) _chronicleCap = Chronicle.Count + 1000;
         }
         Logged?.Invoke(e);
     }
@@ -277,10 +279,9 @@ public partial class Simulation
             civ.Inf[leaving] *= 0.4f; civ.ShiftInf(civ.Drive, 0);
             // with an interstellar presence, the far colonies break away as a new polity: those already restless (strikes
             // or worse), and not within the cooldown of the last split. Otherwise the faction leaves as emigrants instead.
-            var frontier = civ.Colonies.Where(c => !c.Home).OrderByDescending(c => c.Star.Pos.DistanceTo(home.Star.Pos)).Take(Math.Max(0, (int)(civ.Colonies.Count / (3 * civ.M.Admin)))).Where(c => c.Unrest >= 2).ToList();
-            if (frontier.Count >= 2 && Year >= civ.NextRising)
+            var frontier = civ.Colonies.Where(c => !c.Home).OrderByDescending(c => c.Star.Pos.DistanceTo(home.Star.Pos)).Take(Math.Max(0, (int)(civ.Colonies.Count / (3 * civ.M.Admin)))).Where(c => c.Unrest >= 2 && c.OccupiedBy < 0).ToList();
+            if (frontier.Count >= 2 && Year >= civ.NextRising && Separate(civ, frontier, leaving, peaceful: civ.Ethic != "Ruthless") is { } split)
             {
-                var split = Separate(civ, frontier, leaving, peaceful: civ.Ethic != "Ruthless");
                 Log(home, $"Schism. {frontier.Count} colonies of the {civ.Faction(leaving)} declare themselves {split.Name}, and close their borders.", "loss", null);
                 if (civ.Main) Raise("Unrest", "Schism", $"{frontier.Count} colonies of the {civ.Faction(leaving)} break away as {split.Name}.", home);
                 return;

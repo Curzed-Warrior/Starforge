@@ -214,13 +214,13 @@ public static class FractureTests
         }),
         ("overstretched_hive_frays", () => {
             // a hive formed with little dissent holds while it is small, but a vast one frays all the same
-            var (sim, h) = Calm(); h.M.Hive = true; h.HiveSwing = 0;
+            var (sim, h) = Calm(); h.Techs.Add("S8"); h.ComputeMods(); h.HiveSwing = 0;
             sim.Warp(30);
-            SelfTest.Check(h.Colonies.All(c => !c.Holdout), "a small hive with no swing holds");
+            SelfTest.Check(h.M.Hive && h.Colonies.All(c => !c.Holdout), "a small hive with no swing holds");
             var from = h.Colonies.First(x => !x.Home);
             foreach (var st in sim.Gal.Stars.Where(st => st.Owner < 0 && st.Special == null && !st.Dead).Take((int)WarData.D("strife", "sprawl", "full")).ToList())
                 sim.Found(h, st, from, false);
-            for (int i = 0; i < 100 && h.Colonies.All(c => !c.Holdout); i++) { h.M.Hive = true; sim.Warp(1); }
+            for (int i = 0; i < 100 && h.Colonies.All(c => !c.Holdout); i++) sim.Warp(1);
             SelfTest.Check(h.Colonies.Any(c => c.Holdout), "a vast hive frays");
         }),
     };
