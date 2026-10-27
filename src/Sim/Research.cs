@@ -69,7 +69,7 @@ public partial class Simulation
     /// <summary>Beyond the spine, a tier opens once the tier below it is reasonably well known in that branch.</summary>
     public static bool TierOk(Civ civ, Tech t)
     {
-        if (t.Spine || t.Tier == 0) return true;
+        if (SpineLike(t) || t.Tier == 0) return true;
         // count only the tier below that this civ could still learn: an exclusive choice closes some doors for good
         int open = Defs.Techs.Count(x => x.B == t.B && x.Tier == t.Tier - 1 && !Closed(civ, x));
         int need = Math.Min(3, open);
@@ -78,6 +78,9 @@ public partial class Simulation
         foreach (var id in civ.Techs) { var k = Defs.TryTech(id); if (k != null && k.B == t.B && k.Tier == t.Tier - 1 && ++have >= need) return true; }
         return false;
     }
+
+    /// <summary>A spine tech, or a member of an exclusive group with one (its rivals for the same step are as open as it is).</summary>
+    public static bool SpineLike(Tech t) => t.Spine || t.Exclusive != null && Defs.ExclusiveGroups[t.Exclusive].Any(o => Defs.TryTech(o) is { Spine: true });
 
     /// <summary>Shut off for good by an exclusive choice already made (directly, or through every route to it).</summary>
     public static bool Closed(Civ civ, Tech t, int depth = 0)
@@ -161,8 +164,10 @@ public partial class Simulation
         // a keystone left waiting too long is forced into the hand
         foreach (var k in avail.Where(t => t.Keystone && civ.Pity.GetValueOrDefault(t.Id) >= pityAt).Take(handSize)) hand.Add(k);
         // the spine always gets a card: the old milestones keep their pace however wide the tree grows
-        // (the lowest tier first, so a slot shared by two spine branches advances both rather than racing one)
-        if (hand.Count < handSize && avail.Where(t => t.Spine && !hand.Contains(t)).OrderBy(t => t.Tier).ThenByDescending(t => Weight(civ, t, slot, restless) * civ.Rnd(0.8f, 1.2f)).FirstOrDefault() is { } sp) hand.Add(sp);
+        // (the lowest tier first, so a slot shared by two spine branches advances both rather than racing one); where the
+        // spine step is one of an exclusive choice, the card is the member this council leans to, not always the spine's
+
+        if (hand.Count < handSize && avail.Where(t => SpineLike(t) && (t.Exclusive == null || Lean(civ, t.Exclusive) == t.Id) && !hand.Contains(t)).OrderBy(t => t.Tier).ThenByDescending(t => Weight(civ, t, slot, restless) * civ.Rnd(0.8f, 1.2f)).FirstOrDefault() is { } sp) hand.Add(sp);
         var pool = avail.Select((t, i) => (t, w: ws[i])).Where(p => !hand.Contains(p.t) && p.w > 0).ToList();
         while (hand.Count < handSize && pool.Count > 0)
         {

@@ -32,6 +32,10 @@ public partial class EmpireScreen
         {
             h.Add(w.Id); h.Add((int)w.Score); h.Add((int)w.ExhA); h.Add((int)w.ExhB); h.Add(w.Battles);
             h.Add(_askOpen.Contains(w.Id));
+            // what else the card shows: who is in it, what is occupied, who holds each claim
+            h.Add(w.A.Count); h.Add(w.B.Count);
+            foreach (var id in w.A.Concat(w.B)) { var c = Sim.Civs[id]; h.Add(c.Dead); foreach (var col in c.Colonies) if (col.OccupiedBy >= 0) h.Add(col.Star.Id * 31 + col.OccupiedBy); }
+            foreach (var id in w.Claims) h.Add(Sim.ColonyAt(id) is { } col ? Sim.Holder(col).Id : -1);
         }
         return h.ToHashCode();
     }
@@ -40,6 +44,9 @@ public partial class EmpireScreen
     {
         var me = Sim.Humanity;
         var open = Sim.Wars.Where(w => w.Open && Simulation.Side(w, me) >= 0).ToList();
+        // forget the term pickers of wars that have ended (by a proposal or in the simulation)
+        _askOpen.RemoveWhere(id => !open.Any(w => w.Id == id));
+        foreach (var id in _ask.Keys.Where(id => !open.Any(w => w.Id == id)).ToList()) _ask.Remove(id);
         int sig = WarsSig(me, open);
         if (sig == _warsSig) return;
         _warsSig = sig;
@@ -69,6 +76,9 @@ public partial class EmpireScreen
     }
 
     string CivName(Civ c, bool cap = false) => Narrative2.Called(c, cap) + (c.Dead ? " (gone)" : "");
+
+    /// <summary>The civs fighting beside a side's leader.</summary>
+    List<string> Allies(War w, int side) => (side == 0 ? w.A : w.B).Skip(1).Select(id => CivName(Sim.Civs[id])).ToList();
     string StarName(int id) => id >= 0 && id < Sim.Gal.Stars.Count ? Sim.Gal.Stars[id].Name : "?";
 
     static string Stakes(string tier) => tier switch
@@ -97,16 +107,17 @@ public partial class EmpireScreen
         v.AddThemeConstantOverride("separation", 6);
         p.AddChild(v);
 
-        // header: who, why, how long
+        // header: who and how long; then why, and who fights beside each side
         var head = new HBoxContainer();
         head.AddChild(Ui.Label(CivName(enemy, true), 17, enemy.Color, true));
-        var allies = (s == 0 ? w.B : w.A).Skip(1).Select(id => CivName(Sim.Civs[id])).ToList();
-        if (allies.Count > 0) head.AddChild(Ui.Label($"with {string.Join(", ", allies)}", 13, Ui.Text));
+        var allies = Allies(w, 1 - s);
+        if (allies.Count > 0) head.AddChild(Mid(Ui.Label($"with {string.Join(", ", allies)}", 13, Ui.Text)));
         head.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
         int years = (int)Math.Max(0, Sim.Year - w.Start);
-        head.AddChild(Ui.Label($"{reason.Name} · {Stakes(reason.Tier)} · {years} {(years == 1 ? "year" : "years")} at war", 13, Ui.Warm));
+        head.AddChild(Mid(Ui.Label($"{years} {(years == 1 ? "year" : "years")} at war", 13, Ui.Warm)));
         v.AddChild(head);
-        var ours = (s == 0 ? w.A : w.B).Skip(1).Select(id => CivName(Sim.Civs[id])).ToList();
+        v.AddChild(Ui.Label($"{reason.Name} · {Stakes(reason.Tier)}", 13, Ui.Warm));
+        var ours = Allies(w, s);
         if (ours.Count > 0) v.AddChild(Ui.Label($"On our side: {string.Join(", ", ours)}", 12, Ui.Dim));
 
         // score and exhaustion
@@ -138,9 +149,11 @@ public partial class EmpireScreen
         }
         double kgOurs = s == 0 ? w.LostKgA : w.LostKgB, kgTheirs = s == 0 ? w.LostKgB : w.LostKgA;
         var brow = new HFlowContainer();
+        brow.AddThemeConstantOverride("h_separation", 14);
         brow.AddChild(Caption("Battles"));
-        string recent = counted < w.Battles ? $" (hulls from the last {counted})" : "";
-        brow.AddChild(Mid(Ui.Label($"{w.Battles}: won {won}, lost {lost}  ·  ships lost: ours {hullsOurs:0} hulls ({Hud.Sci(kgOurs)} kg), theirs {hullsTheirs:0} hulls ({Hud.Sci(kgTheirs)} kg){recent}", 13)));
+        // hulls are counted from the battle records, which keep only recent battles; the mass lost is the whole war's
+        string recent = counted < w.Battles ? $" (hulls from the last {counted} battles, mass over the whole war)" : "";
+        brow.AddChild(Mid(Ui.Label($"{w.Battles}: won {won}, lost {lost}  ·  lost: ours {hullsOurs:#,0} hulls, {Hud.Sci(kgOurs)} kg; theirs {hullsTheirs:#,0} hulls, {Hud.Sci(kgTheirs)} kg{recent}", 13)));
         if (last != null)
         {
             var star = last.Star;
@@ -187,11 +200,15 @@ public partial class EmpireScreen
         {
             var crow = new HFlowContainer();
             crow.AddChild(Caption(s == 0 ? "Our claims" : "Their claims"));
-            foreach (var id in w.Claims)
+            for (int i = 0; i < w.Claims.Count; i++)
             {
+                int id = w.Claims[i];
                 var col = Sim.ColonyAt(id);
+                // held by our side, lost to theirs, or gone (the colony no longer exists)
                 bool held = col != null && Simulation.Side(w, Sim.Holder(col)) == s;
-                crow.AddChild(Mid(Ui.Label($"{StarName(id)}: {(held ? "held" : "lost")}", 13, held ? Good : Ui.Danger)));
+                string state = col == null ? "gone" : held ? "held" : "lost";
+                if (i > 0) crow.AddChild(Mid(Ui.Label("·", 13, Ui.Dim)));
+                crow.AddChild(Mid(Ui.Label($"{StarName(id)}: {state}", 13, col == null ? Ui.Dim : held ? Good : Ui.Danger)));
             }
             v.AddChild(crow);
         }
@@ -199,7 +216,11 @@ public partial class EmpireScreen
         // the peace on offer, and the buttons
         var (weWin, terms) = Sim.TermsOnOffer(w, me);
         string names = string.Join(", ", terms.Select(t => t.Name.ToLower()));
-        v.AddChild(Ui.Label(terms.Count == 0 ? "No peace is on offer yet." : weWin ? $"They would give: {names}." : $"They demand: {names}.", 14, weWin ? Good : Ui.Warm));
+        var prow = new HBoxContainer();
+        prow.AddChild(Caption("Peace"));
+        prow.AddChild(Mid(Ui.Label(terms.Count == 0 ? "No peace is on offer yet." : weWin ? $"They would give: {names}." : $"They demand: {names}.", 14,
+            terms.Count == 0 ? Ui.Text : weWin ? Good : Ui.Warm)));
+        v.AddChild(prow);
 
         bool can = Sim.CanPropose(w, me, out string why);
         var row = new HBoxContainer();
@@ -232,6 +253,8 @@ public partial class EmpireScreen
                 arow.AddChild(cb);
             }
             var send = Ui.Button("Propose", "Put these terms to them");
+            send.Disabled = chosen.Count == 0;          // nothing ticked is no offer
+            foreach (var cb in arow.GetChildren().OfType<CheckBox>()) cb.Toggled += _ => send.Disabled = chosen.Count == 0;
             send.Pressed += () =>
             {
                 var ask = reason.Terms.Where(chosen.Contains).Select(WarModel.TermById).ToList();

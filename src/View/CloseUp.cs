@@ -36,7 +36,6 @@ public partial class CloseUp : Node3D
     float[] _shipBuf = new float[FlightMax * 12];
     float[] _glowBuf = new float[GlowMax * 20];
 
-    public static string Hide = "";
     const float Range = 16f;   // in planet radii
 
     public void Setup(SystemView sv) { _sv = sv; }
@@ -48,7 +47,7 @@ public partial class CloseUp : Node3D
         _c = c;
         BodyView best = null;
         float bestK = Range;
-        if (c != null && !Hide.Contains("closeup"))
+        if (c != null && !Works.HiddenParts.Contains("closeup"))
             foreach (var bv in _sv.Bodies)
             {
                 if (bv.B.Kind == BodyKind.Belt || bv.B.Mined >= 0.999f) continue;

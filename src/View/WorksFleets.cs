@@ -266,7 +266,7 @@ void fragment(){
         _nBeam = _nSpark = _nDrive = _nLight = _nRing = 0;
         _hulls.Clear(); _sideHulls[0].Clear(); _sideHulls[1].Clear();
         var sim = _sim;
-        if (sim != null && !Hide.Contains("fleets")) LayOut(sim, c);
+        if (sim != null && !HiddenParts.Contains("fleets")) LayOut(sim, c);
         foreach (var p in _hullPools.Values)
         {
             if (p.N > 0) p.Mi.Multimesh.Buffer = p.Buf;
@@ -348,8 +348,8 @@ void fragment(){
                 foreach (var sq in _sqs)
                 {
                     int key = style * Ships.Classes + sq.Hull;
-                    int alive = Ships.DrawCount(sq.Ships, left);
-                    // the squadron's ghosts: what it draws with its share of the losses beyond what it draws without them
+                    // the squadron's ghosts: what it draws with its share of the losses beyond what it draws without them.
+                    // They come first out of the budget: they are the battle's losses, and each must get to blow up
                     int g = 0;
                     if (ghosts > 0)
                     {
@@ -357,10 +357,11 @@ void fragment(){
                         if (!_ghostLatch.TryGetValue(gk, out g) && !_ghostLatched)
                         {
                             int with = Ships.DrawCount(sq.Ships + (total > 0 ? ghosts * sq.Ships / total : 0), left);
-                            _ghostLatch[gk] = g = Math.Max(0, with - alive);
+                            _ghostLatch[gk] = g = Math.Max(0, with - Ships.DrawCount(sq.Ships, left));
                         }
-                        g = Math.Min(g, Math.Max(0, left - alive));
+                        g = Math.Min(g, Math.Max(0, left));
                     }
+                    int alive = Ships.DrawCount(sq.Ships, left - g);
                     if (alive + g > 0) { any = true; _entries.Add(new Entry { Civ = civId, Fleet = f.Id, Key = key, N = alive + g, Alive = alive, LenKm = Ships.LengthKm(sq.Hull), Ghost = g > 0 ? GhostKey(f.Id, sq.Hull) : 0 }); }
                     left -= alive + g;
                 }
@@ -457,7 +458,7 @@ void fragment(){
         float width = 0, depth = 0;
         int start = 0;
         int lastFleet = int.MinValue;
-        float fz = 0, fwidth = 0; int row = 0;
+        float fz = 0, fwidth = 0, lastSp = 0; int row = 0;
         // first pass: each fleet's wedge in its own frame, x relative to the wedge's spine
         var spans = _spans; spans.Clear();
         for (int i = 0; i < _entries.Count; i++)
@@ -467,7 +468,7 @@ void fragment(){
             if (e.Fleet != lastFleet)
             {
                 if (lastFleet != int.MinValue) { spans.Add((start, _local.Count, fwidth)); _spanFleet.Add(lastFleet); }
-                lastFleet = e.Fleet; start = _local.Count; fz = 0; fwidth = 0; row = 0;
+                lastFleet = e.Fleet; start = _local.Count; fz = 0; fwidth = 0; row = 0; lastSp = 0;
             }
             float half = Half(e.LenKm, dcam);
             // 3 hull lengths apart, or 3 spans for a hull wider or taller than it is long
@@ -476,7 +477,10 @@ void fragment(){
             while (placed < e.N)
             {
                 int inRow = Math.Min(2 * row + 1, e.N - placed);
-                fz -= row == 0 && placed == 0 && _local.Count == start ? 0 : sp;
+                // the first rank of a squadron behind another's is spaced for both classes, so small hulls behind big
+                // ones don't sit inside them
+                float pitch = placed == 0 && lastSp > 0 ? Math.Max(sp, 0.5f * (sp + lastSp)) : sp;
+                fz -= row == 0 && placed == 0 && _local.Count == start ? 0 : pitch;
                 for (int k = 0; k < inRow; k++)
                 {
                     float x = (k - (inRow - 1) * 0.5f) * sp;
@@ -488,6 +492,7 @@ void fragment(){
                 fwidth = Math.Max(fwidth, inRow * sp);
                 placed += inRow; row++;
             }
+            lastSp = sp;
             depth = Math.Max(depth, -fz);
         }
         if (lastFleet != int.MinValue) { spans.Add((start, _local.Count, fwidth)); _spanFleet.Add(lastFleet); }
@@ -530,15 +535,19 @@ void fragment(){
         return depth;
     }
 
-    /// <summary>Adds a hull to this frame's list. One right in front of the lens would fill the screen as a smear, so it
-    /// is kept (the battle's bookkeeping counts it) but marked culled: not drawn, not firing, not a target.</summary>
+    /// <summary>Adds a hull to this frame's list. One the lens is all but inside would fill the screen as a smear, so it
+    /// is kept (the battle's bookkeeping counts it) but marked culled: not drawn, not firing, not a target. Only that
+    /// close (CullRatio): a big hull merely near the camera stays, rather than popping out of view.</summary>
     void AddHull(int key, D3 at, Vector3 fwd, float half, Color empire, long ghost)
     {
         Drawn(at, out _, out var tv);
-        bool culled = half > Frame.Cam.DistanceTo(tv) * 0.08f;
+        bool culled = half > Frame.Cam.DistanceTo(tv) * CullRatio;
         _hulls.Add(new HullAt { Key = key, At = at, Fwd = fwd, Half = half, Empire = empire, Culled = culled, Ghost = ghost });
     }
 
+    const float CullRatio = 0.6f;
+    /// <summary>A missile's arc height, as a share of the distance it flies.</summary>
+    const float MissileArc = 0.06f;
     static readonly Color NavRed = new(1f, 0.12f, 0.06f), NavGreen = new(0.15f, 1f, 0.3f), Lamp = new(1f, 0.8f, 0.5f);
 
     /// <summary>Every hull still flying into its pool, with its drive glow and (human hulls, near enough to show them)
@@ -699,19 +708,21 @@ void fragment(){
                 }
                 case "missile":
                 {
-                    // missiles arc across; point defence picks a third of them off on the way in
+                    // missiles arc across, half over the lines and half under, low enough to stay between them; point
+                    // defence picks a third of them off on the way in
                     bool shot = Hash(i, cyc, 9) % 3 == 0;
                     float end = shot ? 0.72f : 1f;
+                    float arc = (Hash(i, cyc, 11) & 1) == 0 ? MissileArc : -MissileArc;
                     if (ph <= end)
                     {
                         // a bright head on a short exhaust trail, along its arc
-                        D3 At(float p) => from.Lerp(to, p) + Vector3.Up * (Mathf.Sin(Mathf.Pi * p) * dist * 0.12f);
+                        D3 At(float p) => from.Lerp(to, p) + Vector3.Up * (Mathf.Sin(Mathf.Pi * p) * dist * arc);
                         var head = At(ph);
                         var back = At(Math.Max(ph - 0.06f, 0f));
                         Beam(back, head, new Color(1f, 0.75f, 0.45f), 0.8f, ShapeTail, sh.Half * 0.05f, 0.0025f);
                         Spark(head, sh.Half * 0.18f, new Color(1f, 0.97f, 0.9f), 1f, 0.6f);
                     }
-                    if (shot && ph > end && ph < end + 0.08f) Spark(from.Lerp(to, end) + Vector3.Up * (Mathf.Sin(Mathf.Pi * end) * dist * 0.12f), tg.Half * 0.6f, new Color(1f, 1f, 0.9f), 1f - (ph - end) / 0.08f);
+                    if (shot && ph > end && ph < end + 0.08f) Spark(from.Lerp(to, end) + Vector3.Up * (Mathf.Sin(Mathf.Pi * end) * dist * arc), tg.Half * 0.6f, new Color(1f, 1f, 0.9f), 1f - (ph - end) / 0.08f);
                     if (!shot && ph > 0.96f) Spark(to, tg.Half * 0.8f, new Color(1f, 0.6f, 0.3f), (ph - 0.96f) * 25f);
                     break;
                 }
@@ -724,7 +735,10 @@ void fragment(){
                     float sgn = Mathf.Sin(Mathf.Tau * ph) >= 0 ? 1f : -1f;
                     var c0 = from.Lerp(to, e * 0.9f);
                     var pd = path / dist * sgn;
-                    var lat = pd.Cross(Vector3.Up).Normalized();
+                    // across the path (any other axis when the path runs straight up or down)
+                    var lat = pd.Cross(Vector3.Up);
+                    if (lat.LengthSquared() < 1e-6f) lat = pd.Cross(Vector3.Right);
+                    lat = lat.Normalized();
                     float spread = dist * 0.012f + sh.Half * 0.5f;
                     for (int k = 0; k < 6; k++)
                     {

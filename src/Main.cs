@@ -11,7 +11,8 @@ namespace Starforge;
 /// <summary>
 /// Entry point. One continuous world: the viewed star sits at the origin, the galaxy is scaled by G around it.
 /// Command line (after "--"): --shot=abs.png [--shotframe=N] --focus=Earth|Sun|Galaxy --dist=D --yaw=Y --pitch=P
-/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] [--battlerun=SECONDS] [--stagelayers] stages a fight here
+/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] [--battlerun=SECONDS] [--stagelayers] stages a fight here;
+/// --stageunrest, --stageslips and --intpage=N stage the Interior, Military and Economy tabs' rarer states
 /// (--stagelayers also stages the galaxy map's war markers nearby: an occupied, a blockaded and a both system, a moving
 /// fleet carrying an army and an idle fleet)
 /// </summary>
@@ -32,6 +33,8 @@ public partial class Main : Node3D
     public static float TitleYaw = -0.6f;
     int _speedBeforeMenu = 2;
     float _autosaveT;
+    /// <summary>The autosave being written on a worker (SaveGame.SaveInBackground), until it is finished and reported.</summary>
+    System.Threading.Tasks.Task _autosave;
     /// <summary>The simulation threw (SimCrashed): time stays stopped and nothing is saved over the good saves until one is loaded.</summary>
     bool _simFaulted;
     public const string SavePath = "user://starforge_save.json", AutoPath = "user://starforge_autosave.json";
@@ -114,7 +117,7 @@ public partial class Main : Node3D
             else if (a == "--auto") Autoplay = true;
             else if (a.StartsWith("--tyaw=")) TitleYaw = F(a[7..]);
             else if (a.StartsWith("--sky=")) { var q = a[6..].Split(','); GalaxyView.SkyOverride = q.Select(F).ToArray(); }
-            else if (a.StartsWith("--hide=")) Works.Hide = a[7..];
+            else if (a.StartsWith("--hide=")) Works.HiddenParts = a[7..];
             else if (a.StartsWith("--fx=")) _fx = a[5..];
             else if (a.StartsWith("--project=")) _forceProject = a[10..];
             else if (a.StartsWith("--terraform=")) _forceTerraform = F(a[12..]);
@@ -186,13 +189,13 @@ public partial class Main : Node3D
         Sim.Effect += (c, kind, b) =>
         {
             if (Warping || c == null) return;
-            if (kind == "arrival" && c.Civ.Main && Autoplay && !_cine.Busy && !_rig.Free && _directorT > 20f && c.Star != ViewStar) { TravelTo(c.Star); _pendingArrival = c; _directorT = 0; return; }
+            if (kind == "arrival" && c.Civ.Main && Autoplay && !_cine.Busy && !_rig.FreeFlight && _directorT > 20f && c.Star != ViewStar) { TravelTo(c.Star); _pendingArrival = c; _directorT = 0; return; }
             if (c.Star != ViewStar) return;
             SysView.Spectacle.Play(kind, c, b);
             if (kind is "flare" or "battle") _music?.Sfx("boom");
             if (kind is "arrival" or "comet") _music?.Sfx("shimmer");
             if (kind == "seedlaunch") _music?.Sfx("whoosh");
-            if (kind == "seedlaunch" && Autoplay && !_rig.Free) FollowLaunch();
+            if (kind == "seedlaunch" && Autoplay && !_rig.FreeFlight) FollowLaunch();
         };
         if (_shot == null) { _music = new Music(); AddChild(_music); Sim.Logged += e => { if (!Warping && (e.Civ.Main || e.Colony == Sim.Focus)) _music.Chime(e.Kind); }; }
 
@@ -682,6 +685,8 @@ public partial class Main : Node3D
         // a limited war, so the Wars tab offers peace and ceasefire
         var w = Sim.DeclareWar(me, foe, "border_claim") ?? Sim.WarBetween(me, foe);
         if (w == null) { GD.Print($"--stagebattle: no war possible with {foe.Name}"); return; }
+        // an existing war is used as it is: say so, since its stakes decide what the Wars tab offers
+        if (w.Reason != "border_claim") GD.Print($"--stagebattle: using the war already open with {foe.Name} ({w.Reason}, not border_claim)");
         Sim.SetManual(me, Area.Fleets, true); Sim.SetManual(foe, Area.Fleets, true);
         _nextBattleCine = Sim.Year + 40;            // no cinematic flying off to film it: the view stays on this battle
         if (OS.GetCmdlineUserArgs().Contains("--stagecommand")) me.Policy.Battle = BattleMode.Command;
@@ -835,7 +840,7 @@ public partial class Main : Node3D
                 case Key.Equal: case Key.KpAdd: SetSpeed(SpeedIdx + 1); break;
                 case Key.Minus: case Key.KpSubtract: SetSpeed(SpeedIdx - 1); break;
                 case Key.G: ToGalaxy(); break;
-                case Key.Tab: _rig.ToggleFree(); _hud.Toast(_rig.Free ? "Free flight · WASD fly · Q/E down/up · right-drag look · wheel speed · Shift ×10 · Ctrl ×0.1 · Tab to orbit" : "Orbit camera"); break;
+                case Key.Tab: _rig.ToggleFree(); _hud.Toast(_rig.FreeFlight ? "Free flight · WASD fly · Q/E down/up · right-drag look · wheel speed · Shift ×10 · Ctrl ×0.1 · Tab to orbit" : "Orbit camera"); break;
                 case Key.X: ToCore(); break;
                 case Key.V: _hud.Visible = !_hud.Visible; break;
                 case Key.M: ToggleMusic(); break;
@@ -845,7 +850,7 @@ public partial class Main : Node3D
                 case Key.N: _hud.ToggleBuild(); break;
                 case Key.H: if (ViewStar != _gal.Sol) TravelTo(_gal.Sol); else SelectBody(SysView.Sys.Find("Earth")); break;
                 case Key.C: _hud.ToggleChronicle(); break;
-                case Key.E when !_rig.Free: _hud.ToggleEmpire(EmpireScreen.TabOverview); break;
+                case Key.E when !_rig.FreeFlight: _hud.ToggleEmpire(EmpireScreen.TabOverview); break;
                 case Key.I: _hud.ToggleEmpire(EmpireScreen.TabInbox); break;
                 // Paradox-style: F1-F4, F6-F8 and F10 open the empire screen's tabs, Ctrl+F or / finds a system
                 case Key.F1: _hud.ToggleEmpire(EmpireScreen.TabOverview); break;
@@ -929,7 +934,7 @@ public partial class Main : Node3D
     /// <summary>When nothing has happened for a while, the director finds something worth looking at.</summary>
     void IdleTour()
     {
-        if (_rig.Free) return;                 // the director never takes the camera from someone flying it
+        if (_rig.FreeFlight) return;                 // the director never takes the camera from someone flying it
         var mine = Sim.Humanity.Colonies;
         int pick = _tour.Next(10);
         if (pick < 3 && mine.Count > 1)
@@ -976,7 +981,7 @@ public partial class Main : Node3D
             if (Autoplay) { ToGalaxy(); _rig.PitchT = -1.25f; _directorT = -40f; }
             return;
         }
-        if (!Autoplay || Warping || _cine.Busy || _rig.Free) return;
+        if (!Autoplay || Warping || _cine.Busy || _rig.FreeFlight) return;
         if (e.Where is string w && w == "visitor" && e.Colony?.Star == ViewStar) { OnLabelClicked("visitor"); _directorT = -15f; return; }
         if (e.Text.StartsWith("Breakthrough: Galactic Core Tap")) { ToCore(); _directorT = -40f; return; }
         if (e.Text.StartsWith("Breakthrough: Andromeda Ark") || e.Text.StartsWith("Type III")) { ToGalaxy(); _directorT = -40f; return; }
@@ -1064,7 +1069,20 @@ public partial class Main : Node3D
         _post.Update(_rig.Cam, SysView, dt);
         _moodT += dt;
         _autosaveT += dt;
-        if (_autosaveT > 300f && !Sim.Holding && !_simFaulted && _shot == null && _seqN == 0) { _autosaveT = 0; SaveGame.Save(Sim, _seed, AutoPath); _hud.Toast("Autosaved"); }
+        // the autosave takes its snapshot here and writes it on a worker (one at a time); never in the middle of a
+        // cinematic, which waits for it to end
+        if (_autosave is { IsCompleted: true })
+        {
+            if (_autosave.IsFaulted)
+            {
+                string why = _autosave.Exception?.GetBaseException().Message;
+                GD.PrintErr("autosave failed: " + why); _hud.Toast("Autosave failed: " + why);
+            }
+            else _hud.Toast("Autosaved");
+            _autosave = null;
+        }
+        if (_autosaveT > 300f && _autosave == null && !_cine.Busy && !Sim.Holding && !_simFaulted && _shot == null && _seqN == 0)
+        { _autosaveT = 0; _autosave = SaveGame.SaveInBackground(Sim, _seed, AutoPath); }
         if (_music != null && _moodT > 5f) { _moodT = 0; _music.Mood = Music.MoodFor(Sim); }
 
         if (_following != null && !IsInstanceValid(_following)) { _following = null; SelectStar(); }
@@ -1089,11 +1107,12 @@ public partial class Main : Node3D
         // tests: --open=empire|policies|systems|inbox|wars|military|economy|interior opens the empire screen; --manual=all|Research,Colonisation,... takes areas into the player's hands
         if (_frame == 10 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--open=")) is string op && Array.IndexOf(new[] { "empire", "policies", "systems", "inbox", "wars", "military", "economy", "interior" }, op[7..]) is int tab and >= 0)
             _hud.ToggleEmpire(tab);
-        // test: --stageunrest spreads grievance across the stages in four of the player's systems, two with a movement (skipped for a hive)
-        if (_frame == 5 && OS.GetCmdlineUserArgs().Contains("--stageunrest"))
+        // test: --stageunrest spreads grievance across the stages in four of the player's systems, two with a movement
+        // (skipped for a hive), and holds those values every frame after, so a later shot still shows them
+        if (_frame >= 5 && OS.GetCmdlineUserArgs().Contains("--stageunrest"))
         {
             var me = Sim.Humanity;
-            if (me.M.Hive) GD.Print("--stageunrest skipped: humanity is a hive");
+            if (me.M.Hive) { if (_frame == 5) GD.Print("--stageunrest skipped: humanity is a hive"); }
             else
             {
                 var pick = me.Colonies.Where(x => !x.Home).Take(4).ToList();
@@ -1101,10 +1120,22 @@ public partial class Main : Node3D
                 for (int i = 0; i < pick.Count; i++)
                 {
                     var c = pick[i]; c.Grievance = gv[i]; c.Unrest = st[i];
-                    if (i >= 2) { c.CauseKey ??= "poverty"; c.Cause ??= "it is poor beside the core's wealth"; Sim.Rise(c); }
+                    if (i >= 2 && c.Movement == null) { c.CauseKey ??= "poverty"; c.Cause ??= "it is poor beside the core's wealth"; Sim.Rise(c); }
                 }
             }
         }
+        // test: --stageslips holds the player's first slips waiting for materiel and sabotages the second shipyard system,
+        // so the Military and Economy tabs show both hold-ups (held every frame: the sim recomputes Waiting each step)
+        if (_frame >= 5 && OS.GetCmdlineUserArgs().Contains("--stageslips"))
+        {
+            var me = Sim.Humanity;
+            for (int i = 0; i < Math.Min(3, me.Yard.Count); i++) me.Yard[i].Waiting = true;
+            var yards = me.Colonies.Where(c => Sim.SlipsOf(c) > 0).Skip(1).FirstOrDefault();
+            if (yards != null && yards.YardDownUntil <= Sim.Year) yards.YardDownUntil = Sim.Year + 5;
+            if (_frame == 5 && yards == null) GD.Print("--stageslips: only one shipyard system, nothing to sabotage");
+        }
+        // test: --intpage=N shows page N (from 1) of the Interior tab
+        if (_frame == 12 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--intpage=")) is string ip && int.TryParse(ip[10..], out int pg)) _hud.EmpireInteriorPage(pg - 1);
         // test: --stagebattle puts Humanity's Home Fleet and the nearest alien fleet at the view star, at war, fights once and pauses
         if (_frame == 5 && (OS.GetCmdlineUserArgs().Contains("--stagebattle") || OS.GetCmdlineUserArgs().Contains("--stagecommand"))) StageBattle();
         if (_battleRunT >= 0 && (_battleRunT += dt) >= BattleRunTo()) { SpeedIdx = 0; _battleRunT = -1; }

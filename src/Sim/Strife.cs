@@ -20,6 +20,9 @@ public partial class Colony
     public bool Autonomy;
     /// <summary>Until when word of a crackdown elsewhere has already reached this system (not saved).</summary>
     internal double HeardCrackdown;
+    /// <summary>When its last movement laid down its arms (not saved): one back in arms within
+    /// strife.movementMemoryYears is the same movement.</summary>
+    internal double QuietSince = double.MinValue;
     /// <summary>The cause key behind Cause (strife.causes), recomputed yearly.</summary>
     public string CauseKey;
     /// <summary>The council has invested here: relief until this year.</summary>
@@ -34,6 +37,8 @@ public partial class Simulation
     /// <summary>Counts of strife events this game (movements, revolts, coups...), for the trace summary. Not saved.</summary>
     public readonly Dictionary<string, int> StrifeStats = new();
     void StrifeCount(string what) => StrifeStats[what] = StrifeStats.GetValueOrDefault(what) + 1;
+    /// <summary>Per civ id: the most systems it ever held, and how many splinters left it. For the trace summary. Not saved.</summary>
+    public readonly Dictionary<int, int> PeakSystems = new(), SplitsOf = new();
 
     // strife.* numbers, cached by (section, key) without building a path each time: every system's grievance reads a
     // dozen of them a year
@@ -97,6 +102,10 @@ public partial class Simulation
         return Math.Min(TravelYears(c.Civ, c.Star, capital.Star) / SD("lifetimeYears"), 1);
     }
 
+    /// <summary>How overstretched an empire is, 0..1: nothing up to strife.sprawl.from systems, fully at strife.sprawl.full.
+    /// Every civ alike: a vast empire's systems feel too far from anyone who decides, and a hive's link frays.</summary>
+    public double Sprawl(Civ civ) => Math.Clamp((civ.Colonies.Count - SD("sprawl", "from")) / (SD("sprawl", "full") - SD("sprawl", "from")), 0, 1);
+
     static double MeanIndustry(Civ civ) => civ.Colonies.Count == 0 ? 0 : civ.Colonies.Average(x => x.IndustryKg);
 
     /// <summary>Each cause of grievance (strife.causes) as the chronicle and the interface say it.</summary>
@@ -109,7 +118,7 @@ public partial class Simulation
         ["deposits"] = "its rare deposits feed other worlds' projects", ["occupied"] = "it is under enemy occupation",
         ["poverty"] = "it is poor beside the core's wealth", ["dread"] = "it lives in fear of the voice",
         ["mandatory"] = "its young are called up against their will", ["incited"] = "agitators from abroad are stirring it up",
-        ["hive"] = "it will not be joined to the hive",
+        ["hive"] = "it will not be joined to the hive", ["sprawl"] = "the empire has grown too vast to hear it",
     };
 
     /// <summary>Where this system's grievance is heading (0..100), and its biggest cause as a phrase.</summary>
@@ -125,7 +134,8 @@ public partial class Simulation
         => GrievanceWork(c, out causeKey, meanInd, exhaustion, capital, null);
 
     /// <summary>Every positive cause of a system's grievance, biggest first, then the relief as a negative entry.
-    /// The causes sum, times GovFactor, plus the relief (negative), clamped to 0..100, is GrievanceTarget.</summary>
+    /// The causes sum, times GovFactor (all but sprawl, which is not scaled), plus the relief (negative), clamped to 0..100,
+    /// is GrievanceTarget.</summary>
     public List<(string Key, string Phrase, double Points)> GrievanceCauses(Colony c)
     {
         var list = new List<(string Key, string Phrase, double Points)>();
@@ -136,12 +146,13 @@ public partial class Simulation
     double GrievanceWork(Colony c, out string causeKey, double meanInd, double exhaustion, Colony capital, List<(string, string, double)> causes)
     {
         var civ = c.Civ;
-        double best = 0, sum = 0; string top = null;
-        void Add(string key, double k)
+        double best = 0, sum = 0, flat = 0; string top = null;
+        // `felt`: scaled by how much the government feels its people (GovFactor); overstretch is not a feeling, it is reach
+        void Add(string key, double k, bool felt = true)
         {
             if (k <= 0) return;
             double v = SD("causes", key) * k;
-            sum += v;
+            if (felt) sum += v; else flat += v;
             causes?.Add((key, CausePhrase[key], v));
             if (v > best) { best = v; top = key; }
         }
@@ -158,6 +169,7 @@ public partial class Simulation
         Add("dread", civ.Dread);
         if (civ.MandatoryService && civ.Culture != null && civ.Culture.Duty < 0) Add("mandatory", 1);
         if (c.IncitedUntil > Year) Add("incited", 1);
+        Add("sprawl", Sprawl(civ), felt: false);
         bool holdout = c.Holdout && civ.M.Hive;
         if (holdout) Add("hive", 1);
         if (holdout) top = "hive";      // whatever else it resents, a holdout is in arms against the hive (and rises with the others)
@@ -169,7 +181,7 @@ public partial class Simulation
             causes.Sort((a, b) => b.Item3.CompareTo(a.Item3));
             causes.Add(("relief", "what eases it: its own order, faith, and investment", -relief));
         }
-        return Math.Clamp(sum * (holdout ? SD("gov", "holdout") : GovFactor(civ)) - relief, 0, 100);
+        return Math.Clamp(sum * (holdout ? SD("gov", "holdout") : GovFactor(civ)) + flat - relief, 0, 100);
     }
 
     /// <summary>
@@ -180,6 +192,7 @@ public partial class Simulation
     /// </summary>
     void StrifeStep(Civ civ, double dy)
     {
+        if (civ.Colonies.Count > PeakSystems.GetValueOrDefault(civ.Id)) PeakSystems[civ.Id] = civ.Colonies.Count;
         bool linkedOnly = civ.M.Hive && SD("gov", "hive") <= 0;
         if (linkedOnly)
         {
@@ -213,7 +226,7 @@ public partial class Simulation
             if (old >= 3 && c.Unrest < 3 && c.Movement != null)
             {
                 if (civ.Main) Log(c, $"{Cap(c.Movement)} lay down their arms. {c.Sys.Name} is quiet again.", "council", null);
-                c.Movement = null;
+                c.Movement = null; c.QuietSince = Year;
             }
         }
         RevoltStep(civ, dy);

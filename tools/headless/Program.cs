@@ -53,7 +53,10 @@ public static class Program
                 {
                     var t = Stopwatch.StartNew(); SaveGame.Save(sim, seed, "user://timed.json"); double ms = t.Elapsed.TotalMilliseconds;
                     t.Restart(); SaveGame.Load("user://timed.json"); double lms = t.Elapsed.TotalMilliseconds;
-                    GD.Print($"SAVETIME save={ms:0}ms load={lms:0}ms bytes={new FileInfo(Godot.FileAccess.Globalize("user://timed.json")).Length}");
+                    // the autosave's two halves: the snapshot holds up the frame, the write runs on a worker
+                    t.Restart(); var snap = SaveGame.Snapshot(sim, seed); double sms = t.Elapsed.TotalMilliseconds;
+                    t.Restart(); SaveGame.Write(snap, Godot.FileAccess.Globalize("user://timed.json")); double wms = t.Elapsed.TotalMilliseconds;
+                    GD.Print($"SAVETIME save={ms:0}ms load={lms:0}ms snapshot={sms:0}ms write={wms:0}ms bytes={new FileInfo(Godot.FileAccess.Globalize("user://timed.json")).Length}");
                 }
             }
             if (args.Contains("--savetest") && !Runs.SaveTest(sim, seed)) failed++;

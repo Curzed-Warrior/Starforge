@@ -48,7 +48,7 @@ public partial class Cinematics : Node
     public void Request(Moment mo)
     {
         if (_m.Warping) return;
-        if (!Enabled || _m.Rig.Free || mo.Focus is null or "none" or "galaxy")        // flying free: the title, but the camera stays yours
+        if (!Enabled || _m.Rig.FreeFlight || mo.Focus is null or "none" or "galaxy")        // flying free: the title, but the camera stays yours
         {
             if (mo.Title != null) _m.Hud.ShowMilestone(mo.Title, mo.Text);
             return;

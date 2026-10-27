@@ -22,7 +22,7 @@ public static class StrifeTests
             SelfTest.Check(t0 > sim.GrievanceTarget(c, out _) + 0.5 * WarData.D("strife", "causes", "levy") * sim.GovFactor(h), "shipping its industry away is resented");
         }),
         ("hive_feels_none", () => {
-            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.M.Hive = true;
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.Techs.Add("S8"); h.ComputeMods();
             foreach (var c in h.Colonies) c.Grievance = 80;
             sim.Warp(2);
             SelfTest.Check(h.Colonies.All(c => c.Grievance < 1 && c.Unrest == 0), "a hive has no grievance");

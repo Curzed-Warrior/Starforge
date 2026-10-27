@@ -426,19 +426,20 @@ void fragment(){
     // ---------- per frame ----------
     public void Sync(Colony c, Simulation sim) { _c = c; _sim = sim; }
 
-    public static string Hide = "";
+    /// <summary>Debug: parts of the scene to leave out (the --hide= flag), e.g. "swarm,traffic,closeup,mega".</summary>
+    public static string HiddenParts = "";
     public void Update(double year, float dt, Camera3D cam)
     {
         _clock += dt;
-        _swarm.Visible = !Hide.Contains("swarm"); _haze.Visible = !Hide.Contains("haze");
-        foreach (var cm in _classMesh) cm.Visible = !Hide.Contains("traffic");
-        _shipGlow.Visible = _trails.Visible = !Hide.Contains("traffic");
-        if (Hide.Contains("trails")) _trails.Visible = false;
-        if (Hide.Contains("shipglow")) _shipGlow.Visible = false;
-        _stations.Visible = _stationLights.Visible = !Hide.Contains("stations");
-        foreach (var hk in _habKinds) hk.Visible = !Hide.Contains("habs");
-        _habLights.Visible = !Hide.Contains("habs");
-        _streams.Visible = !Hide.Contains("streams");
+        _swarm.Visible = !HiddenParts.Contains("swarm"); _haze.Visible = !HiddenParts.Contains("haze");
+        foreach (var cm in _classMesh) cm.Visible = !HiddenParts.Contains("traffic");
+        _shipGlow.Visible = _trails.Visible = !HiddenParts.Contains("traffic");
+        if (HiddenParts.Contains("trails")) _trails.Visible = false;
+        if (HiddenParts.Contains("shipglow")) _shipGlow.Visible = false;
+        _stations.Visible = _stationLights.Visible = !HiddenParts.Contains("stations");
+        foreach (var hk in _habKinds) hk.Visible = !HiddenParts.Contains("habs");
+        _habLights.Visible = !HiddenParts.Contains("habs");
+        _streams.Visible = !HiddenParts.Contains("streams");
         var c = _c;
         // swarm
         double cap = c?.Capture ?? 0;

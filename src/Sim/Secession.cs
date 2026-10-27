@@ -53,18 +53,20 @@ public partial class Simulation
     /// fights a war of independence (side A the union, side B the rebels). The capital never leaves, and the parent
     /// keeps at least one system. Returns the new civ, or null when nothing could leave.
     /// </summary>
-    public Civ Separate(Civ parent, List<Colony> bloc, string drive, bool peaceful, string name = null, bool civilWar = false)
+    public Civ Separate(Civ parent, List<Colony> bloc, string drive, bool peaceful, string name = null, bool civilWar = false, [System.Runtime.CompilerServices.CallerMemberName] string caller = "")
     {
         // never the capital (a splinter's is its first system), and never a system an enemy occupies
         var capital = CapitalOf(parent);
         bloc = bloc.Where(c => c.Civ == parent && c != capital && !c.Home && c.OccupiedBy < 0).Distinct().ToList();
         if (bloc.Count >= parent.Colonies.Count) bloc = bloc.Take(parent.Colonies.Count - 1).ToList();
         if (bloc.Count == 0) return null;
+        StrifeCount("split:" + (parent.Human ? "H" : "A") + caller);
         double share = Math.Min(0.5, bloc.Sum(c => c.Pop) / Math.Max(parent.Pop, 1e-9));
         var s = Splinter(parent, drive, bloc);
         if (name != null) s.Name = name;
         if (parent.M.Hive) LeaveHive(s);
         parent.NextRising = Year + SD("revolt", "cooldownYears");      // however a split came, the parent has years before the next
+        SplitsOf[parent.Id] = SplitsOf.GetValueOrDefault(parent.Id) + 1;
         if (parent.Human) StrifeCount(peaceful ? "humanPeaceful" : civilWar ? "humanCivil" : "humanWar");
         var stars = bloc.Select(c => c.Star.Id).ToHashSet();
         double loyal = SD("revolt", "defectLoyalty");
@@ -72,7 +74,7 @@ public partial class Simulation
         {
             f.Civ = s.Id; f.Target = -1;
             foreach (var a in Armies) if (a.Fleet == f.Id) a.Civ = s.Id;
-            if (parent.Main) Log(bloc[0], $"Admiral {f.Admiral.Name} takes the {f.Name} over to {s.Name}.", "loss", null);
+            if (parent.Main) Log(bloc[0], $"Admiral {f.Admiral.Name} takes the {f.Name} over to {s.Name}.", "loss", null, about: parent);
         }
         foreach (var a in Armies) if (a.Civ == parent.Id && a.Fleet < 0 && a.To < 0 && stars.Contains(a.At)) a.Civ = s.Id;
         // the crews from the bloc's worlds take their share of every squadron with them (at most half the navy), and a
@@ -88,7 +90,7 @@ public partial class Simulation
         if (free.Squadrons.Count > 0) Fleets.Add(free);
         foreach (var c in bloc)
         {
-            c.Grievance = 20; c.Unrest = 0; c.Cause = null; c.CauseKey = null; c.Movement = null; c.Autonomy = false; c.InvestedUntil = 0; c.OccupiedBy = -1; c.Crackdowns = 0;
+            c.Grievance = 20; c.Unrest = 0; c.Cause = null; c.CauseKey = null; c.Movement = null; c.QuietSince = double.MinValue; c.Autonomy = false; c.InvestedUntil = 0; c.OccupiedBy = -1; c.Crackdowns = 0;
             Withdraw("interior:" + c.Star.Id);
         }
         string where = bloc.Count == 1 ? bloc[0].Sys.Name : $"{bloc.Count} systems";
@@ -98,13 +100,13 @@ public partial class Simulation
             s.Relations[parent.Id] = parent.Relations[s.Id] = -30 + 20;
             double truce = Year + F("truceYears");
             s.Truce[parent.Id] = truce; parent.Truce[s.Id] = truce;
-            Log(bloc[0], $"{where} leave {Narrative2.Called(parent)} in peace as {s.Name}. The council lets them go.", "loss", null);
+            Log(bloc[0], $"{where} leave {Narrative2.Called(parent)} in peace as {s.Name}. The council lets them go.", "loss", null, about: parent);
             if (parent.Main) Raise("Unrest", $"{Cap(s.Name)} leave", $"{where} have left in peace as {s.Name}.", bloc[0]);
         }
         else
         {
             Log(bloc[0], civilWar ? $"Civil war. {where} rise as {s.Name}, and {Narrative2.Called(parent)} is split down the middle."
-                                  : $"{where} rise as {s.Name}. {Narrative2.Called(parent, true)} will not let them go.", "loss", null);
+                                  : $"{where} rise as {s.Name}. {Narrative2.Called(parent, true)} will not let them go.", "loss", null, about: parent);
             DeclareWar(parent, s, "independence");
         }
         if (parent.Main)

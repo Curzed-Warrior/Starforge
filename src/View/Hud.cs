@@ -216,6 +216,7 @@ public partial class Hud : CanvasLayer
     /// <summary>Open the empire screen at a tab, leaving it open if it already shows that tab (a shortcut, not a toggle).</summary>
     public void OpenEmpire(int tab) { _empire.Open(tab); _chron.Visible = false; }
     public void ScrollEmpire(int px) => _empire.ScrollTab(px);
+    public void EmpireInteriorPage(int page) => _empire.InteriorPageTo(page);
     public void CloseEmpire() => _empire.Visible = false;
     public void ShowWar(int warId) { _empire.ShowWar(warId); _chron.Visible = false; }
 

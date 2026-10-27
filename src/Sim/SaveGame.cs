@@ -77,9 +77,53 @@ public static class SaveGame
 
     static readonly JsonSerializerOptions Opt = new() { IncludeFields = true, WriteIndented = false, NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
-    public static void Save(Simulation sim, int seed, string path)
+    /// <summary>Save now, on this thread.</summary>
+    public static void Save(Simulation sim, int seed, string path) { WaitForWrite(); Write(Snapshot(sim, seed), ProjectSettings.GlobalizePath(path)); }
+
+    /// <summary>
+    /// Save in two halves (the autosave): the snapshot is taken here, on the main thread, and is cheap; serialising it
+    /// (about 6 MB of JSON late in a game) and writing it run on a worker, so the frame does not wait for them. Returns
+    /// the worker's task: one save at a time, so the caller waits for it to finish before the next.
+    /// </summary>
+    public static System.Threading.Tasks.Task SaveInBackground(Simulation sim, int seed, string path)
     {
-        var d = new SaveDto
+        var d = Snapshot(sim, seed);
+        string full = ProjectSettings.GlobalizePath(path);
+        WaitForWrite();
+        return _writing = System.Threading.Tasks.Task.Run(() => Write(d, full));
+    }
+
+    /// <summary>The save being written on a worker, if any: loads and other saves wait for it, so none reads or swaps a
+    /// file it is still moving into place.</summary>
+    static System.Threading.Tasks.Task _writing;
+    static void WaitForWrite() { try { _writing?.Wait(); } catch (AggregateException) { } _writing = null; }
+
+    // copies of the live objects the simulation goes on changing, so a save being written elsewhere shares nothing with
+    // it: member-wise, with every nested list and dictionary copied too (each of these classes holds values otherwise)
+    static readonly Func<object, object> Shallow = (Func<object, object>)Delegate.CreateDelegate(typeof(Func<object, object>),
+        typeof(object).GetMethod("MemberwiseClone", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
+    static T Clone<T>(T x) where T : class => x == null ? null : (T)Shallow(x);
+    static List<T> Copy<T>(List<T> xs) where T : class => xs?.Select(Clone).ToList();
+    static List<Fleet> Copy(List<Fleet> fs) => fs.Select(f => { var c = Clone(f); c.Squadrons = Copy(f.Squadrons); c.Admiral = Clone(f.Admiral); return c; }).ToList();
+    static List<War> Copy(List<War> ws) => ws.Select(w => { var c = Clone(w); c.A = new(w.A); c.B = new(w.B); c.Claims = new(w.Claims); return c; }).ToList();
+    static Policy Copy(Policy p)
+    {
+        var c = Clone(p);
+        c.Manual = (bool[])p.Manual.Clone(); c.Weight = new(p.Weight); c.Approved = new(p.Approved); c.Declined = new(p.Declined);
+        c.PauseOn = new(p.PauseOn); c.AskAfter = new(p.AskAfter);
+        return c;
+    }
+
+    /// <summary>
+    /// The whole save as data owned by nobody else: every list and dictionary is a copy, and the live objects the
+    /// simulation keeps changing (fleets, armies, teams, wars, yards, policy) are deep copies, so it can be serialised
+    /// on another thread while the game runs on.
+    /// </summary>
+    public static SaveDto Snapshot(Simulation sim, int seed)
+    {
+        // the chronicle: every turning point, and the last 800 routine lines
+        int skip = sim.Chronicle.Count(e => !Simulation.Lasting(e.Kind)) - 800;
+        return new SaveDto
         {
             Seed = seed, StarCount = sim.Gal.Stars.Count, Year = sim.Year, AnsweredAt = sim.AnsweredAt, ArkYear = sim.ArkYear, TypeIII = sim.TypeIIIAnnounced,
             Civs = sim.Civs.Select(c => new CivDto
@@ -95,13 +139,14 @@ public static class SaveGame
                 CrisisAt = new(c.CrisisAt), GateP = new(c.GateP), ActAt = new(c.ActAt), Gates = new(c.Gates), Path = c.Path, Exalted = c.Exalted, Fallen = c.Fallen,
                 Custodian = c.Custodian, Imperial = c.Imperial, Strain = c.Strain, NextApoRoll = c.NextApoRoll, NextExaltedAct = c.NextExaltedAct, WyrmUntil = c.WyrmUntil,
                 OvermindUntil = c.OvermindUntil, NextYearly = c.NextYearly, LastYearly = c.LastYearly, VoiceRelation = c.VoiceRelation, Overlord = c.Overlord?.Id ?? -1,
-                Federation = c.Federation, Age = c.Age, Policy = c.Policy,
+                Federation = c.Federation, Age = c.Age, Policy = Copy(c.Policy),
                 Culture = new[] { c.Culture.Martial, c.Culture.Duty, c.Culture.Resolve }, MandatoryService = c.MandatoryService, Mobilisation = c.Mobilisation,
                 MilShare = c.MilShare, MilFrom = c.MilFrom, MilSince = c.MilSince, Efficiency = c.Efficiency, Materiel = c.Materiel, Manpower = c.Manpower,
-                WarStrain = c.WarStrain, Yard = c.Yard, Barracks = c.Barracks, Truce = c.Truce, TributeTo = c.TributeTo, TributeUntil = c.TributeUntil,
-                JuntaUntil = c.JuntaUntil, Academy = c.Academy,
+                WarStrain = c.WarStrain, Yard = Copy(c.Yard), Barracks = Copy(c.Barracks), Truce = new(c.Truce), TributeTo = c.TributeTo, TributeUntil = c.TributeUntil,
+                JuntaUntil = c.JuntaUntil, Academy = Copy(c.Academy),
             }).ToList(),
-            Fleets = sim.Fleets, Armies = sim.Armies, NextFleetId = sim.NextFleetId, NextArmyId = sim.NextArmyId, Teams = sim.Teams, NextTeamId = sim.NextTeamId, Wars = sim.Wars, NextWarId = sim.NextWarId,
+            Fleets = Copy(sim.Fleets), Armies = Copy(sim.Armies), NextFleetId = sim.NextFleetId, NextArmyId = sim.NextArmyId, Teams = Copy(sim.Teams), NextTeamId = sim.NextTeamId,
+            Wars = Copy(sim.Wars), NextWarId = sim.NextWarId,
             Colonies = sim.Colonies.Select(c => new ColonyDto
             {
                 Civ = c.Civ.Id, Star = c.Star.Id, Home = c.Home, Complete = c.Complete, ProjectDone = c.ProjectDone, VisitorDone = c.VisitorDone,
@@ -125,7 +170,7 @@ public static class SaveGame
                 HasSplinter = c.Splinter.HasValue, SplFaction = c.Splinter?.Faction, SplPop = c.Splinter?.Pop ?? 0, SplAt = c.Splinter?.At ?? 0, SplBack = c.Splinter?.Back ?? 0, SplReturned = c.Splinter?.Returned ?? false,
             }).ToList(),
             Ships = sim.Ships.Select(s => new ShipDto { Civ = s.Civ.Id, Origin = s.Origin.Id, Target = s.Target.Id, FromStar = s.From?.Star.Id ?? -1, Depart = s.Depart, Arrive = s.Arrive, Name = s.Name }).ToList(),
-            Log = sim.Chronicle.Skip(Math.Max(0, sim.Chronicle.Count - 800)).Select(e => new LogDto { Year = e.Year, Civ = e.Civ.Id, Star = e.StarId, System = e.System, Text = e.Text, Kind = e.Kind }).ToList(),
+            Log = sim.Chronicle.Where(e => Simulation.Lasting(e.Kind) || skip-- <= 0).Select(e => new LogDto { Year = e.Year, Civ = e.Civ.Id, Star = e.StarId, System = e.System, Text = e.Text, Kind = e.Kind }).ToList(),
             Timeline = sim.Timeline.Select(t => new[] { t.Year, t.K, t.Pop, t.Systems }).ToList(),
             Mined = sim.Systems.OrderBy(kv => kv.Key.Id).Where(kv => kv.Value.All().Any(b => b.Mined > 0)).ToDictionary(kv => kv.Key.Id, kv => kv.Value.All().Where(b => b.Mined > 0).ToDictionary(b => b.Name, b => b.Mined)),
             Stars = sim.Edited.OrderBy(st => st.Id).Select(st => new StarDto { Id = st.Id, Seed = st.Seed, X = st.Pos.X, Y = st.Pos.Y, Z = st.Pos.Z, Lum = st.Lum, Temp = st.Temp, Dead = st.Dead, Kindled = st.Kindled, Name = st.Name, Cls = st.Cls, Special = st.Special }).ToList(),
@@ -137,9 +182,14 @@ public static class SaveGame
             Worlds = sim.Systems.OrderBy(kv => kv.Key.Id).Where(kv => kv.Value.All().Any(b => b.Greening > 0 || b.Ignited || b.Orbit0 >= 0)).ToDictionary(kv => kv.Key.Id,
                 kv => kv.Value.All().Where(b => b.Greening > 0 || b.Ignited || b.Orbit0 >= 0).ToDictionary(b => b.Name, b => new[] { b.Greening, b.Ignited ? 1f : 0f, b.Orbit, b.Period, b.Orbit0 })),
         };
+    }
+
+    /// <summary>Serialise a snapshot and write it to `full` (an OS path). Touches nothing of the game: safe on any thread.</summary>
+    public static void Write(SaveDto d, string full)
+    {
         // write beside the save and swap it in, keeping the last good one as .bak: a crash or a full disk mid-write
         // (the autosave runs every five minutes) must never leave the only save half-written
-        string full = ProjectSettings.GlobalizePath(path), tmp = full + ".tmp", bak = full + ".bak";
+        string tmp = full + ".tmp", bak = full + ".bak";
         System.IO.File.WriteAllText(tmp, JsonSerializer.Serialize(d, Opt));
         if (System.IO.File.Exists(full)) System.IO.File.Copy(full, bak, true);
         System.IO.File.Move(tmp, full, true);
@@ -148,6 +198,7 @@ public static class SaveGame
     /// <summary>Load a save; if it is unreadable, its backup (the save before it) instead.</summary>
     public static (Simulation Sim, int Seed) Load(string path)
     {
+        WaitForWrite();
         try { return LoadFile(path); }
         catch (Exception e) when (e is JsonException || e is System.IO.IOException || e is NullReferenceException)
         {

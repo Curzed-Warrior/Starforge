@@ -1,47 +1,68 @@
 # To do
 
-## Humanity never ends a game fractured (War and Strife §7)
+Re-measured 2026-10-28 on branch `fracture-followup` (six acceptance seeds 20610, 7, 4242, 1, 99, 2026, `--warp=940
+--trace`, run one at a time in Godot; fracture rate from 24 seeds with `tools/fracrate.sh`). Before/after table:
+`python tools/seedtable.py BEFORE_DIR AFTER_DIR` on the output of `tools/seeds.sh DIR`.
 
-Found 2026-10-18 on master @ 2b2fe50. Not fixed yet.
+## War and Strife §7: fracture
 
-**Cause.** Humanity always researches S8 "Hive Consensus" between 2328 and 2437, at 6–34 systems. A hive shuts off
-every fracture channel: `StrifeStep` zeroes grievance (Strife.cs, `civ.M.Hive` branch), `Coup`/`Revolution` return
-(Coups.cs), `Election` skips the schism (Simulation.cs). Humanity never splinters before that either. Every revolt in
-STRIFESTATS is an alien civ's, because the counters cover all civs.
+- [x] **Humanity always became a hive.** Fixed twice over: the vote with holdouts (follow-up session, 47f881d), and now
+      the research fix this file proposed: Hive Consensus's exclusive rivals open with the spine and only the member the
+      council leans to is forced into the hand (`Simulation.SpineLike`). Humanity is a hive in half of games
+      (12 of 24 sampled).
+- [x] **The revolt ladder never split humanity.** It does now, colonies against the core: `SPLITSTATS` shows
+      `HRevoltStep` splits in 14 of 24 seeds (holdouts in hive games, sprawl and levy in the others).
+- [x] **`movements` was inflated** (16k–29k a game). A movement broken up by troops, or laid down within
+      `strife.movementMemoryYears` (25), is the same movement when it climbs back. Now 2.9k–9.4k.
+- [x] **The chronicle hid secession lines.** `Separate` logs for the parent (`Log(..., about: parent)`).
+- [x] **Runaway empires without fracture.** New cause `sprawl` (`strife.sprawl.from` 150 → `full` 600 systems, up to
+      +40 grievance, not damped by government) and overstretched hives fray even after a clean vote. Every civ that
+      peaks above 400 systems now splits at least once (`EMPIRESTATS`).
+- [x] **Seeds with no revolt / too few battles.** Every seed has 42–107 revolts and 1,391–9,077 battles.
+- [x] **Run time.** 19–37 s per seed in Godot (seed 7 was 42.9 s). Self-tests 180/180 (Godot), `--savetest` equal at
+      300, 700 and 939.
+- [x] **Election schisms split humanity in nearly every non-hive game** (found this session: 24 of 24 seeds fractured).
+      With the owner's agreement a schism now splits off only frontier colonies already at strikes or worse, and
+      respects the split cooldown; otherwise the losing faction leaves as emigrants.
 
-**Why S8 is certain.** `ascS` = {S8, ASC-S3b, ASC-S3c}. `Lean` picks one at random, so hive should be 1 in 3. But S8 is
-a spine tech: `PickResearch` forces it into every hand, and `TierOk` exempts it. ASC-S3b and ASC-S3c need 3 known tier-7
-S techs, which humanity never has. So S8 wins even when `Lean` picks another member.
+Still open:
 
-- [ ] **Fix (no steering):** in `src/Sim/Research.cs`, make a tech that shares an exclusive group with a spine tech count
-      as spine in `TierOk`, and force only the member `Lean` picked into the hand. Tried in a throwaway build: 4 of 6
-      seeds fractured (20610, 7, 1, 99), 2 did not (4242, 2026, where `Lean` rolled S8). Still to check: run time
-      under ~40 s and `--warp=300 --savetest`.
-- [ ] The revolt ladder (`Secession.RevoltStep`) produced 0 human splinters even without the hive. Every human split
-      in the test came from an election schism. Spec §4.7's colonies-against-the-core split does not break humanity yet.
-- [ ] The `movements` counter is probably inflated (16k–107k per game). `Rise()` seems to fire again every time a
-      system climbs back to insurgency.
-- [ ] The chronicle hides secession lines: `Separate` logs at `bloc[0]` after the system has moved to the new splinter,
-      which has not met humanity and is not at war with it yet, so `Log`'s relevance filter drops the line.
+- [ ] **Five of the six acceptance seeds fracture** (only 99 stays whole; 2 of 6 before). Across 24 seeds, 8 stay
+      whole, all of them non-hive. In a hive game humanity always ends split: the vote's holdouts or the sprawl fray
+      give it at least one small splinter. Fracture is still left to chance (no steering), but if "some seeds whole"
+      should hold for the six, the hive side is the lever (`strife.hive.sprawlFray`, `frayPerYear`, `splitShare`).
+- [ ] **Sprawl puts a big humanity on strike.** In seed 20610 at 2961, 438 of 452 human systems are at strikes (sprawl
+      +27): strikes stop shipping industry to great works. Spec-consistent ("drifts apart if overstretched"), but watch
+      great-work pace in late games and consider whether self-rule should relieve sprawl.
+- [ ] **Chronicle per century is 148–230** (target 100–200): seeds 4242 (211), 20610 (219) and 1 (230) run over. The
+      rest is varied foreign news and humanity's research lines.
+- [ ] **Review leftovers (parallel review of this branch).** `hive_is_one_choice_of_three` checks `SpineLike` and
+      `TierOk` but not the hand builder that forces only the leaned member; several tests `return` (pass) when a seed
+      has too few colonies instead of reporting a skip.
+- [ ] **Hive splinters are tiny.** Many human splits in hive games are 1–3 systems (holdouts rising alone). They count
+      as fracture in `STRIFESTATS`.
 
-Full diagnosis, instrumentation diff and seed table: `fracture-diagnosis.md` in the Claude side-session notes
-folder (outside the repo, may not persist; everything needed to act is above).
+## docs/AUDIT.md
 
-### Other stage 3 acceptance gaps (plan 2026-10-19-infighting.md Task 7, spec §7)
+- [x] Finding 6, autosave hitch: `SaveGame.Snapshot` (main thread, owns its data) + `Write` (worker), autosave via
+      `SaveInBackground`, never during a cinematic; atomic write and `.bak` kept. Main-thread cost late game 19–30 ms
+      (was 120–245 ms whole save). `--savetime` prints both halves.
+- [x] Finding 7, history lost on reload: turning points (`Simulation.Lasting`: era, break, omen, god) are kept for the
+      whole game in memory and in saves; only routine lines are capped (800 in a save, oldest routine first in memory).
+- [x] Finding 8: `CameraRig.FreeFlight`; the three `Hide` statics are `Works.HiddenParts` (`--hide=closeup` and
+      `mega` now work too); `TechScreen.TechName`; `Extinct` text; `regime` terms keep the loser's conscience. The
+      outliner's all-pairs war distance was already gone (ebef67f). Game build: 0 warnings.
 
-Measured on the baseline runs of 2026-10-18 (master @ 2b2fe50, six seeds, `--warp=940 --trace`).
+## Stage 5 deferred interface minors (docs/superpowers/notes/interface/ledger.md)
 
-- [ ] **No revolt in two seeds.** "Every seed has movements and at least one revolt somewhere" fails: 20610 and 7 have
-      `revolts=0`.
-- [ ] **Runaway empires that never fracture.** "No runaway empires without fracture" fails: in 20610 the Hegemony ends
-      with 999 systems and Hask with 1024, with 0 revolts; in 7 the Concord ends with 1374 with 0 revolts. Humanity
-      itself reaches 868–968 systems as a hive. In seed 99 the Vessh sat at strikes for centuries (levy the top cause)
-      without reaching open revolt.
-- [ ] **Too few battles in two seeds.** Stage 2's bar (hundreds of battles) fails: 20610 has 5 wars and 65 battles,
-      7 has 19 wars and 173 battles. Seed 20610 endings are only compromise and collapse.
-- [ ] **Not yet checked:** real time under ~40 s per seed (the runs were in parallel, so not timed), `--selftest`,
-      `--warp=300 --savetest`, `--warp=700 --savetest`.
-- [ ] Record every tuning change and its effect in the ledger (Task 7 Step 3), then commit (Step 5).
+Fixed in 0bc7b98 (final review) or by this branch, except these, judged no change:
 
-Already met: Sol uprising before 2300 (seed 7: 2107, seed 99: 2102); chronicle at most ~300 lines a century
-(91–234); `nobattle` under a quarter of ended wars in every seed.
+- [ ] "Bursts on both sides" (Task 7): the ledger already calls it the accepted reading of the brief.
+- [ ] Hulls at the size floor read as noise from the default Earth view (Task 7): the floor is the zoomed-out stand-in
+      by design; culling them would also hide distant battles.
+- [ ] battle_close framing, battle_alien overlap and the grey smudge (Task 7) did not show in this branch's battle
+      shots (`--stagebattle --focus=battle`); re-check with alien hull models built.
+- [ ] 27 other files are CRLF in the index (only Main.cs and WorksFleets.cs were named and converted).
+
+Measured, no action: fireball fill-rate at 1600×900, vsync off, is about 15% (80–94 fps during the blasts against
+~97 paused and ~110 after).

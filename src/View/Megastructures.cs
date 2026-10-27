@@ -107,7 +107,6 @@ public partial class Megastructures : Node3D
         AddChild(_beacons);
     }
 
-    public static string Hide = "";
 
     bool Has(Colony c, string id) => id == "starbase" || c.Civ.M.Megas.Contains(id) || Force.Contains(id);
     /// <summary>Test hook: pretend these great works are known.</summary>
@@ -131,7 +130,7 @@ public partial class Megastructures : Node3D
         if (cam != null) _camLocal = (Frame.Sys(cam.GlobalPosition) - _sv.Offset).F;      // the camera in this system's coordinates
         _nb = 0;
         var on = new HashSet<string>();
-        if (c != null && c.Seat != null && !Hide.Contains("mega"))
+        if (c != null && c.Seat != null && !Works.HiddenParts.Contains("mega"))
         {
             var seat = c.Seat;
             float S = Mathf.Clamp(OrbitOf(seat) / 70f, 0.5f, 3f);           // the system's own scale, Sol = 1
@@ -191,7 +190,7 @@ public partial class Megastructures : Node3D
     /// <summary>Place the structures about this frame's origin (after the camera has moved).</summary>
     public void Apply()
     {
-        if (Works.Hide.Contains("megaglow")) foreach (var (node, _, _) in _placed) foreach (var mi in node.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>()) if (IsGlow(mi)) mi.Visible = false;
+        if (Works.HiddenParts.Contains("megaglow")) foreach (var (node, _, _) in _placed) foreach (var mi in node.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>()) if (IsGlow(mi)) mi.Visible = false;
         foreach (var (node, at, scale) in _placed) Frame.Place(node, Frame.View(_sv.Offset + at), scale);
         _beacons.Multimesh.VisibleInstanceCount = 0;
         if (_nb > 0) _beacons.Multimesh.Buffer = _bb;

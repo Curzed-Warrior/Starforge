@@ -28,7 +28,7 @@ public partial class CameraRig : Node3D
 
     // ---------- free flight ----------
     /// <summary>Roaming the system on your own: WASD to fly, mouse to look, wheel to change speed.</summary>
-    public bool Free { get; private set; }
+    public bool FreeFlight { get; private set; }
     D3 _freePos;
     float _freeSpeed = 1f;                      // system units per second, scaled by the wheel
     public float FreeSpeed => _freeSpeed;
@@ -38,8 +38,8 @@ public partial class CameraRig : Node3D
 
     public void ToggleFree()
     {
-        Free = !Free;
-        if (Free)
+        FreeFlight = !FreeFlight;
+        if (FreeFlight)
         {
             _freePos = Frame.Sys(Cam.GlobalPosition);
             // fly at a speed that suits what we were looking at: a tenth of its distance per second
@@ -114,7 +114,7 @@ public partial class CameraRig : Node3D
     /// </summary>
     public void FlyTo(Func<D3> target, float endDist, float minDist, float duration = -1f)
     {
-        if (Free) { Free = false; FreeChanged?.Invoke(); }
+        if (FreeFlight) { FreeFlight = false; FreeChanged?.Invoke(); }
         _flyFrom = _smoothTarget;
         Target = target;
         MinDist = minDist;
@@ -141,7 +141,7 @@ public partial class CameraRig : Node3D
         if (!UserControl) return;
         if (e is InputEventMouseButton mb)
         {
-            if (Free)
+            if (FreeFlight)
             {
                 if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed) _freeSpeed *= 1.35f;
                 else if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) _freeSpeed /= 1.35f;
@@ -160,7 +160,7 @@ public partial class CameraRig : Node3D
         {
             var d = mm.Position - _lastMouse;
             _lastMouse = mm.Position;
-            if (Free)
+            if (FreeFlight)
             {
                 _fYaw -= d.X * 0.004f;
                 _fPitch = Mathf.Clamp(_fPitch - d.Y * 0.004f, -1.55f, 1.55f);
@@ -178,7 +178,7 @@ public partial class CameraRig : Node3D
     /// <summary>Move the camera for this frame and re-centre the view's origin on what it looks at.</summary>
     public void Step(float dt)
     {
-        if (Free) { StepFree(dt); return; }
+        if (FreeFlight) { StepFree(dt); return; }
         if (UserControl)
         {
             float k = 1.2f * dt;

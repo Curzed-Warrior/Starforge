@@ -55,6 +55,42 @@ public static class InterfaceTests
             var st = sim.TermsOnOffer(w, h).Terms;
             SelfTest.Check(st.Count == 1 && st[0].Id == "ceasefire", "a stalemate on limited stakes offers a ceasefire");
         }),
+        ("interior_answer_closes_proposal", () => {
+            // answering from the Interior tab closes the inbox's proposal for that movement with the same answer
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.M.Hive = false;
+            h.Policy.Manual[(int)Area.Interior] = true;
+            var c = h.Colonies.FirstOrDefault(x => !x.Home);
+            if (c == null) return;
+            c.Grievance = 70; c.Unrest = 3; c.Movement = null; h.Policy.AskAfter.Remove("interior:" + c.Star.Id);
+            sim.Rise(c);
+            var open = sim.Alerts.FirstOrDefault(a => a.Key == "interior:" + c.Star.Id && !a.Done);
+            SelfTest.Check(open != null, "a movement under manual Interior waits in the inbox");
+            SelfTest.Check(sim.AnswerFromInterior(c, Simulation.Answer.SelfRule) && c.Autonomy && open.Done, "the Interior's answer is the proposal's answer");
+            SelfTest.Check(h.Policy.AskAfter["interior:" + c.Star.Id] >= sim.Year + Simulation.AskAgainYears - 1e-9, "and the movement waits AskAgainYears");
+            c.Movement = null;
+            SelfTest.Check(!sim.AnswerFromInterior(c, Simulation.Answer.Wait), "no movement, nothing to answer");
+        }),
+        ("interior_pages", () => {
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            int n = h.Colonies.Count(c => !c.Home);
+            if (n < 3) return;
+            var (rows, page, pages, count) = Simulation.InteriorPage(h, "Name", 99, 2);
+            SelfTest.Check(count == n && pages == (n + 1) / 2 && page == pages - 1 && rows.Count == n - 2 * (pages - 1), "the last page, clamped");
+            var all = Enumerable.Range(0, pages).SelectMany(p => Simulation.InteriorPage(h, "Name", p, 2).Rows).ToList();
+            SelfTest.Check(all.Count == n && all.Distinct().Count() == n, "the pages hold every system once");
+            SelfTest.Check(all.Zip(all.Skip(1)).All(p => string.Compare(p.First.Star.Name, p.Second.Star.Name, StringComparison.OrdinalIgnoreCase) <= 0), "sorted by name");
+            var g = Simulation.InteriorPage(h, "Grievance", 0, 1000).Rows;
+            SelfTest.Check(g.Zip(g.Skip(1)).All(p => p.First.Grievance >= p.Second.Grievance) && g.All(c => !c.Home), "by grievance, capital apart");
+        }),
+        ("collapse_of_gone_enemy_accepted", () => {
+            // a winner asking the collapse of an enemy that holds nothing any more gets it, however fresh the enemy is
+            var (sim, h, o, w) = BorderWar();
+            foreach (var c in o.Colonies) c.OccupiedBy = h.Id;
+            w.Score = 90; w.ExhB = 0;
+            var (wins, offer) = sim.TermsOnOffer(w, h);
+            SelfTest.Check(wins && offer.Count == 1 && offer[0].Id == "collapse", "collapse is the peace on offer");
+            SelfTest.Check(sim.ProposeTerms(w, h, offer, out var why) && !w.Open, $"and it is accepted ({why})");
+        }),
         ("propose_accept_and_refuse", () => {
             var (sim, h, o, w) = BorderWar();
             w.Score = 60; w.ExhB = 70;
@@ -112,9 +148,12 @@ public static class InterfaceTests
             c.Autonomy = false; h.LevyOut[c] = 1;
             var causes = sim.GrievanceCauses(c);
             double target = sim.GrievanceTarget(c, out _);
-            double sum = causes.Where(x => x.Key != "relief").Sum(x => x.Points), relief = causes.Single(x => x.Key == "relief").Points;
-            SelfTest.Check(relief <= 0 && Math.Abs(Math.Clamp(sum * sim.GovFactor(c.Civ) + relief, 0, 100) - target) < 1e-6, "the breakdown adds up");
-            SelfTest.Check(causes.Any(x => x.Key == "levy") && causes[0].Points >= causes[^1].Points, "biggest first");
+            // every cause is felt through GovFactor but sprawl, which is reach, not feeling
+            double sum = causes.Where(x => x.Key != "relief" && x.Key != "sprawl").Sum(x => x.Points), relief = causes.Single(x => x.Key == "relief").Points;
+            double flat = causes.Where(x => x.Key == "sprawl").Sum(x => x.Points);
+            SelfTest.Check(relief <= 0 && Math.Abs(Math.Clamp(sum * sim.GovFactor(c.Civ) + flat + relief, 0, 100) - target) < 1e-6, "the breakdown adds up");
+            var pts = causes.Where(x => x.Key != "relief").Select(x => x.Points).ToList();
+            SelfTest.Check(causes.Any(x => x.Key == "levy") && pts.Zip(pts.Skip(1)).All(p => p.First >= p.Second) && causes[^1].Key == "relief", "biggest first, relief last");
         }),
         ("shortage_when_materiel_runs_out", () => {
             var sim = SelfTest.NewSim(); sim.Warp(2); var h = sim.Humanity;

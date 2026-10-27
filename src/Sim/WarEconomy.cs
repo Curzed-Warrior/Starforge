@@ -191,7 +191,7 @@ public partial class Simulation
         var l = new List<string>();
         int waiting = c.Yard.Count(s => s.Waiting);
         if (waiting > 0) l.Add($"{waiting} of {c.Yard.Count} slips {(waiting == 1 ? "is" : "are")} waiting for materiel.");
-        if (c.LaidUpYr > 0) l.Add($"Ships are being laid up: the materiel runs out before the navy's upkeep is paid.");
+        if (c.LaidUpYr > 0) l.Add("Ships are being laid up: the materiel runs out before the navy's upkeep is paid.");
         if (c.SlipsSabotaged > 0) l.Add($"{c.SlipsSabotaged} slip{(c.SlipsSabotaged == 1 ? " is" : "s are")} idle, sabotaged.");
         var seen = new HashSet<string>();
         var byNeed = new List<(string Need, List<string> Names)>();   // works missing the same resource share one sentence
@@ -206,15 +206,20 @@ public partial class Simulation
         foreach (var (need, names) in byNeed)
         {
             string list = names.Count == 1 ? names[0] : string.Join(", ", names.Take(names.Count - 1)) + " and " + names[^1];
-            l.Add($"No {need}: the {list} {(names.Count == 1 ? "goes" : "go")} at a quarter pace.");
+            l.Add($"No {need}: the {list} {(names.Count == 1 ? "goes" : "go")} at {Colony.WithoutDepositPace:0%} pace.");
         }
         double per = WarData.D("armies", "troopsPerArmy");
         double pop = c.Colonies.Where(Free).Sum(col => col.Pop);
         double want = WarData.D("armies", "garrisonPerBillion") * pop * (c.Mobilisation >= 2 ? 4 : c.Mobilisation == 1 ? 2 : 1);
         double size = per * Math.Max(1, Math.Ceiling(want / WarData.D("armies", "maxArmies")));
+        int armies = ArmiesOf(c).Count();
         double underArms = ArmiesOf(c).Sum(a => a.Troops) + c.Barracks.Sum(t => t.Troops);
-        if (underArms + size <= want * per + 1e-12 && c.Manpower < size)
-            l.Add("Too few people can be called up for the barracks' next intake.");
+        // the barracks' own guards (BarracksStep): an intake is wanted and there is room for another army
+        if (underArms + size <= want * per + 1e-12 && armies + c.Barracks.Count < WarData.D("armies", "maxArmies"))
+        {
+            if (c.Manpower < size) l.Add("Too few people can be called up for the barracks' next intake.");
+            else if (c.Materiel < WarData.D("armies", "kgPerArmy") * size / per) l.Add("The barracks' next intake waits for materiel to equip it.");
+        }
         return l;
     }
 

@@ -169,6 +169,7 @@ void fragment(){
         }
 
         UpdateMarkers(zoomGal);
+        DrawFronts();          // every frame: the lines' pixel width follows the camera, not the 0.3 s marker rebuild
         UpdateShips(zoomGal);
         _texT += dt;
         if (_texT > 1.0f) { _texT = 0; UpdateTerritory(); }
@@ -177,13 +178,19 @@ void fragment(){
     float[] _markerBuf = new float[MaxMarkers * 20];
     float _markerT = 99f;
     StarInfo _markerView;
+    double _markerYear;
+    /// <summary>Markers are rebuilt every MarkerSeconds, or every MarkerSecondsFast once the sim has run MarkerYears on
+    /// since (at high warp fleets and fronts would otherwise move in visible steps).</summary>
+    const float MarkerSeconds = 0.3f, MarkerSecondsFast = 0.05f;
+    const double MarkerYears = 0.02;
 
     /// <summary>All colony markers in one buffer upload (12 transform + 4 colour + 4 custom floats each).</summary>
     void UpdateMarkers(float zoomGal)
     {
         _markerT += (float)GetProcessDeltaTime();
-        if (_markerT < 0.3f && _markerView == _main.ViewStar) return;
-        _markerT = 0; _markerView = _main.ViewStar;
+        bool moved = Math.Abs(_sim.Year - _markerYear) >= MarkerYears;
+        if (_markerView == _main.ViewStar && (_markerT < MarkerSecondsFast || _markerT < MarkerSeconds && !moved)) return;
+        _markerT = 0; _markerView = _main.ViewStar; _markerYear = _sim.Year;
         var mm = _markers.Multimesh;
         int k = 0;
         var buf = _markerBuf;
@@ -241,7 +248,12 @@ void fragment(){
         buf[o + 16] = size; buf[o + 17] = style; buf[o + 18] = main; buf[o + 19] = w;
     }
 
-    const float CeasefireDash = 4f;
+    // the war layers' look: marker sizes in pixels, alphas, and the front lines'
+    const float CeasefireDash = 4f;                                   // galaxy units per dash of a frozen front
+    const float BattleSize = 26f, OccupiedSize = 15f, BlockadeSize = 15f, BlockadeOccupiedSize = 21f, ArmyAboardSize = 7f;
+    const float FleetSizeMin = 6f, FleetSizeMax = 17f, FleetSizePerDecade = 1.6f;
+    const float FrontAlphaMine = 0.9f, FrontAlphaOthers = 0.3f, FrontCeasefireDim = 0.45f, CourseAlpha = 0.55f;
+    static readonly Color BattleColour = new(1f, 0.85f, 0.6f);
     readonly float[] _warBuf = new float[MaxWarMarkers * 20];
     readonly Dictionary<int, Fleet> _fleetById = new();
     readonly HashSet<int> _carrying = new();
@@ -268,9 +280,8 @@ void fragment(){
     void UpdateWarLayers()
     {
         _warIm.ClearSurfaces();
-        _frontIm.ClearSurfaces();
         var wm = _warMarkers.Multimesh;
-        if (Works.Hide.Contains("warmap")) { wm.VisibleInstanceCount = 0; return; }
+        if (Works.HiddenParts.Contains("warmap")) { wm.VisibleInstanceCount = 0; _frontDraw.Clear(); _frontVersion++; return; }
         var buf = _warBuf;
         int k = 0;
         double year = _sim.Year;
@@ -284,7 +295,7 @@ void fragment(){
             double age = year - b.Year;
             if (age > showYears) break;
             if (age < 0) continue;
-            Put(buf, k++, _main.StarWorld(_sim.Gal.Stars[b.Star]), new Color(1f, 0.85f, 0.6f), 1f, 26f, 7f, 0f, (float)(1 - age / showYears));
+            Put(buf, k++, _main.StarWorld(_sim.Gal.Stars[b.Star]), BattleColour, 1f, BattleSize, 7f, 0f, (float)(1 - age / showYears));
         }
 
         _fleetById.Clear();
@@ -295,64 +306,116 @@ void fragment(){
 
         FleetMarkers(ref k, ref any, me, true);
 
-        long occupation = 0;        // changes whenever any system is taken or freed: the fronts are recomputed then
+        // changes whenever any system is taken or freed: the fronts are recomputed then (mixed, not summed, so two
+        // changes cannot cancel out)
+        long occupation = 17;
         foreach (var c in _sim.Colonies)
         {
             bool occupied = c.OccupiedBy >= 0, blockaded = c.BlockadedUntil > year;
-            if (occupied) occupation += (c.Star.Id + 1L) * 1000003L + c.OccupiedBy;
+            if (occupied) occupation = unchecked(occupation * 1000003L ^ ((c.Star.Id + 1L) * 7919L + c.OccupiedBy));
             if (!occupied && !blockaded || k >= MaxWarMarkers) continue;
             var wp = _main.StarWorld(c.Star);
-            if (occupied) Put(buf, k++, wp, _sim.Civs[c.OccupiedBy].Color, 0.95f, 15f, 5f, 0f, 0f);
-            if (blockaded && k < MaxWarMarkers) Put(buf, k++, wp, Ui.Danger, 0.9f, occupied ? 21f : 15f, 6f, 0f, 0f);
+            if (occupied) Put(buf, k++, wp, _sim.Civs[c.OccupiedBy].Color, 0.95f, OccupiedSize, 5f, 0f, 0f);
+            if (blockaded && k < MaxWarMarkers) Put(buf, k++, wp, Ui.Danger, 0.9f, occupied ? BlockadeOccupiedSize : BlockadeSize, 6f, 0f, 0f);
         }
 
         FleetMarkers(ref k, ref any, me, false);
 
-        // fronts: open wars, and ceasefires (a closed war whose front stays frozen) unless a later war between the two leads replaced it
-        var cam = _main.Cam;
-        float pxAngle = Mathf.DegToRad(cam.Fov) / Mathf.Max(GetViewport().GetVisibleRect().Size.Y, 1f);
-        var camPos = cam.GlobalPosition;
+        // fronts: open wars, and ceasefires (a closed war whose front stays frozen) unless a later war between the two
+        // leads replaced it. Gathered here with the markers; DrawFronts draws them every frame.
         if (any) _warIm.SurfaceEnd();
-        bool anyFront = false;
-        for (int wi = 0; wi < _sim.Wars.Count; wi++)
+        _frontDraw.Clear(); _frontVersion++;
+        var superseded = SupersededWars();
+        foreach (var w in _sim.Wars)
         {
-            var w = _sim.Wars[wi];
-            if (!w.Open && !w.Ceasefire || !w.Open && Superseded(wi)) { _fronts.Remove(w.Id); continue; }
+            if (!w.Open && !w.Ceasefire || !w.Open && superseded.Contains(w.Id)) { _fronts.Remove(w.Id); continue; }
             var fronts = Fronts(w, occupation, year);
             if (fronts.Count == 0) continue;
-            if (!anyFront) { _frontIm.SurfaceBegin(Mesh.PrimitiveType.Lines); anyFront = true; }
-            bool mine = w.Has(me);
-            float alpha = mine ? 0.9f : 0.3f;
-            if (w.Ceasefire) alpha *= 0.45f;
-            var red = Ui.Danger.SrgbToLinear();      // the shader writes linear colour; the HUD red is sRGB
-            var col = new Color(red.R, red.G, red.B, alpha);
-            var casing = new Color(0f, 0f, 0f, alpha * 0.7f);
+            _pairs.Clear();
+            foreach (var f in fronts) _pairs.Add(f);
             foreach (var (from, to) in fronts)
             {
-                if (from > to && fronts.Contains((to, from))) continue;     // both leads often name the same front
-                StarInfo sa = _sim.Gal.Stars[from], sb = _sim.Gal.Stars[to];
-                var a = _main.StarWorld(sa);
-                var b = _main.StarWorld(sb);
-                // one pixel across the line at each end, so the width holds however far away each end is
-                // (unit vectors first: galaxy-scale world lengths overflow a float when multiplied)
-                var along = (b - a).Normalized();
-                var pa = along.Cross((a - camPos).Normalized()).Normalized() * (a - camPos).Length() * pxAngle;
-                var pb = along.Cross((b - camPos).Normalized()).Normalized() * (b - camPos).Length() * pxAngle;
-                // a ceasefire's front: every other piece of about CeasefireDash galaxy units
-                int segs = w.Ceasefire ? Math.Max(3, (int)(sa.Pos.DistanceTo(sb.Pos) / CeasefireDash) | 1) : 1;
-                int step = w.Ceasefire ? 2 : 1;
-                if (mine)
-                {
-                    // the player's fronts: three red lines a pixel apart inside a dark casing, so they read over any territory
-                    FrontLine(a, b, pa, pb, -2f, segs, step, casing); FrontLine(a, b, pa, pb, 2f, segs, step, casing);
-                    for (int l = -1; l <= 1; l++) FrontLine(a, b, pa, pb, l, segs, step, col);
-                }
-                else FrontLine(a, b, pa, pb, 0f, segs, step, col);
+                bool both = _pairs.Contains((to, from));
+                if (both && from > to) continue;                            // both leads often name the same front
+                _frontDraw.Add((from, to, w.Has(me), w.Ceasefire, both));
             }
         }
-        if (anyFront) _frontIm.SurfaceEnd();
         wm.Buffer = buf;
         wm.VisibleInstanceCount = k;
+    }
+
+    readonly List<(int From, int To, bool Mine, bool Ceasefire, bool Both)> _frontDraw = new();
+    // what the drawn front geometry was built for: rebuilt only when the fronts or the camera change
+    int _frontVersion, _frontDrawnVersion = -1;
+    Transform3D _frontCam; float _frontFov, _frontH;
+    readonly HashSet<(int, int)> _pairs = new();
+    readonly HashSet<(int, int)> _livePairs = new();
+    readonly HashSet<int> _superseded = new();
+
+    /// <summary>
+    /// Wars (by id) that a later war, open or frozen, between the same two leads has replaced: one pass from the newest
+    /// war back, remembering every pair of civs a live war holds.
+    /// </summary>
+    HashSet<int> SupersededWars()
+    {
+        _superseded.Clear(); _livePairs.Clear();
+        for (int wi = _sim.Wars.Count - 1; wi >= 0; wi--)
+        {
+            var w = _sim.Wars[wi];
+            int a = w.A[0], b = w.B[0];
+            if (!w.Open && _livePairs.Contains((Math.Min(a, b), Math.Max(a, b)))) _superseded.Add(w.Id);
+            if (!w.Open && !w.Ceasefire) continue;
+            var members = w.A.Concat(w.B).ToList();
+            for (int i = 0; i < members.Count; i++)
+                for (int j = i + 1; j < members.Count; j++)
+                    _livePairs.Add((Math.Min(members[i], members[j]), Math.Max(members[i], members[j])));
+        }
+        return _superseded;
+    }
+
+    /// <summary>
+    /// The fronts gathered by UpdateWarLayers, drawn for this frame's camera: one pixel across at each end whatever the
+    /// zoom. The player's are three red lines in a dark casing; others' one faint line, two when both sides fight along
+    /// it (a head-on front); a ceasefire's front is dashed and dimmer.
+    /// </summary>
+    void DrawFronts()
+    {
+        var cam = _main.Cam;
+        float h = GetViewport().GetVisibleRect().Size.Y;
+        if (_frontDrawnVersion == _frontVersion && cam.GlobalTransform == _frontCam && cam.Fov == _frontFov && h == _frontH) return;
+        _frontDrawnVersion = _frontVersion; _frontCam = cam.GlobalTransform; _frontFov = cam.Fov; _frontH = h;
+        _frontIm.ClearSurfaces();
+        if (_frontDraw.Count == 0 || Works.HiddenParts.Contains("warmap")) return;
+        float pxAngle = Mathf.DegToRad(cam.Fov) / Mathf.Max(h, 1f);
+        var camPos = cam.GlobalPosition;
+        var red = Ui.Danger.SrgbToLinear();      // the shader writes linear colour; the HUD red is sRGB
+        _frontIm.SurfaceBegin(Mesh.PrimitiveType.Lines);
+        foreach (var (from, to, mine, ceasefire, both) in _frontDraw)
+        {
+            float alpha = (mine ? FrontAlphaMine : FrontAlphaOthers) * (ceasefire ? FrontCeasefireDim : 1f);
+            var col = new Color(red.R, red.G, red.B, alpha);
+            var casing = new Color(0f, 0f, 0f, alpha * 0.7f);
+            StarInfo sa = _sim.Gal.Stars[from], sb = _sim.Gal.Stars[to];
+            var a = _main.StarWorld(sa);
+            var b = _main.StarWorld(sb);
+            // one pixel across the line at each end, so the width holds however far away each end is
+            // (unit vectors first: galaxy-scale world lengths overflow a float when multiplied)
+            var along = (b - a).Normalized();
+            var pa = along.Cross((a - camPos).Normalized()).Normalized() * (a - camPos).Length() * pxAngle;
+            var pb = along.Cross((b - camPos).Normalized()).Normalized() * (b - camPos).Length() * pxAngle;
+            // a ceasefire's front: every other piece of about CeasefireDash galaxy units
+            int segs = ceasefire ? Math.Max(3, (int)(sa.Pos.DistanceTo(sb.Pos) / CeasefireDash) | 1) : 1;
+            int step = ceasefire ? 2 : 1;
+            if (mine)
+            {
+                // the player's fronts: three red lines a pixel apart inside a dark casing, so they read over any territory
+                FrontLine(a, b, pa, pb, -2f, segs, step, casing); FrontLine(a, b, pa, pb, 2f, segs, step, casing);
+                for (int l = -1; l <= 1; l++) FrontLine(a, b, pa, pb, l, segs, step, col);
+            }
+            else if (both) { FrontLine(a, b, pa, pb, -0.5f, segs, step, col); FrontLine(a, b, pa, pb, 0.5f, segs, step, col); }
+            else FrontLine(a, b, pa, pb, 0f, segs, step, col);
+        }
+        _frontIm.SurfaceEnd();
     }
 
     /// <summary>One front line, offset sideways by off pixels, drawn as every step-th of segs pieces.</summary>
@@ -379,17 +442,19 @@ void fragment(){
             if (ships <= 0) continue;
             var col = _sim.Civs[f.Civ].Color;
             var p = _main.GalWorld(_sim.FleetPos(f));
-            float size = Mathf.Clamp(6f + 1.6f * (float)Math.Log10(Math.Max(ships, 1)), 6f, 17f);
+            float size = Mathf.Clamp(FleetSizeMin + FleetSizePerDecade * (float)Math.Log10(Math.Max(ships, 1)), FleetSizeMin, FleetSizeMax);
             Put(buf, k, p, col, 1f, size, 3f, 0f, 0f);
             int o = k++ * 20;
             buf[o] = 0;                                                // basis x column = course (the shader turns the chevron along it)
             if (!f.Moving) continue;
+            if (_carrying.Contains(f.Id) && k < MaxWarMarkers) Put(buf, k++, p, col.Lerp(Colors.White, 0.4f), 1f, ArmyAboardSize, 4f, 0f, 0f);
             var to = _main.StarWorld(_sim.Gal.Stars[f.To]);
+            // arrived, or setting out for where it is: no course to turn the chevron along, and no course line
+            if ((to - p).LengthSquared() < 1e-12f) continue;
             var course = (to - p).Normalized();
             buf[o] = course.X; buf[o + 4] = course.Y; buf[o + 8] = course.Z;
-            if (_carrying.Contains(f.Id) && k < MaxWarMarkers) Put(buf, k++, p, col.Lerp(Colors.White, 0.4f), 1f, 7f, 4f, 0f, 0f);
             if (!any) { _warIm.SurfaceBegin(Mesh.PrimitiveType.Lines); any = true; }
-            _warIm.SurfaceSetColor(new Color(col.R, col.G, col.B, 0.55f)); _warIm.SurfaceAddVertex(p);
+            _warIm.SurfaceSetColor(new Color(col.R, col.G, col.B, CourseAlpha)); _warIm.SurfaceAddVertex(p);
             _warIm.SurfaceSetColor(new Color(col.R, col.G, col.B, 0.0f)); _warIm.SurfaceAddVertex(to);
         }
     }
@@ -408,19 +473,6 @@ void fragment(){
         fc.Occupation = occupation; fc.Year = year;
         _fronts[w.Id] = fc;
         return fc.Fronts;
-    }
-
-    /// <summary>A later war, open or frozen, between the same two leads as war wi.</summary>
-    bool Superseded(int wi)
-    {
-        var w = _sim.Wars[wi];
-        int a = w.A[0], b = w.B[0];
-        for (int i = wi + 1; i < _sim.Wars.Count; i++)
-        {
-            var x = _sim.Wars[i];
-            if ((x.Open || x.Ceasefire) && x.Has(a) && x.Has(b)) return true;
-        }
-        return false;
     }
 
     void UpdateShips(float zoomGal)

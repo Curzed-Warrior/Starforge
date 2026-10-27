@@ -235,7 +235,8 @@ public partial class Simulation
         Incidents.Add((att.Id, def.Id, Year));
         at ??= Home(def);
         string sys = at?.Sys.Name ?? "their worlds";
-        Say(att, at, $"{Cap(N(att))}'s {t.Name} is caught at {sys}. {Cap(N(def))} parade them before the cameras.", "loss");
+        int untold = Chronicled(att, at) ? News("captured", "captureNewsYears") : 0;
+        if (untold >= 0) Say(att, at, $"{Cap(N(att))}'s {t.Name} is caught at {sys}. {Cap(N(def))} parade them before the cameras.{Untold(untold, "other team has", "other teams have", "been caught")}", "loss");
         if (att.Main || def.Main)
             Raise("Incident", att.Main ? $"{t.Name} captured at {sys}" : $"Spies of {N(att)} caught at {sys}",
                   att.Main ? $"{Cap(N(def))} have caught one of our special groups and are telling the galaxy."

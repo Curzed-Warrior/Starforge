@@ -93,11 +93,14 @@ public partial class Colony
         _ => null
     };
 
+    /// <summary>How fast a work goes without the strategic deposit it needs (the Economy tab's shortages say it too).</summary>
+    public const double WithoutDepositPace = 0.25;
+
     /// <summary>Material pace for a work here: strategic deposits held empire-wide, and water and air for habitats.</summary>
     double MaterialPace(string id)
     {
         double f = 1;
-        if (Needs(id) is string need && !Civ.Strategic.Contains(need)) f *= 0.25;
+        if (Needs(id) is string need && !Civ.Strategic.Contains(need)) f *= WithoutDepositPace;
         if (SpecOf(id).Kind == WorkKind.Habitat && !Res.VolatileRich)
             f *= Civ.Levy.TryGetValue(this, out var l) && l.Any(x => x.From.Res.VolatileRich) ? 0.8 : 0.4;   // shipped in, or scraped together
         return f;
