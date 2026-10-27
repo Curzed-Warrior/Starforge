@@ -148,7 +148,8 @@ public partial class Simulation
         if (t.At == dest.Id) { t.To = -1; t.Arrive = Year; if (!guard) t.Due = Year + S("onSiteYears"); return; }
         // out through our own space to where we work from (Staging), then across; home the same way back
         var from = Gal.Stars[t.At];
-        bool inOwn = ColonyAtAny(t.At)?.Civ == civ;
+        var here = ColonyAtAny(t.At);
+        bool inOwn = here != null && Holder(here) == civ;      // our own space is what we hold now, not what we once settled
         double years;
         if (!guard)
         {
@@ -157,8 +158,11 @@ public partial class Simulation
         }
         else
         {
-            var back = !inOwn && was >= 0 && was < Civs.Count ? Frontier(civ, new() { Civs[was] }) : null;
-            years = back != null && back.Star != dest ? TravelYears(civ, from, back.Star) + S("deployYears") : TravelYears(civ, from, dest);
+            // already in our own space it is the crossing home; otherwise a team that went out by the front (we were at
+            // war with whoever held its target) comes back that way, and any other comes straight home
+            var back = !inOwn && was >= 0 && was < Civs.Count && civ.AtWar.Contains(was) ? Frontier(civ, new() { Civs[was] }) : null;
+            years = inOwn ? S("deployYears")
+                : back != null && back.Star != dest ? TravelYears(civ, from, back.Star) + S("deployYears") : TravelYears(civ, from, dest);
         }
         t.To = dest.Id; t.Arrive = Year + years;
     }

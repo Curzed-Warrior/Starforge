@@ -44,7 +44,6 @@ public partial class Simulation
         string drive = bloc.GroupBy(Leaning).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First().Key;
         StrifeCount("revolts");
         if (civilWar) StrifeCount("civilwars");
-        civ.NextRising = Year + SD("revolt", "cooldownYears");
         return Separate(civ, bloc, drive, peaceful, civilWar: civilWar);
     }
 
@@ -65,6 +64,7 @@ public partial class Simulation
         var s = Splinter(parent, drive, bloc);
         if (name != null) s.Name = name;
         if (parent.M.Hive) LeaveHive(s);
+        parent.NextRising = Year + SD("revolt", "cooldownYears");      // however a split came, the parent has years before the next
         if (parent.Human) StrifeCount(peaceful ? "humanPeaceful" : civilWar ? "humanCivil" : "humanWar");
         var stars = bloc.Select(c => c.Star.Id).ToHashSet();
         double loyal = SD("revolt", "defectLoyalty");

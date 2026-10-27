@@ -149,6 +149,7 @@ public partial class Simulation
         if (c.IncitedUntil > Year) Add("incited", 1);
         bool holdout = c.Holdout && civ.M.Hive;
         if (holdout) Add("hive", 1);
+        if (holdout) top = "hive";      // whatever else it resents, a holdout is in arms against the hive (and rises with the others)
         double relief = SD("relief", "base") + SD("relief", "megaOrder") * c.MegaOrder + SD("relief", "faith") * civ.Faith
                         + (c.Autonomy ? SD("relief", "autonomy") : 0) + (Year < c.InvestedUntil ? SD("relief", "invested") : 0);
         causeKey = top;

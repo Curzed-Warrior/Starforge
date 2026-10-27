@@ -195,21 +195,39 @@ public static class SpecOpsTests
             SelfTest.Check(!sim.Fits(h, mine, o, "sabotage_yard") && !sim.Fits(h, mine, o, "sabotage_deposit"), "a council does not wreck its own occupied world");
             SelfTest.Check(sim.Fits(h, mine, o, "prepare_invasion"), "but it prepares its liberation");
         }),
+        ("peace_return_is_direct", () => {
+            var (sim, h, o, t) = Ready();
+            var home = h.Colonies.First(x => x.Home); var x = o.Colonies[0];
+            // home from a peacetime mission: straight back, not round by any front
+            t.At = x.Star.Id; t.To = -1; t.TargetCiv = o.Id; t.Mission = "steal_tech";
+            sim.Dispatch(t, null, "guard");
+            SelfTest.Check(t.To == home.Star.Id && Math.Abs(t.Arrive - sim.Year - sim.TravelYears(h, x.Star, home.Star)) < 1e-6, "a team at peace comes the direct way home");
+        }),
+        ("home_through_own_space", () => {
+            var (sim, h, o, t) = Ready();
+            // a team left standing in a system we hold (its target fell to our fleet) crosses our own space home
+            var ours = h.Colonies.Where(x => !x.Home && x.OccupiedBy < 0).OrderByDescending(x => sim.TravelYears(h, x.Star, h.Colonies.First(c => c.Home).Star)).First();
+            t.At = ours.Star.Id; t.To = -1; t.TargetCiv = o.Id; t.Mission = "prepare_invasion";
+            sim.Dispatch(t, null, "guard");
+            SelfTest.Check(Math.Abs(t.Arrive - sim.Year - WarData.D("specops", "deployYears")) < 1e-6, "from our own space, home takes the deployment time");
+        }),
         ("teams_work_from_the_front", () => {
             var (sim, h, o, t) = Ready();
             var home = h.Colonies.First(x => x.Home); var fwd = h.Colonies.First(x => !x.Home);
             double max = WarData.D("specops", "travelYearsMax");
             // the enemy is far beyond a team's reach from the capital, but one of our systems sits next to it
             var dir = (o.Colonies[0].Star.Pos - home.Star.Pos).Normalized();
+            // in a line beyond reach, the first of them nearest us (the loop always places them, however far they began)
             float d = 1;
-            while (sim.TravelYears(h, home.Star, o.Colonies[0].Star) < 3 * max && d < 1e5f) { d *= 2; for (int i = 0; i < o.Colonies.Count; i++) sim.MoveStar(o.Colonies[i].Star, home.Star.Pos + dir * (d + i * 0.5f), o); }
+            do { d *= 2; for (int i = 0; i < o.Colonies.Count; i++) sim.MoveStar(o.Colonies[i].Star, home.Star.Pos + dir * (d + i * 0.5f), o); }
+            while (sim.TravelYears(h, home.Star, o.Colonies[0].Star) < 3 * max && d < 1e5f);
             var x = o.Colonies[0];
             sim.MoveStar(fwd.Star, x.Star.Pos - dir * 0.3f, h);
             sim.DeclareWar(h, o);
             SelfTest.Check(sim.TravelYears(h, home.Star, x.Star) > max, "the enemy is out of reach from the capital");
             SelfTest.Check(sim.CanTarget(h, x, "prepare_invasion"), "a team at war works from the front");
             sim.Dispatch(t, x, "prepare_invasion");
-            SelfTest.Check(t.Arrive - sim.Year < max, "and gets there in time to matter");
+            SelfTest.Check(t.To == x.Star.Id && t.Arrive > sim.Year && t.Arrive - sim.Year < max, "and gets there in time to matter");
         }),
     };
 }

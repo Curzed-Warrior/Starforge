@@ -39,16 +39,23 @@ public partial class Simulation
     /// <summary>
     /// The vote, with `swing` scaling every system's will to refuse. The capital always joins, and a civ of only a few
     /// systems (strife.hive.minSystems) joins whole. The swing stays with the civ: it is how fast the link frays later.
+    /// No system is certain to refuse (strife.hive.refuseMax), and the hive keeps most of what it had: at most
+    /// strife.hive.maxShare of its systems refuse, the most unwilling first.
     /// </summary>
     public (int Refused, string Split) HiveVote(Civ civ, double swing)
     {
         civ.HiveSwing = swing;
         var capital = CapitalOf(civ);
-        var refusers = new HashSet<Colony>();
+        var refusers = new List<(Colony C, double P)>();
         if (civ.Colonies.Count >= SD("hive", "minSystems"))
             foreach (var c in civ.Colonies)
-                if (c != capital && !c.Home && _r.NextDouble() < swing * Refusal(c, capital)) refusers.Add(c);
-        return HiveVote(civ, refusers);
+            {
+                if (c == capital || c.Home) continue;
+                double p = Math.Min(SD("hive", "refuseMax"), swing * Refusal(c, capital));
+                if (_r.NextDouble() < p) refusers.Add((c, p));
+            }
+        int most = (int)(SD("hive", "maxShare") * civ.Colonies.Count);
+        return HiveVote(civ, refusers.OrderByDescending(x => x.P).Take(most).Select(x => x.C).ToHashSet());
     }
 
     /// <summary>
@@ -99,14 +106,22 @@ public partial class Simulation
         return (bloc.Count, split);
     }
 
-    /// <summary>Those who leave a hive are not a hive: the splinter forgets Hive Consensus and will not build one for a long while.</summary>
+    /// <summary>
+    /// Those who leave a hive are not a hive: the splinter forgets every tech that links minds into one (Hive Consensus,
+    /// Link-Hive: any with the Hive flag) and will not build one for a long while.
+    /// </summary>
     void LeaveHive(Civ s)
     {
-        if (!s.Techs.Remove("S8")) return;
+        foreach (var id in s.Techs.Where(IsHiveTech).ToList())
+        {
+            s.Techs.Remove(id);
+            s.Banned[id] = Year + SD("hive", "banYears");
+        }
         s.ComputeMods();
-        s.Banned["S8"] = Year + SD("hive", "banYears");
         foreach (var c in s.Colonies) c.Holdout = false;
     }
+
+    static bool IsHiveTech(string id) => Defs.TechById(id) is { } t && t.Effects.Any(e => e.Kind == "flag" && e.A.Length > 0 && e.A[0] == "Hive");
 
     /// <summary>A rising now, in a civ with a system in open revolt (tests).</summary>
     public Civ RevoltNow(Civ civ) => RevoltStep(civ, 1e6);

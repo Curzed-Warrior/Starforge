@@ -98,6 +98,30 @@ public static class FractureTests
             foreach (var c in s.Colonies.Skip(1)) { c.Unrest = 4; c.Grievance = 95; }
             SelfTest.Check(sim.RevoltNow(s) == null, "a splinter does not split again in its first years");
         }),
+        ("link_hive_splinter_is_flesh", () => {
+            // Link-Hive (ASC-C3b) makes a hive too: those who leave it are flesh as well
+            var (sim, h) = Calm(); h.Techs.Remove("ASC-C3b"); h.Techs.Add("ASC-C3b"); h.ComputeMods();
+            var s = sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: true);
+            SelfTest.Check(h.M.Hive && !s.M.Hive && !s.Knows("ASC-C3b") && s.Banned.ContainsKey("ASC-C3b"), "a Link-Hive splinter forgets the link and bans it");
+            SelfTest.Check(s.Colonies.All(c => !c.Holdout), "and its systems are nobody's holdouts");
+        }),
+        ("vote_never_takes_all", () => {
+            var (sim, h) = Calm(); int n = h.Colonies.Count;
+            var r = sim.HiveVote(h, 100);
+            SelfTest.Check(r.Refused > 0 && r.Refused <= WarData.D("strife", "hive", "maxShare") * n, "even a fierce refusal leaves the hive most of what it had");
+        }),
+        ("any_split_sets_cooldown", () => {
+            var (sim, h) = Calm(); h.NextRising = 0;
+            sim.Separate(h, h.Colonies.Where(c => !c.Home).Take(2).ToList(), h.Drive, peaceful: true);
+            SelfTest.Check(h.NextRising > sim.Year, "a civ that has just lost systems, however, has years before the next rising");
+        }),
+        ("holdout_cause_is_hive", () => {
+            var (sim, h) = Calm(); h.M.Hive = true;
+            var home = h.Colonies.First(c => c.Home);
+            var far = h.Colonies.Where(c => !c.Home).OrderByDescending(c => sim.DistanceFactor(c, home)).First(); far.Holdout = true;
+            sim.GrievanceTarget(far, out string cause);
+            SelfTest.Check(cause == Simulation.CausePhrase["hive"], "a far holdout is in arms against the hive, not the distance");
+        }),
         ("hive_tech_calls_vote", () => {
             var (sim, h) = Calm();
             sim.CompleteTech(h, Defs.TechById("S8"));

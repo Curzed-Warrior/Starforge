@@ -32,6 +32,8 @@ public partial class Main : Node3D
     public static float TitleYaw = -0.6f;
     int _speedBeforeMenu = 2;
     float _autosaveT;
+    /// <summary>The simulation threw (SimCrashed): time stays stopped and nothing is saved over the good saves until one is loaded.</summary>
+    bool _simFaulted;
     public const string SavePath = "user://starforge_save.json", AutoPath = "user://starforge_autosave.json";
     public Simulation Sim;
     GalaxyView _galView;
@@ -252,14 +254,21 @@ public partial class Main : Node3D
         GetTree().ReloadCurrentScene();
     }
 
-    public void SaveNow() { if (Sim.Holding) { _hud.Toast("Finish the battle first."); return; } SaveGame.Save(Sim, _seed, SavePath); _hud.Toast("Saved"); }
+    public void SaveNow()
+    {
+        if (_simFaulted) { _hud.Toast("The simulation stopped on an error. Saving now would keep the broken state: load a save (F9) instead."); return; }
+        if (Sim.Holding) { _hud.Toast("Finish the battle first."); return; }
+        SaveGame.Save(Sim, _seed, SavePath); _hud.Toast("Saved");
+    }
 
     /// <summary>
     /// The simulation threw: stop time, write what happened (seed, year, stack) and an emergency save beside it, so
     /// the game can go on from the last autosave and the bug can be reproduced headless from the seed or the save.
+    /// The fault is latched: the half-stepped universe is never stepped again or autosaved over the good saves.
     /// </summary>
     void SimCrashed(Exception ex)
     {
+        _simFaulted = true;
         SpeedIdx = 0;
         string stamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
         string log = $"user://crash_{stamp}.txt", save = $"user://crash_{stamp}.json";
@@ -994,7 +1003,8 @@ public partial class Main : Node3D
         cmd?.Tick(dt);
         bool battleLive = cmd != null && !cmd.Paused && !cmd.Over;
         if (cmd != null && SysView.Works != null && SysView.Works.BattleHere(out _, out float battleR)) _rig.MaxDist = battleR * Works.BattleFrame * 2.5f;
-        double speed = Sim.Holding ? 0 : Speeds[SpeedIdx];
+        if (_simFaulted && SpeedIdx != 0) { SpeedIdx = 0; _hud.Toast("The simulation stopped on an error. Load a save (F9) to go on."); }
+        double speed = Sim.Holding || _simFaulted ? 0 : Speeds[SpeedIdx];
         // keep a frame budget: huge speeds are sliced, never stall the render loop
         double want = speed * dt;
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -1054,7 +1064,7 @@ public partial class Main : Node3D
         _post.Update(_rig.Cam, SysView, dt);
         _moodT += dt;
         _autosaveT += dt;
-        if (_autosaveT > 300f && !Sim.Holding && _shot == null && _seqN == 0) { _autosaveT = 0; SaveGame.Save(Sim, _seed, AutoPath); _hud.Toast("Autosaved"); }
+        if (_autosaveT > 300f && !Sim.Holding && !_simFaulted && _shot == null && _seqN == 0) { _autosaveT = 0; SaveGame.Save(Sim, _seed, AutoPath); _hud.Toast("Autosaved"); }
         if (_music != null && _moodT > 5f) { _moodT = 0; _music.Mood = Music.MoodFor(Sim); }
 
         if (_following != null && !IsInstanceValid(_following)) { _following = null; SelectStar(); }
