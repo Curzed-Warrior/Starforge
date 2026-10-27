@@ -20,6 +20,9 @@ public partial class EmpireScreen : PanelContainer
     readonly ColorRect[] _factionBars = new ColorRect[3];
     Label _legend;
     VBoxContainer _policies, _systems, _inbox, _wars, _military, _economy, _interior;
+    /// <summary>The Interior tab's parts that stay put while its rows scroll: the summary and column heads, and the pager.</summary>
+    VBoxContainer _interiorHead;
+    HBoxContainer _interiorFoot;
     int _inboxSig = -1;
 
     public const int TabOverview = 0, TabPolicies = 1, TabSystems = 2, TabInbox = 3, TabWars = 4, TabMilitary = 5, TabEconomy = 6, TabInterior = 7;
@@ -63,7 +66,21 @@ public partial class EmpireScreen : PanelContainer
         _wars = Scroll("Wars");
         _military = Scroll("Military");
         _economy = Scroll("Economy");
-        _interior = Scroll("Interior");
+        // Interior pins its column heads and pager: only the rows scroll
+        var ibox = new VBoxContainer { Name = "Interior" };
+        ibox.AddThemeConstantOverride("separation", 6);
+        _tabs.AddChild(ibox);
+        _interiorHead = new VBoxContainer();
+        _interiorHead.AddThemeConstantOverride("separation", 6);
+        ibox.AddChild(_interiorHead);
+        var isc = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = SizeFlags.ExpandFill };
+        _interior = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _interior.AddThemeConstantOverride("separation", 6);
+        isc.AddChild(_interior);
+        ibox.AddChild(isc);
+        _interiorFoot = new HBoxContainer();
+        _interiorFoot.AddThemeConstantOverride("separation", 12);
+        ibox.AddChild(_interiorFoot);
     }
 
     VBoxContainer Scroll(string name)
@@ -76,7 +93,11 @@ public partial class EmpireScreen : PanelContainer
         return v;
     }
 
-    public void ScrollTab(int px) { if (_tabs.GetCurrentTabControl() is ScrollContainer sc) sc.ScrollVertical = px; }
+    public void ScrollTab(int px)
+    {
+        var tab = _tabs.GetCurrentTabControl();
+        if ((tab as ScrollContainer ?? tab?.FindChildren("*", "ScrollContainer", false, false).FirstOrDefault() as ScrollContainer) is { } sc) sc.ScrollVertical = px;
+    }
 
     public void Open(int tab)
     {
@@ -435,7 +456,7 @@ public partial class EmpireScreen : PanelContainer
 
     static Label Note(string text, int size = 12)
     {
-        var l = Ui.Label(text, size, Ui.Dim);
+        var l = Ui.Label(text, size, Ui.Text.Lerp(Ui.Dim, 0.4f));      // between Text and Dim: a note is read, not skimmed past
         l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         l.CustomMinimumSize = new Vector2(880, 0);
         return l;

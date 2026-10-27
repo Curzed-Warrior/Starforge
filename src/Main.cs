@@ -11,7 +11,8 @@ namespace Starforge;
 /// <summary>
 /// Entry point. One continuous world: the viewed star sits at the origin, the galaxy is scaled by G around it.
 /// Command line (after "--"): --shot=abs.png [--shotframe=N] --focus=Earth|Sun|Galaxy --dist=D --yaw=Y --pitch=P
-/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] [--battlerun=SECONDS] [--stagelayers] stages a fight here
+/// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] [--battlerun=SECONDS] [--stagelayers] stages a fight here;
+/// --stageunrest, --stageslips and --intpage=N stage the Interior, Military and Economy tabs' rarer states
 /// (--stagelayers also stages the galaxy map's war markers nearby: an occupied, a blockaded and a both system, a moving
 /// fleet carrying an army and an idle fleet)
 /// </summary>
@@ -684,6 +685,8 @@ public partial class Main : Node3D
         // a limited war, so the Wars tab offers peace and ceasefire
         var w = Sim.DeclareWar(me, foe, "border_claim") ?? Sim.WarBetween(me, foe);
         if (w == null) { GD.Print($"--stagebattle: no war possible with {foe.Name}"); return; }
+        // an existing war is used as it is: say so, since its stakes decide what the Wars tab offers
+        if (w.Reason != "border_claim") GD.Print($"--stagebattle: using the war already open with {foe.Name} ({w.Reason}, not border_claim)");
         Sim.SetManual(me, Area.Fleets, true); Sim.SetManual(foe, Area.Fleets, true);
         _nextBattleCine = Sim.Year + 40;            // no cinematic flying off to film it: the view stays on this battle
         if (OS.GetCmdlineUserArgs().Contains("--stagecommand")) me.Policy.Battle = BattleMode.Command;
@@ -1099,11 +1102,12 @@ public partial class Main : Node3D
         // tests: --open=empire|policies|systems|inbox|wars|military|economy|interior opens the empire screen; --manual=all|Research,Colonisation,... takes areas into the player's hands
         if (_frame == 10 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--open=")) is string op && Array.IndexOf(new[] { "empire", "policies", "systems", "inbox", "wars", "military", "economy", "interior" }, op[7..]) is int tab and >= 0)
             _hud.ToggleEmpire(tab);
-        // test: --stageunrest spreads grievance across the stages in four of the player's systems, two with a movement (skipped for a hive)
-        if (_frame == 5 && OS.GetCmdlineUserArgs().Contains("--stageunrest"))
+        // test: --stageunrest spreads grievance across the stages in four of the player's systems, two with a movement
+        // (skipped for a hive), and holds those values every frame after, so a later shot still shows them
+        if (_frame >= 5 && OS.GetCmdlineUserArgs().Contains("--stageunrest"))
         {
             var me = Sim.Humanity;
-            if (me.M.Hive) GD.Print("--stageunrest skipped: humanity is a hive");
+            if (me.M.Hive) { if (_frame == 5) GD.Print("--stageunrest skipped: humanity is a hive"); }
             else
             {
                 var pick = me.Colonies.Where(x => !x.Home).Take(4).ToList();
@@ -1111,10 +1115,22 @@ public partial class Main : Node3D
                 for (int i = 0; i < pick.Count; i++)
                 {
                     var c = pick[i]; c.Grievance = gv[i]; c.Unrest = st[i];
-                    if (i >= 2) { c.CauseKey ??= "poverty"; c.Cause ??= "it is poor beside the core's wealth"; Sim.Rise(c); }
+                    if (i >= 2 && c.Movement == null) { c.CauseKey ??= "poverty"; c.Cause ??= "it is poor beside the core's wealth"; Sim.Rise(c); }
                 }
             }
         }
+        // test: --stageslips holds the player's first slips waiting for materiel and sabotages the second shipyard system,
+        // so the Military and Economy tabs show both hold-ups (held every frame: the sim recomputes Waiting each step)
+        if (_frame >= 5 && OS.GetCmdlineUserArgs().Contains("--stageslips"))
+        {
+            var me = Sim.Humanity;
+            for (int i = 0; i < Math.Min(3, me.Yard.Count); i++) me.Yard[i].Waiting = true;
+            var yards = me.Colonies.Where(c => Sim.SlipsOf(c) > 0).Skip(1).FirstOrDefault();
+            if (yards != null && yards.YardDownUntil <= Sim.Year) yards.YardDownUntil = Sim.Year + 5;
+            if (_frame == 5 && yards == null) GD.Print("--stageslips: only one shipyard system, nothing to sabotage");
+        }
+        // test: --intpage=N shows page N (from 1) of the Interior tab
+        if (_frame == 12 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--intpage=")) is string ip && int.TryParse(ip[10..], out int pg)) _hud.EmpireInteriorPage(pg - 1);
         // test: --stagebattle puts Humanity's Home Fleet and the nearest alien fleet at the view star, at war, fights once and pauses
         if (_frame == 5 && (OS.GetCmdlineUserArgs().Contains("--stagebattle") || OS.GetCmdlineUserArgs().Contains("--stagecommand"))) StageBattle();
         if (_battleRunT >= 0 && (_battleRunT += dt) >= BattleRunTo()) { SpeedIdx = 0; _battleRunT = -1; }

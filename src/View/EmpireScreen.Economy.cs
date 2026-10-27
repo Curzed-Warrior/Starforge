@@ -36,7 +36,7 @@ public partial class EmpireScreen
         h.Add((int)(me.MilShare * 1000)); h.Add((int)(me.Efficiency * 1000));
         h.Add(Q(me.Materiel)); h.Add(Q(me.MadeKgYr)); h.Add(Q(me.UpkeepKgYr)); h.Add(Q(me.LaidUpYr)); h.Add(Q(me.Manpower)); h.Add(string.Join("|", shortages));
         h.Add(me.SlipsWaiting); h.Add(me.SlipsSabotaged); h.Add(slips.Count);
-        foreach (var s in slips) { h.Add(s.Hull); h.Add((int)(s.Progress * 20)); h.Add(s.Waiting); }
+        foreach (var s in slips) { h.Add(s.Hull); h.Add((int)(s.Progress * 100)); h.Add(s.Waiting); }      // per cent, as shown
         foreach (var c in me.Colonies) h.Add(c.YardDownUntil > Sim.Year);
         int sig = h.ToHashCode();
         if (sig == _ecoSig) return;
@@ -77,7 +77,8 @@ public partial class EmpireScreen
         void Row(string cap, string val, Color? col = null)
         {
             var c = Ui.Label(cap, 13, Ui.Dim); c.CustomMinimumSize = new Vector2(150, 0);
-            g.AddChild(c); g.AddChild(Ui.Label(val, 13, col ?? Ui.Text));
+            // both centred on the row: the value's exponents make it taller than its caption
+            g.AddChild(Mid(c)); g.AddChild(Mid(Ui.Label(val, 13, col ?? Ui.Text)));
         }
         Row("In stock", $"{Hud.Sci(me.Materiel)} kg");
         Row("Made per year", $"{Hud.Sci(me.MadeKgYr)} kg");
@@ -90,16 +91,19 @@ public partial class EmpireScreen
         _economy.AddChild(Gap());
         _economy.AddChild(Ui.Label("SHORTAGES", 14, Ui.Accent, true));
         if (shortages.Count == 0) _economy.AddChild(Ui.Label("No shortages.", 13, Ui.Dim));
-        else foreach (var s in shortages) { var l = Ui.Label(s, 13, Ui.Warm); l.AutowrapMode = TextServer.AutowrapMode.WordSmart; l.CustomMinimumSize = new Vector2(880, 0); _economy.AddChild(l); }
+        else foreach (var s in shortages) { var l = Ui.Label(s, 13, Ui.Warm); l.AutowrapMode = TextServer.AutowrapMode.WordSmart; l.SizeFlagsHorizontal = SizeFlags.ExpandFill; _economy.AddChild(l); }
 
         // SLIPS
         _economy.AddChild(Gap());
         _economy.AddChild(Ui.Label("SLIPS", 14, Ui.Accent, true));
-        int building = Math.Max(0, slips.Count - me.SlipsWaiting - me.SlipsSabotaged);
-        _economy.AddChild(Ui.Label($"{slips.Count:#,0} slips: {building:#,0} building, {me.SlipsWaiting:#,0} waiting for materiel, {me.SlipsSabotaged:#,0} sabotaged.", 13, Ui.Text));
+        // each slip counted once: a sabotaged one is sabotaged whether or not it also waits for materiel
+        int sabotaged = 0, waiting = 0;
+        foreach (var (_, own, down) in SlipsByColony(me)) { if (down) sabotaged += own.Count; else waiting += own.Count(s => s.Waiting); }
+        int building = slips.Count - sabotaged - waiting;
+        _economy.AddChild(Ui.Label($"{slips.Count:#,0} slips: {building:#,0} building, {waiting:#,0} waiting for materiel, {sabotaged:#,0} sabotaged.", 13, Ui.Text));
         if (slips.Count == 0) return;
         var sg = RowGrid(4);
-        foreach (var t in new[] { "System", "Slips", "Progress (mean)", "State" }) sg.AddChild(Ui.Label(t, 13, Ui.Text));
+        foreach (var t in new[] { "System", "Slips", "Progress (mean)", "Held up" }) sg.AddChild(Ui.Label(t, 12, Ui.Dim));
         int shown = 0, hidden = 0;
         foreach (var (c, own, down) in SlipsByColony(me))
         {

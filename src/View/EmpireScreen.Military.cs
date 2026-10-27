@@ -28,14 +28,14 @@ public partial class EmpireScreen
             h.Add(f.Id); h.Add(f.At); h.Add(f.To); h.Add(f.Target); h.Add(f.Mission); h.Add(f.Stance);
             h.Add((int)(f.Ships)); h.Add((int)(f.Morale * 20)); h.Add((int)(f.Supply * 20));
             h.Add(f.Moving ? (int)Math.Ceiling(f.Arrive - Sim.Year) : 0);
-            h.Add(f.Admiral?.Name); h.Add(f.Admiral?.Wins ?? 0); h.Add(f.Admiral?.Losses ?? 0);
+            h.Add(f.Admiral?.Name); h.Add(f.Admiral?.Wins ?? 0); h.Add(f.Admiral?.Losses ?? 0); h.Add(f.Admiral?.Skill ?? 0); h.Add(f.Admiral?.Trait);
             h.Add(_fleetOpen.Contains(f.Id));
             if (_fleetOpen.Contains(f.Id)) foreach (var s in f.Squadrons) { h.Add(s.Hull); h.Add((int)s.Ships); h.Add(s.Level); }
         }
         h.Add(armies.Count);
         foreach (var a in armies) { h.Add(a.Id); h.Add(a.At); h.Add(a.Fleet); h.Add(a.To); h.Add((long)(a.Troops * 1e6)); h.Add(Forces.Level(a.Xp)); h.Add(a.To >= 0 ? (int)Math.Ceiling((a.Arrive - Sim.Year) * 10) : 0); }
         foreach (var t in teams) { h.Add(t.Id); h.Add(t.At); h.Add(t.To); h.Add(t.Mission); h.Add((int)t.Due); h.Add(t.To >= 0 ? (int)Math.Ceiling((t.Arrive - Sim.Year) * 10) : 0); }
-        foreach (var s in me.Yard) { h.Add(s.Hull); h.Add((int)(s.Progress * 20)); h.Add(s.Waiting); }
+        foreach (var s in me.Yard) { h.Add(s.Hull); h.Add((int)(s.Progress * 100)); h.Add(s.Waiting); }      // per cent, as shown
         foreach (var c in me.Colonies) h.Add(c.YardDownUntil > Sim.Year);
         foreach (var b in me.Barracks) { h.Add((long)(b.Troops * 1e6)); h.Add((int)(b.Left * 4)); }
         foreach (var b in me.Academy) h.Add((int)(b.Left * 4));
@@ -52,6 +52,7 @@ public partial class EmpireScreen
         var fleets = Sim.FleetsOf(me).ToList();
         var armies = Sim.ArmiesOf(me).ToList();
         var teams = Sim.TeamsOf(me).ToList();
+        _fleetOpen.RemoveWhere(id => !fleets.Any(f => f.Id == id));        // fleets lost or merged since
         int sig = MilitarySig(me, fleets, armies, teams);
         if (sig == _milSig) return;
         _milSig = sig;
@@ -86,12 +87,14 @@ public partial class EmpireScreen
         else
         {
             var g = RowGrid(5);
-            foreach (var t in new[] { "Where", "Troops", "Quality", "Experience", "Training" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
-            var groups = armies.GroupBy(a => (Where: ArmyWhere(a), Q: $"{a.Quality:0.00}", Lv: Forces.Level(a.Xp), a.Rushed)).ToList();
+            foreach (var t in new[] { "Where", "Troops", "Quality", "Experience", "Course" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
+            // grouped by where they are and where they go (not by the text, whose arrival time differs army by army)
+            var groups = armies.GroupBy(a => (a.At, a.To, a.Fleet, Q: $"{a.Quality:0.00}", Lv: Forces.Level(a.Xp), a.Rushed)).ToList();
             foreach (var grp in groups.Take(ArmyCap))
             {
                 int n = grp.Count();
-                g.AddChild(Ui.Label(n > 1 ? $"{grp.Key.Where}  ×{n}" : grp.Key.Where, 13));
+                string where = ArmyWhere(grp.OrderBy(a => a.Arrive).First());
+                g.AddChild(Ui.Label(n > 1 ? $"{where}  ×{n}" : where, 13));
                 g.AddChild(Ui.Label(Soldiers(grp.Sum(a => a.Troops)), 13));
                 g.AddChild(Ui.Label(grp.Key.Q, 13));
                 g.AddChild(Ui.Label(grp.Key.Lv, 13));
@@ -108,7 +111,7 @@ public partial class EmpireScreen
         else
         {
             var g = RowGrid(6);
-            foreach (var t in new[] { "Team", "Mission", "Target", "Quality", "Training", "Status" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
+            foreach (var t in new[] { "Team", "Mission", "Target", "Quality", "Course", "Status" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
             var groups = teams.GroupBy(t => (t.Mission, Target: t.Target >= 0 ? StarName(t.Target) : "none", Q: $"{t.Quality:0.00}", t.Rushed,
                 Status: t.To >= 0 ? $"travelling to {StarName(t.To)}, arrives in {Years(t.Arrive - Sim.Year)}"
                     : t.Due > 0 ? $"on site at {StarName(t.At)}, due {t.Due:0}" : $"at {StarName(t.At)}")).ToList();
@@ -134,7 +137,7 @@ public partial class EmpireScreen
         {
             _military.AddChild(Note("Slips grouped by system and hull class."));
             var g = RowGrid(3);
-            foreach (var t in new[] { "System · hull class", "Progress (mean)", "State" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
+            foreach (var t in new[] { "System · hull class", "Progress (mean)", "Held up" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
             const int SlipRows = 30;
             int rows = 0, hiddenSlips = 0, hiddenSys = 0;
             foreach (var (c, own, down) in SlipsByColony(me))
@@ -162,7 +165,7 @@ public partial class EmpireScreen
         else
         {
             var g = RowGrid(4);
-            foreach (var t in new[] { "At", "Troops", "Years left", "Training" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
+            foreach (var t in new[] { "At", "Troops", "Years left", "Course" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
             foreach (var b in me.Barracks.Take(ArmyCap))
             {
                 g.AddChild(Ui.Label(StarName(b.At), 13));
@@ -171,7 +174,7 @@ public partial class EmpireScreen
                 g.AddChild(Ui.Label(b.Rushed ? "rushed" : "full", 13, b.Rushed ? Ui.Warm : Ui.Dim));
             }
             _military.AddChild(g);
-            if (me.Barracks.Count > ArmyCap) _military.AddChild(Ui.Label($"and {me.Barracks.Count - ArmyCap:#,0} more", 13, Ui.Dim));
+            if (me.Barracks.Count > ArmyCap) _military.AddChild(Ui.Label($"and {me.Barracks.Count - ArmyCap:#,0} more intakes", 13, Ui.Dim));
         }
 
         _military.AddChild(Gap());
@@ -180,7 +183,7 @@ public partial class EmpireScreen
         else
         {
             var g = RowGrid(3);
-            foreach (var t in new[] { "At", "Years left", "Training" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
+            foreach (var t in new[] { "At", "Years left", "Course" }) g.AddChild(Ui.Label(t, 12, Ui.Dim));
             foreach (var b in me.Academy)
             {
                 g.AddChild(Ui.Label(StarName(b.At), 13));
@@ -189,33 +192,6 @@ public partial class EmpireScreen
             }
             _military.AddChild(g);
         }
-    }
-
-    /// <summary>Slips are owned by colonies in order: colony i holds the next SlipsOf(i) entries of the yard. Skips colonies with none.</summary>
-    IEnumerable<(Colony C, List<Slip> Slips, bool Down)> SlipsByColony(Civ me)
-    {
-        int at = 0;
-        foreach (var c in me.Colonies)
-        {
-            int n = Math.Max(0, Math.Min(Sim.SlipsOf(c), me.Yard.Count - at));
-            var own = me.Yard.Skip(at).Take(n).ToList();
-            at += n;
-            if (own.Count > 0) yield return (c, own, c.YardDownUntil > Sim.Year);
-        }
-    }
-
-    (string Text, Color Col) SlipState(Colony c, bool down, int cnt, int waiting) =>
-        down ? ($"sabotaged until {c.YardDownUntil:0}", Ui.Danger)
-        : waiting > 0 ? (cnt > 1 ? $"{waiting} of {cnt} waiting for materiel" : "waiting for materiel", Ui.Warm)
-        : ("building", Ui.Dim);
-
-    static Control ProgressCell(float mean)
-    {
-        var pb = new HBoxContainer();
-        pb.AddThemeConstantOverride("separation", 6);
-        pb.AddChild(Bar(mean, Ui.Accent, SlipBarWidth));
-        pb.AddChild(Ui.Label($"{mean * 100:0}%", 13, Ui.Text));
-        return pb;
     }
 
     /// <summary>Troops are held in billions of people; show them as people.</summary>
@@ -238,12 +214,12 @@ public partial class EmpireScreen
         int id = f.Id;
         fold.Pressed += () => { if (!_fleetOpen.Remove(id)) _fleetOpen.Add(id); _milSig = -1; RefreshMilitary(); };
         row.AddChild(fold);
-        var name = Ui.Button(f.Name, "Fly to this fleet");
+        var name = Ui.Button(f.Name, f.Moving ? "Fly to where this fleet is going" : "Fly to this fleet");
         name.CustomMinimumSize = new Vector2(150, 0);
-        int at = f.At;
+        int at = f.Moving ? f.To : f.At;
         name.Pressed += () => { Visible = false; _main.TravelTo(Sim.Gal.Stars[at]); };
         row.AddChild(name);
-        row.AddChild(Cell(Ui.Label($"{f.Ships:#,0} ships", 13, Ui.Warm), 90));
+        row.AddChild(Cell(Ui.Label(f.Ships >= 1e7 ? $"{f.Ships / 1e6:0.#}M ships" : $"{f.Ships:#,0} ships", 13, Ui.Warm), 120));
         row.AddChild(Meter("morale", f.Morale, Good));
         row.AddChild(Meter("supply", f.Supply, Ui.Warm.Lightened(0.15f)));
         row.AddChild(Cell(Ui.Label(f.Stance, 13, Ui.Dim), 80));
@@ -303,6 +279,9 @@ public partial class EmpireScreen
         int want = f.Target >= 0 ? f.Target : f.At;
         if (!list.Any(t => t.Id == want)) list.Insert(0, (want, StarName(want)));
         for (int i = 0; i < list.Count; i++) { target.AddItem(list[i].Name, list[i].Id); if (list[i].Id == want) target.Selected = i; }
+        // own systems are listed up to OwnSystemCap, nearest the capital first: say so rather than drop the rest silently
+        int more = Sim.Humanity.Colonies.Count - OwnSystemCap;
+        if (more > 0) { target.AddItem($"and {more:#,0} more of our systems (fly there to order)"); target.SetItemDisabled(target.ItemCount - 1, true); }
         if (manual)
         {
             mission.ItemSelected += i => Sim.Order(f, f.Target >= 0 ? f.Target : f.At, mission.GetItemText((int)i));
@@ -318,11 +297,12 @@ public partial class EmpireScreen
         return p;
     }
 
-    /// <summary>Where a fleet can be sent: own systems, the claims and the front targets of open wars.</summary>
+    /// <summary>Where a fleet can be sent: own systems (the OwnSystemCap nearest the capital), the claims and the front targets of open wars.</summary>
     List<(int Id, string Name)> OrderTargets(Civ me)
     {
         var ids = new List<int>();
-        foreach (var c in me.Colonies.Take(OwnSystemCap)) ids.Add(c.Star.Id);
+        var cap = me.Colonies.FirstOrDefault(c => c.Home) ?? me.Colonies.FirstOrDefault();
+        if (cap != null) foreach (var c in me.Colonies.OrderBy(c => c.Star.Pos.DistanceSquaredTo(cap.Star.Pos)).Take(OwnSystemCap)) ids.Add(c.Star.Id);
         foreach (var w in Sim.Wars.Where(w => w.Open && w.Has(me.Id)))
         {
             ids.AddRange(w.Claims);

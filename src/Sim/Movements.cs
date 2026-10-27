@@ -44,12 +44,51 @@ public partial class Simulation
         AnswerMovement(c);
     }
 
+    /// <summary>How long an answered movement waits before it is put to anyone again (strife.answers.askAgainYears).</summary>
+    public static double AskAgainYears => SD("answers", "askAgainYears");
+
+    /// <summary>
+    /// The player answers a movement from the Interior tab: through the inbox's open proposal for it when there is one
+    /// (so the proposal closes with that answer), otherwise directly, withdrawing any stale proposal. Returns false when
+    /// the system is no longer the player's or has no movement any more.
+    /// </summary>
+    public bool AnswerFromInterior(Colony c, Answer a)
+    {
+        if (c.Civ != Humanity || c.Movement == null) return false;
+        string key = "interior:" + c.Star.Id;
+        var open = Alerts.FirstOrDefault(x => x.Key == key && !x.Done && x.Decision);
+        int idx = open?.Choices.FindIndex(ch => ch.Label == AnswerLabel(a)) ?? -1;
+        if (idx >= 0) Decide(open, idx);
+        else { Respond(c, a); Withdraw(key); }
+        return true;
+    }
+
+    /// <summary>
+    /// The Interior tab's rows: the player's systems but the capital, sorted ("Grievance", "Name" or "Stage") and cut
+    /// into pages of `perPage`. The page asked for is clamped to the pages there are.
+    /// </summary>
+    public static (List<Colony> Rows, int Page, int Pages, int Count) InteriorPage(Civ civ, string sort, int page, int perPage)
+    {
+        var rest = civ.Colonies.Where(c => !c.Home);
+        var sorted = sort switch
+        {
+            "Name" => rest.OrderBy(c => c.Star.Name, StringComparer.OrdinalIgnoreCase),
+            "Stage" => rest.OrderByDescending(c => c.Unrest).ThenByDescending(c => c.Grievance),
+            _ => rest.OrderByDescending(c => c.Grievance),
+        };
+        var list = sorted.ToList();
+        perPage = Math.Max(1, perPage);
+        int pages = Math.Max(1, (list.Count + perPage - 1) / perPage);
+        page = Math.Clamp(page, 0, pages - 1);
+        return (list.Skip(page * perPage).Take(perPage).ToList(), page, pages, list.Count);
+    }
+
     /// <summary>Put the movement to whoever answers it: the player when they hold Interior, otherwise the council.</summary>
     void AnswerMovement(Colony c)
     {
         var civ = c.Civ;
         string key = "interior:" + c.Star.Id;
-        if (Year < civ.Policy.AskAfter.GetValueOrDefault(key)) return;          // answered within the last five years
+        if (Year < civ.Policy.AskAfter.GetValueOrDefault(key)) return;          // answered within AskAgainYears
         if (civ.Main && civ.Policy.IsManual(Area.Interior))
         {
             if (Waiting(key)) return;
@@ -63,7 +102,7 @@ public partial class Simulation
         Respond(c, CouncilAnswer(c));
     }
 
-    /// <summary>A movement left waiting comes back for an answer once its time is up (five years).</summary>
+    /// <summary>A movement left waiting comes back for an answer once its time is up (AskAgainYears).</summary>
     void AnswerAgain(Colony c)
     {
         if (c.Movement == null || c.Autonomy || Year < c.InvestedUntil) return;
@@ -120,7 +159,7 @@ public partial class Simulation
                     Log(c, $"Troops land at {c.Sys.Name}. {Cap(c.Movement ?? "the movement")} are broken up, and every other world hears about it.{Untold(untold, "other movement has", "other movements have", "been broken up by troops")}", "loss", null);
                 break;
         }
-        // whatever the answer, the movement is not taken up again for five years
-        civ.Policy.AskAfter[key] = Year + 5;
+        // whatever the answer, the movement is not taken up again for a while
+        civ.Policy.AskAfter[key] = Year + AskAgainYears;
     }
 }

@@ -44,6 +44,23 @@ public partial class Simulation
         return Math.Clamp(sum * GovFactor(civ) - relief, 0, 100);
     }
 
+    /// <summary>The biggest of WorldTarget's causes, as a phrase for the Interior tab (null when nothing weighs on it).</summary>
+    public string WorldCause(Colony c, Body b)
+    {
+        var civ = c.Civ;
+        double far = b.Parent == c.Seat ? 0.3 : Math.Min(Math.Abs(Math.Log2(Math.Max(StarOrbit(b), 1e-6f) / Math.Max(StarOrbit(c.Seat), 1e-6f))), 3);
+        var causes = new (double Points, string Phrase)[]
+        {
+            (HW("far") * far / 3, $"{c.Seat.Name} is far away"),
+            (HW("hub") * c.Hubs.GetValueOrDefault(b) / 3.0, $"its mines and yards work for {c.Seat.Name}"),
+            (c.PopCap > 0 && c.Pop > 0.92 * c.PopCap ? HW("crowding") : 0, "there is no room left to live"),
+            (civ.Emergency ? HW("emergency") : 0, "the emergency takes everything it makes"),
+            (civ.Ethic == "Ruthless" ? HW("ruthless") : 0, "the council rules it harshly"),
+        };
+        var top = causes.OrderByDescending(x => x.Points).First();
+        return top.Points > 0 ? top.Phrase : null;
+    }
+
     /// <summary>Yearly for a home system: each settled world (not the seat) climbs or descends the ladder; at insurgency
     /// a movement is answered; in open revolt it may rise.</summary>
     void HomeWorlds(Colony c, double dy)
@@ -70,8 +87,8 @@ public partial class Simulation
     {
         var civ = c.Civ;
         string name = MovementName(b), key = $"interior:{c.Star.Id}:{b.Name}";
-        if (Year < civ.Policy.AskAfter.GetValueOrDefault(key)) return;           // answered within the last five years
-        civ.Policy.AskAfter[key] = Year + 5;
+        if (Year < civ.Policy.AskAfter.GetValueOrDefault(key)) return;           // answered within AskAgainYears
+        civ.Policy.AskAfter[key] = Year + AskAgainYears;
         StrifeCount("movements");
         if (civ.Main) Log(c, $"The {name} takes up arms on {b.Name}: it is tired of working for {c.Seat.Name}.", "loss", b);
         var a = civ.Ethic == "Ruthless" ? Answer.Crackdown : civ.Ethic == "Reverent" ? (CanInvest(civ) ? Answer.Invest : Answer.SelfRule) : Answer.SelfRule;
