@@ -122,6 +122,19 @@ public static class FractureTests
             sim.GrievanceTarget(far, out string cause);
             SelfTest.Check(cause == Simulation.CausePhrase["hive"], "a far holdout is in arms against the hive, not the distance");
         }),
+        ("foreign_wonders_share_news", () => {
+            // a galaxy of many powers: their wonders share one slot in humanity's chronicle (interface.foreignNewsYears)
+            var (sim, h) = Calm();
+            var aliens = sim.Civs.Where(c => c.Alien && !c.Dead && c.Colonies.Count > 0).Take(2).ToList();
+            foreach (var a in aliens) { a.Met.Add(h.Id); h.Met.Add(a.Id); }
+            int n = sim.Chronicle.Count;
+            foreach (var a in aliens) sim.MoveStar(a.Colonies[0].Star, a.Colonies[0].Star.Pos + new Godot.Vector3(0.1f, 0, 0), a);
+            SelfTest.Check(sim.Chronicle.Count == n + 1, "two foreign wonders in a year make one line");
+            sim.MoveStar(h.Colonies.First(c => !c.Home).Star, h.Colonies.First(c => !c.Home).Star.Pos + new Godot.Vector3(0.1f, 0, 0), h);
+            SelfTest.Check(sim.Chronicle.Count == n + 2, "humanity's own are always told");
+            sim.Log(aliens[0].Colonies[0], "battle one", "era", null, party: true); sim.Log(aliens[0].Colonies[0], "battle two", "era", null, party: true);
+            SelfTest.Check(sim.Chronicle.Count == n + 4, "and so are humanity's battles in foreign systems");
+        }),
         ("hive_tech_calls_vote", () => {
             var (sim, h) = Calm();
             sim.CompleteTech(h, Defs.TechById("S8"));

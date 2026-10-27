@@ -190,7 +190,9 @@ public partial class Simulation
     }
 
     // ---------- Logging ----------
-    public void Log(Colony c, string text, string kind, object where)
+    double _foreignNewsAt;
+    /// <summary>A chronicle line. `party`: humanity is one side of it (its battle, its peace), whoever's system it is in.</summary>
+    public void Log(Colony c, string text, string kind, object where, bool party = false)
     {
         var civ = c?.Civ ?? Humanity;
         // the chronicle follows humanity, the watched system, and anyone humanity has met
@@ -200,6 +202,13 @@ public partial class Simulation
         // far-flung human colonies only make the chronicle with turning points, not routine news
         if (civ.Main && c != null && !c.Home && c != Focus && (kind == "event" || kind == "council")) relevant = false;
         if (!relevant) return;
+        // foreign turning points humanity has no part in share one slot, a line every interface.foreignNewsYears at most,
+        // so a crowded late galaxy does not bury humanity's history (only the chronicle reads it, so it is not saved)
+        if (kind == "era" && !civ.Main && !party && c != Focus)
+        {
+            if (Year < _foreignNewsAt) return;
+            _foreignNewsAt = Year + WarData.D("interface", "foreignNewsYears");
+        }
         var e = new LogEntry { Year = Year, Civ = civ, Colony = c, System = c?.Sys.Name ?? "", Text = text, Kind = kind, Where = where, StarId = c?.Star.Id ?? -1 };
         Chronicle.Add(e);
         if (Chronicle.Count > 4000) Chronicle.RemoveRange(0, 1000);

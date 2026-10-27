@@ -36,6 +36,15 @@ public static class WarData
         if (!_d.TryGetValue(key, out double v)) _d[key] = v = P(path).GetDouble();
         return v;
     }
+    // the common short paths without building a key string per call (C# picks these over the params form)
+    static readonly System.Collections.Generic.Dictionary<(string, string, string), double> _d3 = new();
+    public static double D(string a, string b) => D3(a, b, null);
+    public static double D(string a, string b, string c) => D3(a, b, c);
+    static double D3(string a, string b, string c)
+    {
+        if (!_d3.TryGetValue((a, b, c), out double v)) _d3[(a, b, c)] = v = c == null ? P(a, b).GetDouble() : P(a, b, c).GetDouble();
+        return v;
+    }
     public static string S(params string[] path) => P(path).GetString();
 
     /// <summary>A placeholder cube's colour (placeholders.kind, a hex string).</summary>

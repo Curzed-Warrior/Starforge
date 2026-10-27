@@ -438,7 +438,7 @@ public partial class Simulation
         var a = Civs[w.A[0]]; var b = Civs[w.B[0]];
         ApplyTerms(w, aWins ? a : b, aWins ? b : a, terms);
         var col = (a.Main ? a : b.Main ? b : a).Colonies.FirstOrDefault() ?? HomeColony;
-        Log(col, $"Peace between {Narrative2.Called(a)} and {Narrative2.Called(b)}: {w.Ending}.", "era", null);
+        Log(col, $"Peace between {Narrative2.Called(a)} and {Narrative2.Called(b)}: {w.Ending}.", "era", null, party: a.Main || b.Main);
         if (a.Main || b.Main) Raise("Contact", $"Peace with {Narrative2.Called(a.Main ? b : a)}", $"The war between {Narrative2.Called(a)} and {Narrative2.Called(b)} is over: {w.Ending}.", col);
     }
 }

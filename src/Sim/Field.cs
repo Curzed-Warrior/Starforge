@@ -116,7 +116,10 @@ public partial class Simulation
         if (Year >= _nextOrders)
         {
             _nextOrders = Year + F("orderEvery");
-            foreach (var civ in Civs) if (!civ.Dead && civ.Colonies.Count > 0) CouncilOrders(civ);
+            // every civ's fleets, found in one pass rather than one scan of the galaxy's fleets per civ
+            var byCiv = new Dictionary<int, List<Fleet>>();
+            foreach (var f in Fleets) { if (!byCiv.TryGetValue(f.Civ, out var l)) byCiv[f.Civ] = l = new(); l.Add(f); }
+            foreach (var civ in Civs) if (!civ.Dead && civ.Colonies.Count > 0 && byCiv.TryGetValue(civ.Id, out var mine)) CouncilOrders(civ, mine);
         }
     }
 
@@ -164,7 +167,7 @@ public partial class Simulation
         {
             w.LastLog = Year;
             double hulls = r.AWins ? r.LostB : r.LostA;
-            Log(target ?? HomeColony, $"Battle at {Gal.Stars[star].Name}: {Narrative2.Called(win, true)} beat {Narrative2.Called(lose)}, who lose {hulls:#,0} ships.", win.Main ? "era" : "loss", null);
+            Log(target ?? HomeColony, $"Battle at {Gal.Stars[star].Name}: {Narrative2.Called(win, true)} beat {Narrative2.Called(lose)}, who lose {hulls:#,0} ships.", win.Main ? "era" : "loss", null, party: true);
         }
         return r;
     }
@@ -260,14 +263,21 @@ public partial class Simulation
     static double TraitD(string trait, string key, double dflt) =>
         WarData.P("battle", "traits", trait).TryGetProperty(key, out var v) ? v.GetDouble() : dflt;
 
+    /// <summary>The nearest of these systems to a point, the first of equals (one pass, not a sort of the empire).</summary>
+    static Colony FirstNearest(List<Colony> cols, Godot.Vector3 p)
+    {
+        Colony best = null; float bd = 0;
+        foreach (var c in cols) { float d = c.Star.Pos.DistanceSquaredTo(p); if (best == null || d < bd) { best = c; bd = d; } }
+        return best;
+    }
+
     /// <summary>
     /// The admirals' orders: the home fleet guards what is threatened, attack fleets go for the claims and then the
     /// weakest system in reach (carrying armies), raiders blockade the richest. A broken fleet always goes home; with
     /// the Fleets area in the player's hands nothing else is ordered. At peace every fleet comes home.
     /// </summary>
-    void CouncilOrders(Civ civ)
+    void CouncilOrders(Civ civ, List<Fleet> mine)
     {
-        var mine = FleetsOf(civ).ToList();
         if (mine.Count == 0) return;
         var home = civ.Colonies.FirstOrDefault(c => c.Home) ?? civ.Colonies[0];
         bool manual = civ.Policy.IsManual(Area.Fleets);
@@ -304,7 +314,7 @@ public partial class Simulation
                         .OrderBy(r => r.Value).Select(r => Civs[r.Key]).FirstOrDefault() ?? civ;
                     post = rival != civ ? (watch ??= Frontier(civ, new() { rival }) ?? home)
                         : ColonyAt(f.Moving ? f.To : f.At) is { } c0 && c0.Civ == civ ? c0
-                        : civ.Colonies.OrderBy(c => c.Star.Pos.DistanceSquaredTo(Gal.Stars[f.Moving ? f.To : f.At].Pos)).First();
+                        : FirstNearest(civ.Colonies, Gal.Stars[f.Moving ? f.To : f.At].Pos);
                 }
                 if (f.Target != post.Star.Id && !(f.Target < 0 && f.At == post.Star.Id)) Order(f, post.Star.Id, m);
                 continue;

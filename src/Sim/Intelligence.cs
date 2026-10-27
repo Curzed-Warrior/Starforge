@@ -24,31 +24,75 @@ public partial class Simulation
         var home = Home(c);
         if (home == null) return list;
         double caution = c.Ethic == "Reverent" ? 2 : c.Ethic == "Ruthless" ? 0.5 : 1;
+        foreach (var (col, m, v, d) in Targets(c, home))
+        {
+            double score = v * SuccessChance(t, d, m) * Math.Max(0, 1 - CaptureChance(t, d, m) * caution);
+            if (score > 0) list.Add((col, m, score));
+        }
+        return list.OrderByDescending(x => x.Item3).ToList();
+    }
+
+    /// <summary>Which academy pass is running (AcademyStep): within one, a civ's targets are worked out once for all its teams. -1 outside.</summary>
+    int _offerPass = -1, _passes;
+    readonly Dictionary<int, (int Pass, List<(Colony, string, double, double)> List)> _targets = new();
+
+    /// <summary>
+    /// What a civ's teams could work on, with what each is worth and the holder's counter-intelligence: the same for
+    /// every team of the civ (only the odds depend on the team), so an academy pass works it out once per civ.
+    /// </summary>
+    List<(Colony Col, string Mission, double Value, double Ci)> Targets(Civ c, Colony home)
+    {
+        if (_offerPass >= 0 && _targets.TryGetValue(c.Id, out var hit) && hit.Pass == _offerPass) return hit.List;
+        var list = new List<(Colony, string, double, double)>();
         var aims = FleetsOf(c).Select(f => f.Target).Where(id => id >= 0).ToHashSet();
         double reach = S("travelYearsMax");
         var ci = new Dictionary<int, double>();
+        var steal = new Dictionary<int, bool>();      // whether a power has anything worth stealing depends on the power, not the system
+        // our systems each power occupies, found once (not once per power)
+        var held = new Dictionary<int, List<Colony>>();
+        foreach (var x in c.Colonies) if (x.OccupiedBy >= 0) { if (!held.TryGetValue(x.OccupiedBy, out var l)) held[x.OccupiedBy] = l = new(); l.Add(x); }
         foreach (var o in Known(c))
         {
             // at war, teams work from the front facing this enemy; otherwise from the capital
             var from = Staging(c, o) ?? home;
-            var near = o.Colonies.Concat(c.Colonies.Where(x => x.OccupiedBy == o.Id))
-                .OrderByDescending(x => aims.Contains(x.Star.Id)).ThenBy(x => x.Star.Pos.DistanceSquaredTo(from.Star.Pos)).Take(TargetsPerCiv);
+            var near = Nearest(held.TryGetValue(o.Id, out var occ) ? o.Colonies.Concat(occ) : o.Colonies, aims, from.Star.Pos);
             foreach (var col in near)
             {
                 var def = Holder(col);
-                if (def == c || def.Dead || !c.Met.Contains(def.Id) || TravelYears(c, Staging(c, def).Star, col.Star) > reach) continue;
+                if (def == c || def.Dead || !c.Met.Contains(def.Id) || TravelYears(c, (Staging(c, def) ?? home).Star, col.Star) > reach) continue;
                 if (!ci.TryGetValue(def.Id, out double d)) ci[def.Id] = d = CounterIntel(def);
                 bool war = c.AtWar.Contains(def.Id), rival = c.Relations.GetValueOrDefault(def.Id) < 0;
                 foreach (var m in Missions)
                 {
                     double v = MissionValue(c, col, m, war, rival);
-                    if (v <= 0 || !Fits(c, col, def, m)) continue;
-                    double score = v * SuccessChance(t, d, m) * Math.Max(0, 1 - CaptureChance(t, d, m) * caution);
-                    if (score > 0) list.Add((col, m, score));
+                    if (v <= 0) continue;
+                    bool fits = m == "steal_tech" ? steal.TryGetValue(def.Id, out bool st) ? st : steal[def.Id] = Fits(c, col, def, m) : Fits(c, col, def, m);
+                    if (fits) list.Add((col, m, v, d));
                 }
             }
         }
-        return list.OrderByDescending(x => x.Item3).ToList();
+        if (_offerPass >= 0) _targets[c.Id] = (_offerPass, list);
+        return list;
+    }
+
+    /// <summary>
+    /// The TargetsPerCiv systems a council looks at: its fleets' targets first, then the nearest to `at`; ties keep their
+    /// order. One pass that keeps the best few, not a sort of a thousand-system empire.
+    /// </summary>
+    static List<Colony> Nearest(IEnumerable<Colony> cols, HashSet<int> aims, Godot.Vector3 at)
+    {
+        var best = new List<(bool Aim, float D, Colony C)>(TargetsPerCiv + 1);
+        foreach (var x in cols)
+        {
+            bool aim = aims.Contains(x.Star.Id); float d = x.Star.Pos.DistanceSquaredTo(at);
+            if (best.Count == TargetsPerCiv && !Before(aim, d, best[^1])) continue;
+            int i = best.Count;
+            while (i > 0 && Before(aim, d, best[i - 1])) i--;
+            best.Insert(i, (aim, d, x));
+            if (best.Count > TargetsPerCiv) best.RemoveAt(best.Count - 1);
+        }
+        return best.Select(b => b.C).ToList();
+        static bool Before(bool aim, float d, (bool Aim, float D, Colony C) o) => aim && !o.Aim || aim == o.Aim && d < o.D;
     }
 
     /// <summary>The council's pick for a ready team. Null keeps the team at home.</summary>

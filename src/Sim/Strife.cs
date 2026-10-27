@@ -35,17 +35,28 @@ public partial class Simulation
     public readonly Dictionary<string, int> StrifeStats = new();
     void StrifeCount(string what) => StrifeStats[what] = StrifeStats.GetValueOrDefault(what) + 1;
 
-    static double SD(params string[] path) => WarData.D(new[] { "strife" }.Concat(path).ToArray());
+    // strife.* numbers, cached by (section, key) without building a path each time: every system's grievance reads a
+    // dozen of them a year
+    static readonly Dictionary<(string, string), double> _sd = new();
+    static double SD(string a, string b = null)
+    {
+        if (!_sd.TryGetValue((a, b), out double v)) _sd[(a, b)] = v = b == null ? WarData.D("strife", a) : WarData.D("strife", a, b);
+        return v;
+    }
+    static double SD(string a, string b, string c) => WarData.D("strife", a, b, c);
 
     static string[] _unrestNames;
     public static string[] UnrestNames => _unrestNames ??= WarData.P("strife", "ladder", "names").EnumerateArray().Select(e => e.GetString()).ToArray();
 
+    static double[] _up, _down;
     /// <summary>The ladder with hysteresis: a step is climbed at up[s] and only left once grievance falls below down[s-1].</summary>
     public static int Stage(float g, int cur)
     {
         int s = Math.Clamp(cur, 0, 4);
-        while (s < 4 && g >= SD("ladder", "up", s.ToString())) s++;
-        while (s > 0 && g < SD("ladder", "down", (s - 1).ToString())) s--;
+        _up ??= new[] { 0, 1, 2, 3 }.Select(i => SD("ladder", "up", i.ToString())).ToArray();
+        _down ??= new[] { 0, 1, 2, 3 }.Select(i => SD("ladder", "down", i.ToString())).ToArray();
+        while (s < 4 && g >= _up[s]) s++;
+        while (s > 0 && g < _down[s - 1]) s--;
         return s;
     }
 

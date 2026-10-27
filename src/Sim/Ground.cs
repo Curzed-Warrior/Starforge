@@ -111,6 +111,7 @@ public partial class Simulation
     /// </summary>
     void FieldSieges()
     {
+        List<Army> embarked = null;      // the armies aboard any fleet, found once (most armies are garrisons)
         foreach (var g in Fleets.Where(f => !f.Moving && f.Ships > 0).GroupBy(f => f.At).ToList())
         {
             var c = ColonyAt(g.Key);
@@ -131,7 +132,9 @@ public partial class Simulation
                 c.DefenceLoss = (float)Math.Clamp(1 - sb.StationHulls / Math.Max(whole, 1e-9), 0, 1);
             }
             if (!HoldsOrbit(att, c)) continue;
-            var aboard = Armies.Where(a => a.Civ == att.Id && a.Fleet >= 0 && g.Any(f => f.Id == a.Fleet)).ToList();
+            embarked ??= Armies.Where(a => a.Fleet >= 0).ToList();
+            var here = g.Select(f => f.Id).ToHashSet();
+            var aboard = embarked.Where(a => a.Civ == att.Id && here.Contains(a.Fleet)).ToList();
             // land only with the strength to win; otherwise keep the blockade and wait for more troops
             if (aboard.Count > 0 && InvasionStrength(aboard, att) > GarrisonStrength(c, att) * F("landingMargin")) Land(c, att, aboard);
             else if (c.OccupiedBy < 0) c.BlockadedUntil = Year + F("orderEvery");

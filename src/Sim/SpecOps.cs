@@ -59,8 +59,10 @@ public partial class Simulation
         foreach (var t in TeamsOf(c).Where(t => t.To >= 0 && t.Mission != "guard").ToList())
             if (!StillOn(t, ColonyAtAny(t.Target))) { SpecCount("aborted"); t.To = -1; Dispatch(t, null, "guard"); }
 
-        // a team home for a year is ready for its next mission
+        // a team home for a year is ready for its next mission (the civ's targets are worked out once for all of them)
+        _offerPass = ++_passes;
         foreach (var t in TeamsOf(c).Where(t => t.Mission == "guard" && t.To < 0 && Year >= t.Arrive + 1).ToList()) OfferTeam(c, t);
+        _offerPass = -1;
 
         bool war = c.AtWar.Count > 0;
         double men = S("manpowerPerTeam");
@@ -240,6 +242,9 @@ public partial class Simulation
                            : $"A special group of {N(att)} was caught working at {sys}. Relations with them have soured.", at);
     }
 
+    /// <summary>When each (attacker, defender, mission) may next make the chronicle. Only the chronicle reads it, so it is not saved.</summary>
+    readonly Dictionary<(int, int, string), double> _specNews = new();
+
     /// <summary>A mission succeeds. The chronicle tells it when the player is either side.</summary>
     public void Succeed(Team t, Colony c, string mission)
     {
@@ -279,6 +284,13 @@ public partial class Simulation
                 break;
             default: return;
         }
-        if (what != null && (att.Main || def.Main)) Log(c, what, def.Main ? "loss" : "event", null);
+        // the same team work is told once in a while (specops.logEveryYears), not after every raid; raids on our worlds
+        // count together whoever makes them (a fractured humanity can have many enemies at work)
+        var key = (def.Main ? -1 : att.Id, def.Id, mission);
+        if (what != null && (att.Main || def.Main) && Year >= _specNews.GetValueOrDefault(key))
+        {
+            _specNews[key] = Year + S("logEveryYears");
+            Log(c, what, def.Main ? "loss" : "event", null);
+        }
     }
 }

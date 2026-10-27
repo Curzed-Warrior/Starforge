@@ -203,6 +203,33 @@ public static class SpecOpsTests
             sim.Dispatch(t, null, "guard");
             SelfTest.Check(t.To == home.Star.Id && Math.Abs(t.Arrive - sim.Year - sim.TravelYears(h, x.Star, home.Star)) < 1e-6, "a team at peace comes the direct way home");
         }),
+        ("foreign_capture_quiet", () => {
+            var (sim, h, o, t) = Ready();
+            // two aliens, one at war with humanity: a spy of the other caught on its world is none of humanity's history
+            var a = sim.Civs.First(c => c.Alien && !c.Dead && c != o && c.Colonies.Count > 0);
+            o.Met.Add(h.Id); h.Met.Add(o.Id); sim.DeclareWar(h, o);
+            var spy = new Team { Id = sim.NextTeamId++, Civ = a.Id, At = o.Colonies[0].Star.Id, Quality = 1, Name = "Alien Group" };
+            sim.Teams.Add(spy);
+            int n = sim.Chronicle.Count;
+            sim.Captured(spy, o, o.Colonies[0]);
+            SelfTest.Check(sim.Chronicle.Count == n, "a capture between two foreign powers is not logged");
+            sim.Captured(t, o, o.Colonies[0]);
+            SelfTest.Check(sim.Chronicle.Count > n, "but one of ours caught is");
+        }),
+        ("spec_news_not_every_raid", () => {
+            var (sim, h, o, t) = Ready();
+            // the same enemy readying our worlds again and again is told once in a while, not every time
+            var spy = new Team { Id = sim.NextTeamId++, Civ = o.Id, At = h.Colonies[0].Star.Id, Quality = 1, Name = "Their Group" };
+            int n = sim.Chronicle.Count;
+            for (int i = 0; i < 4; i++) sim.Succeed(spy, h.Colonies[i % h.Colonies.Count], "prepare_invasion");
+            var other = sim.Civs.First(c => c.Alien && !c.Dead && c != o);
+            sim.Succeed(new Team { Id = sim.NextTeamId++, Civ = other.Id, At = h.Colonies[0].Star.Id, Quality = 1, Name = "Another Group" }, h.Colonies[0], "prepare_invasion");
+            SelfTest.Check(sim.Chronicle.Count == n + 1, "four raids in a year make one line, whoever makes them");
+            sim.Warp(WarData.D("specops", "logEveryYears") + 0.5);
+            int m = sim.Chronicle.Count;
+            sim.Succeed(spy, h.Colonies[0], "prepare_invasion");
+            SelfTest.Check(sim.Chronicle.Count == m + 1, "and the next raid after a while is told again");
+        }),
         ("home_through_own_space", () => {
             var (sim, h, o, t) = Ready();
             // a team left standing in a system we hold (its target fell to our fleet) crosses our own space home

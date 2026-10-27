@@ -81,7 +81,12 @@ public partial class Simulation
         return best;
     }
     bool Chronicled(Civ c, Colony at = null) => c.Main || at != null && at == Focus || at?.Civ.Main == true;
-    void Say(Civ c, Colony at, string text, string kind = "event") { if (Chronicled(c, at) || kind is "era" or "loss" or "omen") Log(at ?? Home(c), text, kind, null); }
+    void Say(Civ c, Colony at, string text, string kind = "event")
+    {
+        // a loss between foreign powers is not humanity's history, even when the loser happens to be at war with humanity
+        if (kind == "loss" && !Chronicled(c, at)) return;
+        if (Chronicled(c, at) || kind is "era" or "omen") Log(at ?? Home(c), text, kind, null);
+    }
     static string Cap(string s) => s.Length == 0 ? s : char.ToUpper(s[0]) + s[1..];
     string N(Civ c) => Narrative2.Called(c);
 

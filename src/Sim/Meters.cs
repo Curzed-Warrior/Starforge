@@ -126,7 +126,8 @@ public partial class Simulation
                     var o = Civs[id];
                     o.Relations[civ.Id] = o.Relations.GetValueOrDefault(civ.Id) - 30; civ.Relations[o.Id] = o.Relations[civ.Id];
                 }
-                Log(home, $"{Called().First().ToString().ToUpper() + Called()[1..]}'s spy networks are exposed all at once. Every embassy in the galaxy closes its doors to them.", "loss", null);
+                // humanity's own scandal is a loss; a foreign one is foreign news (Log gives those one shared slot)
+                Log(home, $"{Called().First().ToString().ToUpper() + Called()[1..]}'s spy networks are exposed all at once. Every embassy in the galaxy closes its doors to them.", civ.Main ? "loss" : "era", null);
                 break;
             case "Egress":
                 HorizonShock(civ);

@@ -288,7 +288,14 @@ public partial class Colony
         if (Everywhere.Contains(id)) return civ.Colonies.Where(c => c.Seat != null && c.CanHost(id));
         var started = civ.Colonies.FirstOrDefault(c => c.Has(id));
         if (started != null) return new[] { started };
-        var best = civ.Colonies.Where(c => c.Seat != null && c.CanHost(id)).OrderByDescending(c => c.Suits(id)).FirstOrDefault();
+        // the first of the best suited (one pass: a sort of a thousand systems for one pick is most of a year's planning)
+        Colony best = null; double top = 0;
+        foreach (var c in civ.Colonies)
+        {
+            if (c.Seat == null || !c.CanHost(id)) continue;
+            double s = c.Suits(id);
+            if (best == null || s > top) { best = c; top = s; }
+        }
         return best == null ? Array.Empty<Colony>() : new[] { best };
     }
     /// <summary>Sites are replanned with the logistics, once a year: ids of the great works each system builds.</summary>
@@ -401,11 +408,17 @@ public partial class Colony
         }
         BuildRate.Clear();
         // the voice's raised structures always proceed; then what is sited here, most wanted (and smallest) first
-        var want = Raised.Concat(Civ.M.Megas.Where(id => !Raised.Contains(id))).Where(id => !Instant(id)).Distinct()
-            .Where(id => BuildProgress(id) < 1f && BuildsHere(id) && (!Civ.Emergency || Critical(id) || Raised.Contains(id)) && Sanctioned(id))
-            .OrderBy(id => Raised.Contains(id) ? 0 : 1).ThenBy(id => Built.ContainsKey(id) ? 0 : 1).ThenByDescending(Want).ThenBy(id => SpecOf(id).Kg)
-            .ToList();
-        if (want.Count == 0) return;
+        // (a plain loop, not a query: every system runs this every build tick, and nearly always nothing qualifies)
+        List<string> want = null;
+        foreach (var id in Raised) Consider(id);
+        foreach (var id in Civ.M.Megas) if (!Raised.Contains(id)) Consider(id);
+        void Consider(string id)
+        {
+            if (!Instant(id) && BuildProgress(id) < 1f && BuildsHere(id) && (!Civ.Emergency || Critical(id) || Raised.Contains(id)) && Sanctioned(id))
+                (want ??= new()).Add(id);
+        }
+        if (want == null) return;
+        want = want.OrderBy(id => Raised.Contains(id) ? 0 : 1).ThenBy(id => Built.ContainsKey(id) ? 0 : 1).ThenByDescending(Want).ThenBy(id => SpecOf(id).Kg).ToList();
         var active = new List<string>();
         int slots = BuildSlots;
         foreach (var id in want) if (Raised.Contains(id) || active.Count(a => !Raised.Contains(a)) < slots) active.Add(id);
