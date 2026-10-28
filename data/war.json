@@ -123,7 +123,7 @@
       "outOfPower": 12, "deposits": 6, "occupied": 30, "poverty": 20, "dread": 10, "mandatory": 8, "incited": 30, "hive": 35, "sprawl": 40
     },
     "sprawl": { "from": 150, "full": 600 },
-    "relief": { "autonomy": 20, "invested": 25, "megaOrder": 100, "faith": 10, "base": 5 },
+    "relief": { "autonomy": 20, "autonomySprawl": 0.5, "invested": 25, "megaOrder": 100, "faith": 10, "base": 5 },
     "gov": { "hive": 0, "digital": 0.6, "Synthetic Commonwealth": 0.6, "Directorate": 1.1, "junta": 1.3, "holdout": 1.0 },
     "answers": { "investCost": 0.05, "investYears": 25, "crackdown": 30, "crackdownFade": 0.5, "crackdownSpread": 6, "selfRuleIndustry": 0.5, "askAgainYears": 5 },
     "revolt": { "chancePerYear": 0.1, "civilWarShare": 0.2, "civilWarPopShare": 0.25, "letGoMax": 3, "defectLoyalty": 0.6,

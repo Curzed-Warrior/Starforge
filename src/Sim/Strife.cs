@@ -169,7 +169,7 @@ public partial class Simulation
         Add("dread", civ.Dread);
         if (civ.MandatoryService && civ.Culture != null && civ.Culture.Duty < 0) Add("mandatory", 1);
         if (c.IncitedUntil > Year) Add("incited", 1);
-        Add("sprawl", Sprawl(civ), felt: false);
+        Add("sprawl", Sprawl(civ) * (c.Autonomy ? SD("relief", "autonomySprawl") : 1), felt: false);   // a self-ruled system has a council near enough to hear it
         bool holdout = c.Holdout && civ.M.Hive;
         if (holdout) Add("hive", 1);
         if (holdout) top = "hive";      // whatever else it resents, a holdout is in arms against the hive (and rises with the others)

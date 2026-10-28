@@ -31,9 +31,14 @@ Still open:
       whole, all of them non-hive. In a hive game humanity always ends split: the vote's holdouts or the sprawl fray
       give it at least one small splinter. Fracture is still left to chance (no steering), but if "some seeds whole"
       should hold for the six, the hive side is the lever (`strife.hive.sprawlFray`, `frayPerYear`, `splitShare`).
-- [ ] **Sprawl puts a big humanity on strike.** In seed 20610 at 2961, 438 of 452 human systems are at strikes (sprawl
-      +27): strikes stop shipping industry to great works. Spec-consistent ("drifts apart if overstretched"), but watch
-      great-work pace in late games and consider whether self-rule should relieve sprawl.
+- [x] **Self-rule answers the levy and sprawl.** A council (not Ruthless, not a junta) now answers a movement over the
+      levy or the empire's size with self-rule (it was "wait", so self-rule was never granted), and a self-ruled system
+      feels sprawl at `strife.relief.autonomySprawl` (0.5).
+- [ ] **A Ruthless humanity smoulders.** The 20610 strikes were not sprawl: humanity there is Ruthless, cracks down
+      on every movement, and each crackdown adds `crackdownSpread` (6) to every other system. From ~2800 the levy
+      puts half the empire on strike, crackdowns cascade, and by 2951 343 systems are in insurgency and 72 in open
+      revolt, with 4% of the levy shipped. It splits only twice (`revolt.cooldownYears` 50). Options: scale the
+      spread by empire size, or let the revolt cooldown shorten with the number in open revolt. Owner's call.
 - [x] **Chronicle per century was 148–230** (target 100–200). An enemy's own losses (its revolutions, its other wars)
       now share one slot a year (`interface.foreignNewsYears`), as foreign wonders do; humanity's part in them is always
       told. Now 142–198: 20610 168, 7 146, 4242 188, 1 198, 99 142, 2026 184 (simulation unchanged).
