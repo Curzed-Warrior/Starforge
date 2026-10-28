@@ -106,8 +106,8 @@ public static class CommandTests
         ("ai_never_commands", () => {
             var sim = SelfTest.NewSim(); sim.Warp(2); sim.CommandEnabled = true; sim.Humanity.Policy.Battle = BattleMode.Command;
             var al = sim.Civs.Where(c => c.Alien && c.Colonies.Count > 0).Take(2).ToList();
-            if (al.Count < 2) return;
-            var w = sim.DeclareWar(al[0], al[1], "border_claim"); if (w == null) return;
+            if (al.Count < 2) SelfTest.Skip("fewer than two alien civs with colonies");
+            var w = sim.DeclareWar(al[0], al[1], "border_claim"); if (w == null) SelfTest.Skip("the aliens would not go to war");
             Arm(sim, al[0]); Arm(sim, al[1]);
             var r = sim.TestFight(w, al[0].Colonies[0].Star.Id);
             SelfTest.Check(r != null && sim.Command == null, "a battle between others is never the player's to command");

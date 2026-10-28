@@ -135,6 +135,22 @@ public static class FractureTests
             sim.Log(aliens[0].Colonies[0], "battle one", "era", null, party: true); sim.Log(aliens[0].Colonies[0], "battle two", "era", null, party: true);
             SelfTest.Check(sim.Chronicle.Count == n + 4, "and so are humanity's battles in foreign systems");
         }),
+        ("foreign_losses_share_news", () => {
+            // an enemy's own losses (its revolutions, its other wars) share one slot a year, as foreign wonders do
+            var (sim, h) = Calm();
+            var aliens = sim.Civs.Where(c => c.Alien && !c.Dead && c.Colonies.Count > 0).Take(2).ToList();
+            if (aliens.Count < 2) SelfTest.Skip("fewer than two alien civs with colonies");
+            foreach (var a in aliens) { a.Met.Add(h.Id); h.Met.Add(a.Id); a.AtWar.Add(h.Id); }
+            int n = sim.Chronicle.Count;
+            sim.Log(aliens[0].Colonies[0], "loss one", "loss", null); sim.Log(aliens[1].Colonies[0], "loss two", "loss", null);
+            SelfTest.Check(sim.Chronicle.Count == n + 1, "two enemy losses in a year make one line");
+            sim.Log(aliens[0].Colonies[0], "our raid", "loss", null, party: true);
+            SelfTest.Check(sim.Chronicle.Count == n + 2, "humanity's part in them is always told");
+            sim.Warp(WarData.D("interface", "foreignNewsYears") + 0.5);
+            int m = sim.Chronicle.Count(e => e.Text == "loss three");
+            sim.Log(aliens[1].Colonies[0], "loss three", "loss", null);
+            SelfTest.Check(sim.Chronicle.Count(e => e.Text == "loss three") == m + 1, "and the slot opens again");
+        }),
         ("hive_tech_calls_vote", () => {
             var (sim, h) = Calm();
             sim.CompleteTech(h, Defs.TechById("S8"));
@@ -160,7 +176,7 @@ public static class FractureTests
             // humanity's risings make one chronicle line per interface.movementNewsYears, and the next one counts the rest
             var (sim, h) = Calm(); h.SetDrive(h.Drive, "Pragmatic");
             var cs = h.Colonies.Where(x => !x.Home).Take(3).ToList();
-            if (cs.Count < 3) return;
+            if (cs.Count < 3) SelfTest.Skip("fewer than three colonies");
             int Lines() => sim.Chronicle.Count(e => e.Text.Contains("take up arms"));
             int n0 = Lines();
             foreach (var c in cs.Take(2)) { c.Grievance = 70; c.Unrest = 3; sim.Rise(c); }
@@ -194,7 +210,7 @@ public static class FractureTests
             foreach (var (restless, cooling) in new[] { (true, false), (true, true), (false, false) })
             {
                 var (sim, h) = Calm(); h.Founded = sim.Year - 100;
-                if (h.Colonies.Count < 8) return;                                  // too few colonies on this seed for a schism
+                if (h.Colonies.Count < 8) SelfTest.Skip("too few colonies on this seed for a schism");
                 h.NextRising = cooling ? sim.Year + 40 : 0;
                 if (restless) foreach (var c in h.Colonies.Where(c => !c.Home)) { c.Grievance = 50; c.Unrest = 2; }
                 var ks = h.Inf.Keys.ToList(); string other = ks.First(k => k != h.Drive);
@@ -211,6 +227,31 @@ public static class FractureTests
             var (sim, h) = Calm();
             foreach (var id in new[] { "ASC-S3b", "ASC-S3c" })
                 SelfTest.Check(Simulation.SpineLike(Defs.TechById(id)) && Simulation.TierOk(h, Defs.TechById(id)), $"{id} opens with the spine");
+        }),
+        ("hand_forces_the_leaned_member", () => {
+            // the spine's card for an exclusive step is the member the council leans to, not Hive Consensus every time
+            var (sim, h) = Calm(); h.Policy.Manual[(int)Area.Research] = false;
+            var s8 = Defs.TechById("S8");
+            if (!sim.Available(h, s8)) SelfTest.Skip("Hive Consensus is not open yet on this seed");
+            var rival = Defs.ExclusiveGroups[s8.Exclusive].Select(Defs.TechById).FirstOrDefault(t => t.Id != s8.Id && sim.Available(h, t));
+            if (rival == null) SelfTest.Skip("no rival of Hive Consensus is open");
+            string area = Simulation.AreaOf(s8.B);
+            if (Simulation.AreaOf(rival.B) != area) SelfTest.Skip("the rivals research in another area");
+            // nothing else of the spine waits in this area: the forced card can only be one of the group
+            foreach (var t in sim.AvailableIn(h, area).Where(t => Simulation.SpineLike(t) && t.Exclusive != s8.Exclusive).ToList()) h.Techs.Add(t.Id);
+            foreach (var (lean, other) in new[] { (rival, s8), (s8, rival) })
+            {
+                h.ExclusivePick[s8.Exclusive] = lean.Id;
+                int leaned = 0, others = 0;
+                for (int i = 0; i < 40; i++)
+                {
+                    var slot = h.Slots[area]; slot.Pinned = null; slot.LastHand.Clear();
+                    sim.PickResearch(h, area);
+                    if (slot.Hand.Contains(lean.Id)) leaned++;
+                    if (slot.Hand.Contains(other.Id)) others++;
+                }
+                SelfTest.Check(leaned == 40 && others < 10, $"leaning to {lean.Id}: dealt {leaned}/40, {other.Id} {others}/40");
+            }
         }),
         ("overstretched_hive_frays", () => {
             // a hive formed with little dissent holds while it is small, but a vast one frays all the same

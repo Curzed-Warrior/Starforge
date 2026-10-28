@@ -34,7 +34,7 @@ public static class WarTests
             var sim = SelfTest.NewSim(); sim.Warp(400);
             var h = sim.Humanity; h.Culture.Martial = 0.42f;
             var cols = h.Colonies.Where(c => !c.Home).Take(2).ToList();
-            if (cols.Count < 2) return;                                          // no colonies yet on this seed: nothing to check
+            if (cols.Count < 2) SelfTest.Skip("no colonies yet on this seed");
             var s = sim.SplinterForTest(h, h.Drive, cols);
             SelfTest.Check(Math.Abs(s.Culture.Martial - 0.42f) < 1e-4 && s.Culture != h.Culture, "copied, not shared");
             SelfTest.Check(sim.FleetsOf(h).All(f => f.Civ == h.Id), "parent keeps its fleets");
@@ -156,7 +156,6 @@ public static class WarTests
             var cols = h.Colonies.Where(c => !c.Home).Take(2).ToList();
             SelfTest.Check(cols.Count == 2, "seed has colonies by year 400");
             foreach (var c in cols) c.Built.Remove("yard");                             // young colonies, no yards yet
-            if (cols.Count < 2) return;
             var s = sim.SplinterForTest(h, h.Drive, cols);
             SelfTest.Check(sim.Slips(s) >= 1, "a breakaway's capital has a slip");
         }),

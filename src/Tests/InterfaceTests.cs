@@ -60,7 +60,7 @@ public static class InterfaceTests
             var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.M.Hive = false;
             h.Policy.Manual[(int)Area.Interior] = true;
             var c = h.Colonies.FirstOrDefault(x => !x.Home);
-            if (c == null) return;
+            if (c == null) SelfTest.Skip("no colonies yet on this seed");
             c.Grievance = 70; c.Unrest = 3; c.Movement = null; h.Policy.AskAfter.Remove("interior:" + c.Star.Id);
             sim.Rise(c);
             var open = sim.Alerts.FirstOrDefault(a => a.Key == "interior:" + c.Star.Id && !a.Done);
@@ -73,7 +73,7 @@ public static class InterfaceTests
         ("interior_pages", () => {
             var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
             int n = h.Colonies.Count(c => !c.Home);
-            if (n < 3) return;
+            if (n < 3) SelfTest.Skip("fewer than three colonies");
             var (rows, page, pages, count) = Simulation.InteriorPage(h, "Name", 99, 2);
             SelfTest.Check(count == n && pages == (n + 1) / 2 && page == pages - 1 && rows.Count == n - 2 * (pages - 1), "the last page, clamped");
             var all = Enumerable.Range(0, pages).SelectMany(p => Simulation.InteriorPage(h, "Name", p, 2).Rows).ToList();

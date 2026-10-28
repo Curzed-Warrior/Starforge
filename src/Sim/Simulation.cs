@@ -190,7 +190,6 @@ public partial class Simulation
     }
 
     // ---------- Logging ----------
-    double _foreignNewsAt;
     int _chronicleCap = 4000;
     /// <summary>A turning point (a new era, a breakthrough, an omen, the voice's work): kept for the whole game, in
     /// memory and in saves, where routine lines are capped.</summary>
@@ -208,12 +207,9 @@ public partial class Simulation
         if (civ.Main && c != null && !c.Home && c != Focus && (kind == "event" || kind == "council")) relevant = false;
         if (!relevant) return;
         // foreign turning points humanity has no part in share one slot, a line every interface.foreignNewsYears at most,
-        // so a crowded late galaxy does not bury humanity's history (only the chronicle reads it, so it is not saved)
-        if (kind == "era" && !civ.Main && !party && c != Focus)
-        {
-            if (Year < _foreignNewsAt) return;
-            _foreignNewsAt = Year + WarData.D("interface", "foreignNewsYears");
-        }
+        // so a crowded late galaxy does not bury humanity's history (only the chronicle reads it, so it is not saved);
+        // an enemy's own losses (its revolutions, its other wars) have a slot of their own on the same clock
+        if (kind is "era" or "loss" && !civ.Main && !party && c != Focus && News("foreign " + kind, "foreignNewsYears") < 0) return;
         var e = new LogEntry { Year = Year, Civ = civ, Colony = c, System = c?.Sys.Name ?? "", Text = text, Kind = kind, Where = where, StarId = c?.Star.Id ?? -1 };
         Chronicle.Add(e);
         // memory holds 4000 lines and more turning points: the oldest routine ones go first, turning points stay
