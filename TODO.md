@@ -34,11 +34,16 @@ Still open:
 - [x] **Self-rule answers the levy and sprawl.** A council (not Ruthless, not a junta) now answers a movement over the
       levy or the empire's size with self-rule (it was "wait", so self-rule was never granted), and a self-ruled system
       feels sprawl at `strife.relief.autonomySprawl` (0.5).
-- [ ] **A Ruthless humanity smoulders.** The 20610 strikes were not sprawl: humanity there is Ruthless, cracks down
-      on every movement, and each crackdown adds `crackdownSpread` (6) to every other system. From ~2800 the levy
-      puts half the empire on strike, crackdowns cascade, and by 2951 343 systems are in insurgency and 72 in open
-      revolt, with 4% of the levy shipped. It splits only twice (`revolt.cooldownYears` 50). Options: scale the
-      spread by empire size, or let the revolt cooldown shorten with the number in open revolt. Owner's call.
+- [x] **A Ruthless humanity smouldered** (20610: 343 systems in insurgency and 72 in revolt by 2951, 4% of the levy
+      shipped). Root cause was the levy: a system on strike ships nothing yet resented the levy in full, and a Ruthless
+      council never grants self-rule. Now a striking system feels the levy at `strife.levyOnStrike` (0.5), and sprawl
+      is felt at `strife.sprawl.near` (0.25) beside the capital, in full at a lifetime's distance (the empire drifts
+      apart at its edges). Scaling the crackdown spread by size was tried (branch `crackdown-spread`, not merged): it
+      did not touch the cause.
+- [ ] **20610 still strikes late.** A Ruthless humanity of 390–565 systems: ~350–430 on strike from sprawl at its far
+      systems, 2–22% of the levy shipped; insurgency comes and goes (385 at 2951, 94 at 3001). Conflict is lower on
+      every seed since strikes now resolve (revolts 21–58, was 40–96; civil wars 5–12, was 17–43); four of six
+      fracture (7 and 99 whole).
 - [x] **Chronicle per century was 148–230** (target 100–200). An enemy's own losses (its revolutions, its other wars)
       now share one slot a year (`interface.foreignNewsYears`), as foreign wonders do; humanity's part in them is always
       told. Now 142–198: 20610 168, 7 146, 4242 188, 1 198, 99 142, 2026 184 (simulation unchanged).

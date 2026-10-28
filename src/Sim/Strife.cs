@@ -156,7 +156,8 @@ public partial class Simulation
             causes?.Add((key, CausePhrase[key], v));
             if (v > best) { best = v; top = key; }
         }
-        if (!c.Autonomy) Add("levy", Math.Clamp(civ.LevyOut.GetValueOrDefault(c), 0, 1));
+        // a system on strike ships nothing: it resents the levy less (strife.levyOnStrike), so strikes can win and end
+        if (!c.Autonomy) Add("levy", Math.Clamp(civ.LevyOut.GetValueOrDefault(c), 0, 1) * (c.Unrest >= 2 ? SD("levyOnStrike") : 1));
         if (capital != null && capital != c) Add(Folds(civ) ? "distance" : "distanceSlow", DistanceFactor(c, capital));
         if (c.PopCap > 0 && c.Pop > 0.92 * c.PopCap) Add("crowding", 1);
         if (civ.Emergency) Add("emergency", 1);
@@ -169,7 +170,10 @@ public partial class Simulation
         Add("dread", civ.Dread);
         if (civ.MandatoryService && civ.Culture != null && civ.Culture.Duty < 0) Add("mandatory", 1);
         if (c.IncitedUntil > Year) Add("incited", 1);
-        Add("sprawl", Sprawl(civ) * (c.Autonomy ? SD("relief", "autonomySprawl") : 1), felt: false);   // a self-ruled system has a council near enough to hear it
+        // an overstretched empire drifts apart at its edges: felt at strife.sprawl.near beside the capital, in full a lifetime
+        // away; a self-ruled system has a council near enough to hear it
+        double reach = capital != null && capital != c ? DistanceFactor(c, capital) : 0, near = SD("sprawl", "near");
+        Add("sprawl", Sprawl(civ) * (near + (1 - near) * reach) * (c.Autonomy ? SD("relief", "autonomySprawl") : 1), felt: false);
         bool holdout = c.Holdout && civ.M.Hive;
         if (holdout) Add("hive", 1);
         if (holdout) top = "hive";      // whatever else it resents, a holdout is in arms against the hive (and rises with the others)
