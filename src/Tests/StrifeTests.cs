@@ -207,6 +207,20 @@ public static class StrifeTests
             sim.Respond(cs[0], Simulation.Answer.Crackdown); sim.Respond(cs[1], Simulation.Answer.Crackdown);
             SelfTest.Check(Math.Abs(cs[2].Grievance - 10 - WarData.D("strife", "answers", "crackdownSpread")) < 1e-3, "word of crackdowns spreads once a year, however many there are");
         }),
+        ("crackdown_word_thins_in_a_vast_empire", () => {
+            // up to strife.answers.crackdownSpreadFull systems every other one hears the full spread; beyond, it thins as
+            // the square root of the size, so one crackdown cannot set a vast empire alight
+            var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity;
+            double full = WarData.D("strife", "answers", "crackdownSpread"), at = WarData.D("strife", "answers", "crackdownSpreadFull");
+            SelfTest.Check(h.Colonies.Count <= at && Math.Abs(sim.CrackdownSpread(h) - full) < 1e-9, "a small empire hears it all");
+            var from = h.Colonies.First(x => !x.Home);
+            foreach (var st in sim.Gal.Stars.Where(st => st.Owner < 0 && st.Special == null && !st.Dead).Take(400).ToList()) sim.Found(h, st, from, false);
+            int n = h.Colonies.Count;
+            SelfTest.Check(Math.Abs(sim.CrackdownSpread(h) - full * Math.Sqrt(at / n)) < 1e-9, $"{n} systems: {sim.CrackdownSpread(h):0.##}");
+            var cs = h.Colonies.Where(x => !x.Home).Take(2).ToList(); cs[1].Grievance = 10;
+            sim.Respond(cs[0], Simulation.Answer.Crackdown);
+            SelfTest.Check(Math.Abs(cs[1].Grievance - 10 - sim.CrackdownSpread(h)) < 1e-3, "and that is what each system gains");
+        }),
         ("crackdown_not_every_year", () => {
             var sim = SelfTest.NewSim(); sim.Warp(400); var h = sim.Humanity; h.M.Hive = false; h.SetDrive(h.Drive, "Ruthless");
             var c = h.Colonies.First(x => !x.Home);

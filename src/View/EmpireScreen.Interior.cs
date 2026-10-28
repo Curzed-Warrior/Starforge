@@ -166,7 +166,7 @@ public partial class EmpireScreen
         row.AddChild(Mid(Cell(UpFirst(c.Movement), NameW + BarW, Ui.Warm, 14)));
         var pick = Sim.CouncilAnswer(c);
         double invest = WarData.D("strife", "answers", "investCost") * 100, yrs = WarData.D("strife", "answers", "investYears");
-        double crack = WarData.D("strife", "answers", "crackdown"), spread = WarData.D("strife", "answers", "crackdownSpread");
+        double crack = WarData.D("strife", "answers", "crackdown"), spread = Sim.CrackdownSpread(c.Civ);
         var opts = new (Simulation.Answer A, string Label, string Tip)[]
         {
             (Simulation.Answer.SelfRule, "Grant self-rule", "Its industry stays at home from now on, and the grievance eases. No other cost."),

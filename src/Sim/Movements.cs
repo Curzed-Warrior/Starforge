@@ -124,6 +124,11 @@ public partial class Simulation
         };
     }
 
+    /// <summary>The grievance every other system gains from a crackdown: strife.answers.crackdownSpread up to
+    /// crackdownSpreadFull systems, thinning as the square root of the size beyond (word carries less far in a vast empire).</summary>
+    public double CrackdownSpread(Civ civ) =>
+        SD("answers", "crackdownSpread") * Math.Sqrt(Math.Min(1, SD("answers", "crackdownSpreadFull") / Math.Max(1, civ.Colonies.Count)));
+
     static Colony CapitalOf(Civ civ) => civ.Colonies.FirstOrDefault(x => x.Home) ?? civ.Colonies.FirstOrDefault();
     bool CanInvest(Civ civ) => civ.Materiel > 0 || CapitalOf(civ)?.Stock > 0;
 
@@ -150,7 +155,7 @@ public partial class Simulation
                 // troops can break a movement up once or twice; after that they only harden it
                 c.Grievance = (float)Math.Max(0, c.Grievance - SD("answers", "crackdown") * Math.Pow(SD("answers", "crackdownFade"), c.Crackdowns++));
                 c.Unrest = Stage(c.Grievance, c.Unrest);
-                float spread = (float)SD("answers", "crackdownSpread");
+                float spread = (float)CrackdownSpread(civ);
                 // every other system hears of it, once a year however many crackdowns there are
                 foreach (var o in civ.Colonies)
                     if (o != c && !o.Home && o.HeardCrackdown < Year) { o.HeardCrackdown = Year + 1; o.Grievance = Math.Min(100, o.Grievance + spread); }

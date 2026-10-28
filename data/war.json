@@ -125,7 +125,7 @@
     "sprawl": { "from": 150, "full": 600 },
     "relief": { "autonomy": 20, "autonomySprawl": 0.5, "invested": 25, "megaOrder": 100, "faith": 10, "base": 5 },
     "gov": { "hive": 0, "digital": 0.6, "Synthetic Commonwealth": 0.6, "Directorate": 1.1, "junta": 1.3, "holdout": 1.0 },
-    "answers": { "investCost": 0.05, "investYears": 25, "crackdown": 30, "crackdownFade": 0.5, "crackdownSpread": 6, "selfRuleIndustry": 0.5, "askAgainYears": 5 },
+    "answers": { "investCost": 0.05, "investYears": 25, "crackdown": 30, "crackdownFade": 0.5, "crackdownSpread": 6, "crackdownSpreadFull": 50, "selfRuleIndustry": 0.5, "askAgainYears": 5 },
     "revolt": { "chancePerYear": 0.1, "civilWarShare": 0.2, "civilWarPopShare": 0.25, "letGoMax": 3, "defectLoyalty": 0.6,
                "reachYears": 10, "civilWarRestlessShare": 0.5, "civilWarMinShare": 0.12, "civilWarMinSystems": 4, "graceYears": 60, "cooldownYears": 50 },
     "hive": { "swingMax": 2.0, "swingPower": 2.0, "minSystems": 4, "frayPerYear": 0.0005, "frayMinSwing": 0.3, "letGo": 0.5, "refuseMax": 0.9, "maxShare": 0.6, "base": 0.04, "distance": 0.5, "outOfPower": 0.2, "flesh": 0.3,
