@@ -34,11 +34,12 @@ Still open:
 - [ ] **Sprawl puts a big humanity on strike.** In seed 20610 at 2961, 438 of 452 human systems are at strikes (sprawl
       +27): strikes stop shipping industry to great works. Spec-consistent ("drifts apart if overstretched"), but watch
       great-work pace in late games and consider whether self-rule should relieve sprawl.
-- [ ] **Chronicle per century is 148–230** (target 100–200): seeds 4242 (211), 20610 (219) and 1 (230) run over. The
-      rest is varied foreign news and humanity's research lines.
-- [ ] **Review leftovers (parallel review of this branch).** `hive_is_one_choice_of_three` checks `SpineLike` and
-      `TierOk` but not the hand builder that forces only the leaned member; several tests `return` (pass) when a seed
-      has too few colonies instead of reporting a skip.
+- [x] **Chronicle per century was 148–230** (target 100–200). An enemy's own losses (its revolutions, its other wars)
+      now share one slot a year (`interface.foreignNewsYears`), as foreign wonders do; humanity's part in them is always
+      told. Now 142–198: 20610 168, 7 146, 4242 188, 1 198, 99 142, 2026 184 (simulation unchanged).
+- [x] **Review leftovers.** `hand_forces_the_leaned_member` tests the hand builder (fails against the old `t.Spine`
+      rule); tests that cannot run on a seed call `SelfTest.Skip`, reported as `SELFTEST SKIP` and counted in
+      `SELFTEST DONE ... skip=K`.
 - [ ] **Hive splinters are tiny.** Many human splits in hive games are 1–3 systems (holdouts rising alone). They count
       as fracture in `STRIFESTATS`.
 
