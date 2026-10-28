@@ -241,6 +241,31 @@ public static class FractureTests
             h.SetDrive(h.Drive, "Ruthless");
             SelfTest.Check(sim.CouncilAnswer(c) == Simulation.Answer.Crackdown, "a Ruthless council cracks down");
         }),
+        ("strike_eases_the_levy", () => {
+            // a system on strike ships nothing, so it resents the levy only at strife.levyOnStrike: strikes win something
+            var (sim, h) = Calm();
+            var c = h.Colonies.First(x => !x.Home); h.LevyOut[c] = 1;
+            double Levy() => sim.GrievanceCauses(c).Where(x => x.Key == "levy").Sum(x => x.Points);
+            double full = Levy(); c.Unrest = 2;
+            SelfTest.Check(full > 0 && Math.Abs(Levy() - full * WarData.D("strife", "levyOnStrike")) < 1e-6, $"levy {full:0.#} -> {Levy():0.#} on strike");
+        }),
+        ("sprawl_is_felt_at_the_frontier", () => {
+            // an overstretched empire drifts apart at its edges: next to the capital sprawl is felt at strife.sprawl.near,
+            // at a lifetime's distance in full
+            var (sim, h) = Calm();
+            var home = h.Colonies.First(c => c.Home);
+            foreach (var st in sim.Gal.Stars.Where(st => st.Owner < 0 && st.Special == null && !st.Dead).Take((int)WarData.D("strife", "sprawl", "full")).ToList())
+                sim.Found(h, st, home, false);
+            double Sprawl(Colony c) => sim.GrievanceCauses(c).Where(x => x.Key == "sprawl").Sum(x => x.Points);
+            double full = WarData.D("strife", "causes", "sprawl"), near = WarData.D("strife", "sprawl", "near");
+            foreach (var c in h.Colonies.Where(c => !c.Home).Take(50))
+            {
+                double want = full * (near + (1 - near) * sim.DistanceFactor(c, home));
+                SelfTest.Check(Math.Abs(Sprawl(c) - want) < 1e-6, $"{c.Star.Name}: {Sprawl(c):0.#}, want {want:0.#}");
+            }
+            var by = h.Colonies.Where(c => !c.Home).OrderBy(c => sim.DistanceFactor(c, home)).ToList();
+            SelfTest.Check(Sprawl(by[0]) < Sprawl(by[^1]), "the frontier feels it more than the core");
+        }),
         ("self_rule_eases_sprawl", () => {
             // a self-ruled system hears its own council: it feels the empire's size at strife.relief.autonomySprawl
             var (sim, h) = Calm();
