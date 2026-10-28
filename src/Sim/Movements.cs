@@ -117,7 +117,8 @@ public partial class Simulation
         if (civ.Ethic == "Reverent") return CanInvest(civ) ? Answer.Invest : Answer.SelfRule;
         return c.CauseKey switch
         {
-            "distance" or "distanceSlow" or "deposits" => Answer.SelfRule,
+            // what self-rule ends (the levy, the deposits taken) or eases (distance, an empire too vast to hear it)
+            "distance" or "distanceSlow" or "deposits" or "levy" or "sprawl" => Answer.SelfRule,
             "poverty" or "crowding" => CanInvest(civ) ? Answer.Invest : Answer.Wait,
             _ => Answer.Wait,
         };

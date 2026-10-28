@@ -228,6 +228,29 @@ public static class FractureTests
             foreach (var id in new[] { "ASC-S3b", "ASC-S3c" })
                 SelfTest.Check(Simulation.SpineLike(Defs.TechById(id)) && Simulation.TierOk(h, Defs.TechById(id)), $"{id} opens with the spine");
         }),
+        ("council_frees_the_levied", () => {
+            // a movement over the levy or the empire's size is answered with self-rule, which ends the levy for good;
+            // a Ruthless council still cracks down
+            var (sim, h) = Calm(); h.SetDrive(h.Drive, "Pragmatic");
+            var c = h.Colonies.First(x => !x.Home);
+            foreach (var key in new[] { "levy", "sprawl" })
+            {
+                c.CauseKey = key;
+                SelfTest.Check(sim.CouncilAnswer(c) == Simulation.Answer.SelfRule, $"{key}: self-rule");
+            }
+            h.SetDrive(h.Drive, "Ruthless");
+            SelfTest.Check(sim.CouncilAnswer(c) == Simulation.Answer.Crackdown, "a Ruthless council cracks down");
+        }),
+        ("self_rule_eases_sprawl", () => {
+            // a self-ruled system hears its own council: it feels the empire's size at strife.relief.autonomySprawl
+            var (sim, h) = Calm();
+            var c = h.Colonies.First(x => !x.Home);
+            foreach (var st in sim.Gal.Stars.Where(st => st.Owner < 0 && st.Special == null && !st.Dead).Take((int)WarData.D("strife", "sprawl", "full")).ToList())
+                sim.Found(h, st, c, false);
+            double Sprawl() => sim.GrievanceCauses(c).Where(x => x.Key == "sprawl").Sum(x => x.Points);
+            double full = Sprawl(); c.Autonomy = true;
+            SelfTest.Check(full > 0 && Math.Abs(Sprawl() - full * WarData.D("strife", "relief", "autonomySprawl")) < 1e-6, $"sprawl {full:0.#} -> {Sprawl():0.#}");
+        }),
         ("hand_forces_the_leaned_member", () => {
             // the spine's card for an exclusive step is the member the council leans to, not Hive Consensus every time
             var (sim, h) = Calm(); h.Policy.Manual[(int)Area.Research] = false;
