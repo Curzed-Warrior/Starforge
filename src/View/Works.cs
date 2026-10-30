@@ -33,9 +33,10 @@ public partial class Works : Node3D
     class Ship { public Body A, B; public double T0, Dur; public float Lift, Side; public int Kind, Cls; public float Size; public bool Out; }
     readonly List<Ship> _ships = new();
     MultiMeshInstance3D _shipGlow, _trails;
-    readonly MultiMeshInstance3D[] _classMesh = new MultiMeshInstance3D[Ships.Classes];
-    readonly float[][] _classBuf = new float[Ships.Classes][];
-    readonly int[] _classN = new int[Ships.Classes];
+    // one batch per hull class, then a second per class (index + Ships.Classes) with its lean mesh for the far ones
+    readonly MultiMeshInstance3D[] _classMesh = new MultiMeshInstance3D[Ships.Classes * 2];
+    readonly float[][] _classBuf = new float[Ships.Classes * 2][];
+    readonly int[] _classN = new int[Ships.Classes * 2];
     int _style;
     const int ShipMax = 3000;
     float[] _engBuf = new float[ShipMax * 20], _wakeBuf = new float[ShipMax * 16];
@@ -213,10 +214,12 @@ void fragment(){
     void BuildTraffic()
     {
         // one batch per hull class; each grows only as large as that class's traffic needs
-        for (int c = 0; c < Ships.Classes; c++)
+        for (int c = 0; c < Ships.Classes * 2; c++)
         {
-            int n = c < 3 ? ShipMax : Math.Max(12, (int)(2400 / Math.Pow(Ships.ClassScale[c], 2.2)));      // capital ships are rare, and heavy
-            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = Ships.Mesh(c), InstanceCount = n, VisibleInstanceCount = 0 };
+            int ci = c % Ships.Classes;
+            int n = ci < 3 ? ShipMax : Math.Max(12, (int)(2400 / Math.Pow(Ships.ClassScale[ci], 2.2)));      // capital ships are rare, and heavy
+            var mesh = c < Ships.Classes ? Ships.Mesh(ci) : Ships.Far(Ships.Mesh(ci));
+            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = mesh, InstanceCount = n, VisibleInstanceCount = 0 };
             _classMesh[c] = new MultiMeshInstance3D { Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, CustomAabb = Everywhere };
             _classBuf[c] = new float[n * 12];
             _near.AddChild(_classMesh[c]);
@@ -536,7 +539,11 @@ void fragment(){
         {
             // a different people's yards: swap every class's hull for theirs
             _style = style;
-            for (int ci = 0; ci < Ships.Classes; ci++) _classMesh[ci].Multimesh.Mesh = Ships.Mesh(ci, style);
+            for (int ci = 0; ci < Ships.Classes; ci++)
+            {
+                _classMesh[ci].Multimesh.Mesh = Ships.Mesh(ci, style);
+                _classMesh[ci + Ships.Classes].Multimesh.Mesh = Ships.Far(Ships.Mesh(ci, style));
+            }
         }
         int guard = 0;
         while (_ships.Count < want && totalW > 0 && guard++ < 120)
@@ -597,7 +604,8 @@ void fragment(){
             var at = Drawn(p, out float sq, out var trueV);
             float dcam = camV.DistanceTo(trueV);
             var basisS = Basis.LookingAt(-fwd, Mathf.Abs(fwd.Y) > 0.98f ? Vector3.Right : Vector3.Up).Scaled(Vector3.One * (s.Size * sq));
-            if (_classN[s.Cls] * 12 < _classBuf[s.Cls].Length) Put(_classBuf[s.Cls], _classN[s.Cls]++ * 12, basisS, at);
+            int slot = dcam > s.Size * 2f * Ships.FarRatio ? s.Cls + Ships.Classes : s.Cls;
+            if (_classN[slot] * 12 < _classBuf[slot].Length) Put(_classBuf[slot], _classN[slot]++ * 12, basisS, at);
             Color ec = s.Kind == 1 ? new Color(1f, 0.6f, 0.3f) : s.Kind == 2 ? new Color(0.7f, 0.85f, 1f) : new Color(0.55f, 0.75f, 1f);
             if (c.Civ.Alien) ec = c.Civ.Color.Lerp(Colors.White, s.Kind == 2 ? 0.4f : 0.1f);
             if (c.Civ.Exalted) ec = new Color(1f, 0.82f, 0.4f);              // an Exalted civ's ships burn gold
@@ -619,7 +627,7 @@ void fragment(){
             _wakeBuf[to + 12] = ec.R; _wakeBuf[to + 13] = ec.G; _wakeBuf[to + 14] = ec.B; _wakeBuf[to + 15] = burn * 0.22f * ends * Mathf.SmoothStep(s.Size * 40f, s.Size * 400f, dcam);
             if (++k >= ShipMax) break;
         }
-        for (int ci = 0; ci < Ships.Classes; ci++)
+        for (int ci = 0; ci < Ships.Classes * 2; ci++)
         {
             var cm = _classMesh[ci].Multimesh;
             if (_classN[ci] > 0) cm.Buffer = _classBuf[ci];
