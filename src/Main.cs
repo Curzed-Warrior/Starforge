@@ -12,7 +12,8 @@ namespace Starforge;
 /// Entry point. One continuous world: the viewed star sits at the origin, the galaxy is scaled by G around it.
 /// Command line (after "--"): --shot=abs.png [--shotframe=N] --focus=Earth|Sun|Galaxy --dist=D --yaw=Y --pitch=P
 /// --warp=YEARS [--trace] --seed=N --speed=I --star=Name; --stagebattle [--focus=battle] [--battlefam=A,B] [--battlerun=SECONDS] [--stagelayers] stages a fight here;
-/// --stageunrest, --stageslips and --intpage=N stage the Interior, Military and Economy tabs' rarer states
+/// --stageunrest, --stageslips and --intpage=N stage the Interior, Military and Economy tabs' rarer states;
+/// --stagewarworks [--focus=works:factory|slip|barracks|specops|army] stages the home system's war works and frames one
 /// (--stagelayers also stages the galaxy map's war markers nearby: an occupied, a blockaded and a both system, a moving
 /// fleet carrying an army and an idle fleet)
 /// </summary>
@@ -705,6 +706,22 @@ public partial class Main : Node3D
         if (OS.GetCmdlineUserArgs().Contains("--stagelayers")) StageMapLayers(me, foe);
     }
 
+    /// <summary>Test: the home system gets a war economy to draw (six foundries, a hull half built on each slip, three
+    /// barracks classes, two special-forces courses, three armies on the ground).</summary>
+    void StageWarWorks()
+    {
+        var me = Sim.Humanity; var home = me.Colonies.FirstOrDefault(c => c.Home);
+        if (home == null) { GD.Print("--stagewarworks: no home system"); return; }
+        home.Foundries = Math.Max(home.Foundries, 6);
+        int slips = Sim.SlipsOf(home);
+        while (me.Yard.Count < slips) me.Yard.Insert(0, new Slip());
+        for (int i = 0; i < slips; i++) { me.Yard[i].Hull = Math.Max(1, me.Hull - i); me.Yard[i].Progress = 0.3 + 0.3 * i; }
+        for (int i = 0; i < 3; i++) me.Barracks.Add(new Training { Troops = 1, Left = 5, At = home.Star.Id });
+        for (int i = 0; i < 2; i++) me.Academy.Add(new Training { Troops = 1, Left = 5, At = home.Star.Id });
+        for (int i = 0; i < 3; i++) Sim.Armies.Add(new Army { Id = Sim.NextArmyId++, Civ = me.Id, At = home.Star.Id, Troops = 1e6, Fleet = -1 });
+        GD.Print($"STAGEWARWORKS foundries={home.Foundries} slips={slips} hulls={string.Join(",", me.Yard.Take(slips).Select(y => y.Hull))}");
+    }
+
     /// <summary>Test: the nearest systems beyond this one become occupied, blockaded and both, and two fleets of the player's
     /// appear there (one under way with an army aboard, one in port), so every galaxy-map war marker can be seen at once.</summary>
     void StageMapLayers(Civ me, Civ foe)
@@ -1152,6 +1169,22 @@ public partial class Main : Node3D
                 GD.Print($"FOCUSBATTLE yaw={_rig.Yaw:0.00} (the player's side; +3.14 for the far side) radius={br}");
             }
             else GD.Print("--focus=battle: no battle here");
+        }
+        // test: --stagewarworks gives the home system a war economy to look at: foundries, a hull on each slip, barracks
+        // classes, special-forces courses and armies on the ground
+        if (_frame == 5 && OS.GetCmdlineUserArgs().Contains("--stagewarworks")) StageWarWorks();
+        // test: --focus=works:KIND (factory, slip, barracks, specops, army) frames the first of that kind of war works here
+        if (_frame == 8 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--focus=works:")) is string fw)
+        {
+            if (SysView.Works.WorksHere(fw[14..], out var wc, out float ws))
+            {
+                SelectedBody = null;
+                var works = SysView.Works; string kind = fw[14..];
+                _rig.Target = () => IsInstanceValid(works) && works.WorksHere(kind, out var c, out _) ? c : wc; _rig.MinDist = ws * 0.2f;
+                string Arg(string k) => Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith(k))?[k.Length..];
+                _rig.SetView(Arg("--yaw=") is string y ? F(y) : 0.6f, Arg("--pitch=") is string pt ? F(pt) : 0.35f, (Arg("--dist=") is string d ? F(d) : 1.6f) * ws);
+            }
+            else GD.Print($"--focus=works: no {fw[14..]} here");
         }
         // test: --scroll=N scrolls the open empire tab down N px
         if (_frame == 30 && Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--scroll=")) is string scr) _hud.ScrollEmpire(int.Parse(scr[9..]));
