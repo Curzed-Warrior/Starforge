@@ -67,7 +67,6 @@ public partial class Works : Node3D
         BuildSwarm();
         BuildTraffic();
         BuildStations();
-        BuildWarProps();
         BuildFleets();
         BuildHabitats();
         BuildStreams();
@@ -479,7 +478,8 @@ void fragment(){
         foreach (var cm in _classMesh) cm.Multimesh.VisibleInstanceCount = 0;
         _shipGlow.Multimesh.VisibleInstanceCount = 0; _trails.Multimesh.VisibleInstanceCount = 0;
         _stations.Multimesh.VisibleInstanceCount = 0; _stationLights.Multimesh.VisibleInstanceCount = 0;
-        _warProps.Multimesh.VisibleInstanceCount = 0;
+        foreach (var wp in _warPools.Values) wp.Mi.Multimesh.VisibleInstanceCount = 0;
+        if (_warGlow != null) _warGlow.Multimesh.VisibleInstanceCount = 0;
         foreach (var hk in _habKinds) hk.Multimesh.VisibleInstanceCount = 0;
         _habLights.Multimesh.VisibleInstanceCount = 0;
         _streams.Multimesh.VisibleInstanceCount = 0;

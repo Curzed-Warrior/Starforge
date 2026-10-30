@@ -172,9 +172,9 @@ public partial class EmpireScreen : PanelContainer
         string specops = Sim.TeamCap(civ) == 0 && teams.Count == 0 && civ.Academy.Count == 0 ? ""
             : $"\nSpecial forces: {teams.Count} teams ({teams.Count(t => !t.Rushed)} fully trained, {teams.Count(t => t.Rushed)} rushed) · {civ.Academy.Count} in training · "
               + $"{teams.Count(t => t.Mission != "guard")} on missions · counter-intelligence {Sim.CounterIntel(civ):0.0}";
-        string legend = $"\n[color=#{dim}]Placeholder cubes: [color=#{Ui.Hex(WarData.Colour("factory"))}]factories[/color] · [color=#{Ui.Hex(WarData.Colour("shipyard"))}]shipyards[/color] · "
+        string legend = $"\n[color=#{dim}]War works, by tint: [color=#{Ui.Hex(WarData.Colour("factory"))}]factories[/color] · [color=#{Ui.Hex(WarData.Colour("shipyard"))}]shipyard slips[/color] · "
             + $"[color=#{Ui.Hex(WarData.Colour("barracks"))}]barracks[/color] · [color=#{Ui.Hex(WarData.Colour("transport"))}]armies[/color] · "
-            + $"[color=#{Ui.Hex(WarData.Colour("specops"))}]special forces[/color] · [color=#{Ui.Hex(WarData.Colour("hull"))}]hulls[/color][/color]";
+            + $"[color=#{Ui.Hex(WarData.Colour("specops"))}]special forces[/color] · [color=#{Ui.Hex(WarData.Colour("hull"))}]hulls on the slips[/color][/color]";
         string auto = string.Join("  ·  ", Enum.GetValues<Area>().Select(a => civ.Policy.IsManual(a) ? $"[color=#{Ui.Hex(Ui.Warm)}]{a}: you[/color]" : $"{a}: council"));
         _overview.Text = $"[font_size=26][color=#{Ui.Hex(civ.Color)}][b]{civ.Name.ToUpper()}[/b][/color][/font_size]\n" +
             $"[color=#{Ui.Hex(Ui.Warm)}]{gov.Name}[/color] · {civ.Faction(civ.Drive)} {(gov == Government.Assembly ? "hold the council" : "ascendant")} · {civ.Drive} · {civ.Ethic}\n" +
