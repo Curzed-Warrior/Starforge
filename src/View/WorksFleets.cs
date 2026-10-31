@@ -22,12 +22,12 @@ public partial class Works
     const int TransportKey = -1;
     /// <summary>The gap between two battle lines, in lengths of the biggest hull there: close enough that from where the
     /// camera frames the fight the big hulls read as ships, not specks.</summary>
-    const float GapHulls = 12f;
+    const float GapHulls = 9f;
     /// <summary>The battle camera's pitch: high enough that the two lines don't collapse into one.</summary>
     public const float BattlePitch = -0.6f;
     /// <summary>How far the battle camera sits from the centre, in battle radii: just outside the lines, so the nearer
     /// line's hulls are large and the far one is still in frame.</summary>
-    public const float BattleFrame = 0.95f;
+    public const float BattleFrame = 0.78f;
     int _beamLimit = BeamMax;
 
     /// <summary>A hull to draw this frame: where (true system position), which way, how big (half-length, drawn).
