@@ -176,7 +176,7 @@ def bernal():
     # the sphere: hull with a glazed equatorial band (the "window" between two chevron shields)
     lats = [-90 + i * 7.5 for i in range(25)]
     prof = [(RS * math.cos(math.radians(l)), RS * math.sin(math.radians(l))) for l in lats]
-    revolve(bm, prof, 96, lambda i, s: GLASS if 10 <= i <= 13 else (HULL if i % 2 else LIGHT), closed=False, toward=lambda c: c.normalized())
+    revolve(bm, prof, 96, lambda i, s: GLASS if 10 <= i <= 13 else (DARK if i % 2 else HULL), closed=False, toward=lambda c: c.normalized())
     for k in range(144):
         a = k * 2 * math.pi / 144
         d = Vector((math.cos(a), math.sin(a), 0)); t = Vector((-d.y, d.x, 0))
@@ -194,12 +194,13 @@ def bernal():
             rr = 34 - abs(j - 4) * 1.6
             n0 = set(bm.verts)
             prof = [(rr + 3.2 * math.cos(t), 3.2 * math.sin(t)) for t in [i * 2 * math.pi / 12 for i in range(12)]]
-            revolve(bm, prof, 72, lambda i, s2: GLASS if i in (5, 6, 7) else (PLANT if i in (4, 8) else HULL), closed=True, toward=lambda c, rr=rr: (Vector((c.x, c.y, 0)) - Vector((c.x, c.y, 0)).normalized() * rr + Vector((0, 0, c.z))).normalized())
+            revolve(bm, prof, 72, lambda i, s2: GLASS if i in (5, 6, 7) else (PLANT if i in (4, 8) else DARK if i in (0, 11) else HULL), closed=True, toward=lambda c, rr=rr: (Vector((c.x, c.y, 0)) - Vector((c.x, c.y, 0)).normalized() * rr + Vector((0, 0, c.z))).normalized())
             bmesh.ops.translate(bm, vec=Z_ * z, verts=since(bm, n0))
             for k in range(4):
                 a = k * math.pi / 2 + j * 0.3
                 d = Vector((math.cos(a), math.sin(a), 0))
-                truss(bm, Z_ * z + d * 3, Z_ * z + d * (rr - 3), w=0.6, mi=DARK, rod=0.06)
+                # a plain box spoke: a truss here cost 140k triangles for something two pixels wide in the game
+                fast_box(bm, (rr - 6, 0.7, 0.7), Z_ * z + d * (rr / 2), Matrix((d, Vector((-d.y, d.x, 0)), Z_)).transposed(), DARK, U(bm), bottom=True)
             for k in range(36):
                 a = k * 2 * math.pi / 36
                 d = Vector((math.cos(a), math.sin(a), 0))

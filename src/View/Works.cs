@@ -30,12 +30,16 @@ public partial class Works : Node3D
     ShaderMaterial _hazeMat;
 
     // traffic
-    class Ship { public Body A, B; public double T0, Dur; public float Lift, Side; public int Kind, Cls; public float Size; public bool Out; }
+    class Ship { public Body A, B; public double T0, Dur; public float Lift, Side; public int Kind, Cls, Slot; public float Size; public bool Out; }
     readonly List<Ship> _ships = new();
     MultiMeshInstance3D _shipGlow, _trails;
-    readonly MultiMeshInstance3D[] _classMesh = new MultiMeshInstance3D[Ships.Classes];
-    readonly float[][] _classBuf = new float[Ships.Classes][];
-    readonly int[] _classN = new int[Ships.Classes];
+    // one batch per hull class and per civilian hull, then a second of each (index + Slots) with its lean mesh for
+    // the far ones
+    static readonly string[] Civilian = { "Science", "Construction", "Colony", "Transport" };
+    static int Slots => Ships.Classes + Civilian.Length;
+    readonly MultiMeshInstance3D[] _classMesh = new MultiMeshInstance3D[Slots * 2];
+    readonly float[][] _classBuf = new float[Slots * 2][];
+    readonly int[] _classN = new int[Slots * 2];
     int _style;
     const int ShipMax = 3000;
     float[] _engBuf = new float[ShipMax * 20], _wakeBuf = new float[ShipMax * 16];
@@ -213,10 +217,14 @@ void fragment(){
     void BuildTraffic()
     {
         // one batch per hull class; each grows only as large as that class's traffic needs
-        for (int c = 0; c < Ships.Classes; c++)
+        for (int c = 0; c < Slots * 2; c++)
         {
-            int n = c < 3 ? ShipMax : Math.Max(12, (int)(2400 / Math.Pow(Ships.ClassScale[c], 2.2)));      // capital ships are rare, and heavy
-            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = Ships.Mesh(c), InstanceCount = n, VisibleInstanceCount = 0 };
+            int ci = c % Slots;
+            bool civil = ci >= Ships.Classes;
+            int n = civil ? ShipMax / 4 : ci < 3 ? ShipMax : Math.Max(12, (int)(2400 / Math.Pow(Ships.ClassScale[ci], 2.2)));      // capital ships are rare, and heavy
+            var near = civil ? Ships.Named(Civilian[ci - Ships.Classes]) ?? Ships.Mesh(0) : Ships.Mesh(ci);
+            var mesh = c < Slots ? near : Ships.Far(near);
+            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = mesh, InstanceCount = n, VisibleInstanceCount = 0 };
             _classMesh[c] = new MultiMeshInstance3D { Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, CustomAabb = Everywhere };
             _classBuf[c] = new float[n * 12];
             _near.AddChild(_classMesh[c]);
@@ -527,7 +535,7 @@ void fragment(){
         // ports closed, convoys holding: crises thin the lanes (missions still fly; they are the emergency)
         float open = (float)c.TrafficFactor;
         int want = (int)Mathf.Clamp((float)(routes.Sum(r => r.W * (r.Kind == 2 ? 1f : open)) * 9 * (0.4 + c.TrafficLevel) * mainstream), 0, ShipMax);
-        if (OS.GetCmdlineUserArgs().Contains("--trace") && Engine.GetProcessFrames() % 60 == 0) GD.Print($"TRAFFIC open={open:0.00} want={want} flying={_ships.Count} crisis={c.Crisis?.Id}");
+        if (OS.GetCmdlineUserArgs().Contains("--trace") && Engine.GetProcessFrames() % 60 == 0) GD.Print($"TRAFFIC open={open:0.00} want={want} flying={_ships.Count} civil={_ships.Count(x => x.Slot >= Ships.Classes)} crisis={c.Crisis?.Id}");
         // spawn
         float totalW = routes.Sum(r => r.W);
         int maxCls = Ships.MaxClass(c.Civ);
@@ -536,7 +544,11 @@ void fragment(){
         {
             // a different people's yards: swap every class's hull for theirs
             _style = style;
-            for (int ci = 0; ci < Ships.Classes; ci++) _classMesh[ci].Multimesh.Mesh = Ships.Mesh(ci, style);
+            for (int ci = 0; ci < Ships.Classes; ci++)
+            {
+                _classMesh[ci].Multimesh.Mesh = Ships.Mesh(ci, style);
+                _classMesh[ci + Slots].Multimesh.Mesh = Ships.Far(Ships.Mesh(ci, style));
+            }
         }
         int guard = 0;
         while (_ships.Count < want && totalW > 0 && guard++ < 120)
@@ -548,7 +560,24 @@ void fragment(){
             if (rt.Kind == 4) back = _r.NextDouble() < 0.5;
             var s = new Ship { Out = rt.Kind == 4 && back, A = rt.Kind == 4 ? rt.A : back ? rt.B : rt.A, B = rt.Kind == 4 ? rt.B : back ? rt.A : rt.B, T0 = _clock - (_ships.Count < want / 2 ? _r.NextDouble() * 6 : 0), Kind = rt.Kind, Lift = (float)(_r.NextDouble() - 0.5) * 0.3f, Side = (float)(_r.NextDouble() - 0.5) * 0.25f };
             s.Cls = rt.Kind == 2 ? 0 : Ships.Pick(_r, maxCls, rt.Kind == 3);
-            s.Size = Ships.Size(s.Cls) * (0.85f + 0.3f * (float)_r.NextDouble());
+            s.Slot = s.Cls;
+            s.Size = Ships.Size(s.Cls);
+            // humanity's working ships fly their own hulls: haulers from the mines, colony ships on missions, tugs and
+            // constructors round the seat, liners and the odd survey ship between worlds
+            int civ = style != 0 ? -1 : rt.Kind switch
+            {
+                1 => _r.NextDouble() < 0.75 ? 3 : -1,
+                2 => 2,
+                3 => _r.NextDouble() < 0.4 ? 1 : -1,
+                4 => _r.NextDouble() < 0.3 ? 3 : -1,
+                _ => _r.NextDouble() is var q && q < 0.35 ? 3 : q < 0.43 ? 0 : -1,
+            };
+            if (civ >= 0 && Ships.TrueLengthM.TryGetValue(Civilian[civ], out var lenM))
+            {
+                s.Slot = Ships.Classes + civ;
+                s.Size = lenM / 1000f * StarSystem.Km * 0.5f;
+            }
+            s.Size *= 0.85f + 0.3f * (float)_r.NextDouble();
             s.Dur = rt.Kind == 3 ? 3 + _r.NextDouble() * 4 : 5 + _r.NextDouble() * 6;
             _ships.Add(s);
         }
@@ -597,7 +626,8 @@ void fragment(){
             var at = Drawn(p, out float sq, out var trueV);
             float dcam = camV.DistanceTo(trueV);
             var basisS = Basis.LookingAt(-fwd, Mathf.Abs(fwd.Y) > 0.98f ? Vector3.Right : Vector3.Up).Scaled(Vector3.One * (s.Size * sq));
-            if (_classN[s.Cls] * 12 < _classBuf[s.Cls].Length) Put(_classBuf[s.Cls], _classN[s.Cls]++ * 12, basisS, at);
+            int slot = dcam > s.Size * 2f * Ships.FarRatio ? s.Slot + Slots : s.Slot;
+            if (_classN[slot] * 12 < _classBuf[slot].Length) Put(_classBuf[slot], _classN[slot]++ * 12, basisS, at);
             Color ec = s.Kind == 1 ? new Color(1f, 0.6f, 0.3f) : s.Kind == 2 ? new Color(0.7f, 0.85f, 1f) : new Color(0.55f, 0.75f, 1f);
             if (c.Civ.Alien) ec = c.Civ.Color.Lerp(Colors.White, s.Kind == 2 ? 0.4f : 0.1f);
             if (c.Civ.Exalted) ec = new Color(1f, 0.82f, 0.4f);              // an Exalted civ's ships burn gold
@@ -619,7 +649,7 @@ void fragment(){
             _wakeBuf[to + 12] = ec.R; _wakeBuf[to + 13] = ec.G; _wakeBuf[to + 14] = ec.B; _wakeBuf[to + 15] = burn * 0.22f * ends * Mathf.SmoothStep(s.Size * 40f, s.Size * 400f, dcam);
             if (++k >= ShipMax) break;
         }
-        for (int ci = 0; ci < Ships.Classes; ci++)
+        for (int ci = 0; ci < Slots * 2; ci++)
         {
             var cm = _classMesh[ci].Multimesh;
             if (_classN[ci] > 0) cm.Buffer = _classBuf[ci];

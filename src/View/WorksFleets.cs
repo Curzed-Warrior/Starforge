@@ -18,16 +18,16 @@ public partial class Works
 {
     /// <summary>One draw batch: every hull of one class and style (or the army transport), in one MultiMesh.</summary>
     sealed class HullPool { public MultiMeshInstance3D Mi; public float[] Buf; public int N, Stride; public Aabb Box; public bool Lit; }
-    readonly Dictionary<int, HullPool> _hullPools = new();
+    readonly Dictionary<int, HullPool> _hullPools = new(), _farPools = new();
     const int TransportKey = -1;
     /// <summary>The gap between two battle lines, in lengths of the biggest hull there: close enough that from where the
     /// camera frames the fight the big hulls read as ships, not specks.</summary>
-    const float GapHulls = 12f;
+    const float GapHulls = 9f;
     /// <summary>The battle camera's pitch: high enough that the two lines don't collapse into one.</summary>
     public const float BattlePitch = -0.6f;
     /// <summary>How far the battle camera sits from the centre, in battle radii: just outside the lines, so the nearer
     /// line's hulls are large and the far one is still in frame.</summary>
-    public const float BattleFrame = 0.95f;
+    public const float BattleFrame = 0.78f;
     int _beamLimit = BeamMax;
 
     /// <summary>A hull to draw this frame: where (true system position), which way, how big (half-length, drawn).
@@ -179,9 +179,11 @@ void fragment(){
         _near.AddChild(_fleetKey); _near.AddChild(_fleetFill);
     }
 
-    HullPool Pool(int key)
+    /// <summary>The pool a hull draws into; a far one (Ships.FarRatio) gets its class's lean mesh.</summary>
+    HullPool Pool(int key, bool far = false)
     {
-        if (_hullPools.TryGetValue(key, out var p)) return p;
+        var pools = far ? _farPools : _hullPools;
+        if (pools.TryGetValue(key, out var p)) return p;
         int cap = Math.Max(1, (int)WarData.D("interface", "fleetDrawMax"));
         Mesh mesh; bool cube = false;
         if (key == TransportKey) { mesh = Ships.Named("Transport"); cube = mesh == null; }
@@ -191,6 +193,7 @@ void fragment(){
             cube = !Ships.HasModel(cls, style);
             mesh = cube ? null : Ships.Mesh(cls, style);
         }
+        if (far && !cube) mesh = Ships.Far(mesh);
         if (cube)
         {
             // no .glb at all for this class (a fresh clone): a grey hull-long box, the empire's colour on top
@@ -207,7 +210,7 @@ void fragment(){
         };
         p.Buf = new float[cap * p.Stride];
         _near.AddChild(p.Mi);
-        _hullPools[key] = p;
+        pools[key] = p;
         return p;
     }
 
@@ -263,11 +266,12 @@ void fragment(){
             _fleetKey.LightColor = sun.LightColor; _fleetKey.LightEnergy = sun.LightEnergy * KeyShare;
         }
         foreach (var p in _hullPools.Values) p.N = 0;
+        foreach (var p in _farPools.Values) p.N = 0;
         _nBeam = _nSpark = _nDrive = _nLight = _nRing = 0;
         _hulls.Clear(); _sideHulls[0].Clear(); _sideHulls[1].Clear();
         var sim = _sim;
         if (sim != null && !HiddenParts.Contains("fleets")) LayOut(sim, c);
-        foreach (var p in _hullPools.Values)
+        foreach (var p in _hullPools.Values.Concat(_farPools.Values))
         {
             if (p.N > 0) p.Mi.Multimesh.Buffer = p.Buf;
             p.Mi.Multimesh.VisibleInstanceCount = p.N;
@@ -558,9 +562,9 @@ void fragment(){
         {
             var h = _hulls[i];
             if (h.Dead || h.Culled) continue;
-            var p = Pool(h.Key);
-            if (p.N * p.Stride >= p.Buf.Length) continue;
             var d = Drawn(h.At, out float sq, out var tv);
+            var p = Pool(h.Key, Frame.Cam.DistanceTo(tv) > h.Half * 2f * Ships.FarRatio);
+            if (p.N * p.Stride >= p.Buf.Length) continue;
             var basis = Basis.LookingAt(-h.Fwd, Mathf.Abs(h.Fwd.Y) > 0.98f ? Vector3.Right : Vector3.Up);
             int o = p.N * p.Stride;
             Put(p.Buf, o, basis.Scaled(Vector3.One * (h.Half * sq)), d);

@@ -148,6 +148,55 @@ public static class Ships
     /// <summary>True modelled length in metres of each kit-v2 hull, by class name.</summary>
     public static readonly Dictionary<string, float> TrueLengthM = new();
 
+    /// <summary>Hulls drawn further than this many hull lengths from the camera (a few tens of pixels) use the lean mesh.</summary>
+    public const float FarRatio = 60f;
+    const int FarTris = 6000;
+    static readonly Dictionary<Godot.Mesh, Godot.Mesh> _far = new();
+    /// <summary>
+    /// A lean copy of a hull for the multimeshes, whose whole-system AABB keeps Godot's own LOD at full detail: every
+    /// surface decimated (ImporterMesh.GenerateLods) to about FarTris triangles in all. Small hulls come back as they are.
+    /// </summary>
+    public static Godot.Mesh Far(Godot.Mesh src)
+    {
+        if (src == null) return null;
+        if (_far.TryGetValue(src, out var got)) return got;
+        long tris = 0;
+        for (int i = 0; i < src.GetSurfaceCount(); i++)
+        {
+            var a = src.SurfaceGetArrays(i);
+            tris += (a[(int)Godot.Mesh.ArrayType.Index].VariantType != Variant.Type.Nil ? a[(int)Godot.Mesh.ArrayType.Index].AsInt32Array().Length : a[(int)Godot.Mesh.ArrayType.Vertex].AsVector3Array().Length) / 3;
+        }
+        if (tris <= FarTris * 1.5f || src is not ArrayMesh am) return _far[src] = src;
+        var im = new ImporterMesh();
+        for (int i = 0; i < am.GetSurfaceCount(); i++)
+            im.AddSurface(Godot.Mesh.PrimitiveType.Triangles, am.SurfaceGetArrays(i), material: am.SurfaceGetMaterial(i));
+        im.GenerateLods(60f, 0f, new Godot.Collections.Array());
+        float frac = (float)FarTris / tris;
+        var lean = new ArrayMesh();
+        for (int i = 0; i < im.GetSurfaceCount(); i++)
+        {
+            var a = im.GetSurfaceArrays(i);
+            int full = a[(int)Godot.Mesh.ArrayType.Index].VariantType != Variant.Type.Nil ? a[(int)Godot.Mesh.ArrayType.Index].AsInt32Array().Length : 0;
+            int[] best = null; int bestN = full;
+            for (int l = 0; l < im.GetSurfaceLodCount(i); l++)
+            {
+                var idx = im.GetSurfaceLodIndices(i, l);
+                // the LOD nearest the budget, never one that loses the surface altogether
+                if (idx.Length >= 3 && Mathf.Abs(idx.Length - full * frac) < Mathf.Abs(bestN - full * frac)) { best = idx; bestN = idx.Length; }
+            }
+            if (best != null) a[(int)Godot.Mesh.ArrayType.Index] = best;
+            lean.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, a);
+            lean.SurfaceSetMaterial(i, im.GetSurfaceMaterial(i));
+        }
+        if (OS.GetCmdlineUserArgs().Contains("--trace"))
+        {
+            long n = 0;
+            for (int i = 0; i < lean.GetSurfaceCount(); i++) n += lean.SurfaceGetArrays(i)[(int)Godot.Mesh.ArrayType.Index].AsInt32Array().Length / 3;
+            GD.Print($"LEANHULL {tris} -> {n} tris");
+        }
+        return _far[src] = lean;
+    }
+
     /// <summary>Hull families: 0 human, 1 organic (ribbed, crescent-winged), 2 crystalline (clustered shards).</summary>
     public static int Style(Civ civ) => civ.M.Has("GrownHulls") ? 1 : civ.Alien ? 1 + civ.Id % 2 : 0;
     static ArrayMesh[,] _alien;
